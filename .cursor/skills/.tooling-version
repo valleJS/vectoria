@@ -1,0 +1,5 @@
+# polaris-docs tooling provenance — do not edit by hand.
+# Written by scaffold-repo-skills.sh; updated by docs-defrag after a pull-update.
+ssot_commit=97fb0fd9e98b0954d8b21ba4d10a5cb1d85a87fb
+ssot_version=1.4.0
+ssot_origin=https://github.com/manuliner/polaris-docs.git

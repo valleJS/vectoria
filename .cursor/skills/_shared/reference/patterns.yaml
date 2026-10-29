@@ -1,0 +1,106 @@
+# patterns.yaml — the declarative SSOT for doc patterns. Prose lives in the referenced reference/
+# files; this file makes the machine-checkable parts enforceable. Read by verify-patterns.sh.
+# Keep this FLAT (no deep nesting) so a grep/awk reader needs no heavyweight YAML parser.
+#
+# Each rule:
+#   id          stable identifier
+#   ref         which reference/*.md documents the rule in prose
+#   applies-to  glob (relative to repo root) the rule scopes to
+#   check       machine check kind: line-count | frontmatter-required | heading-depth | enum | llm
+#   <params>    check-specific keys (see below)
+#
+# check kinds and their params:
+#   line-count           max: <int>                      fail if a matching file exceeds max lines
+#   frontmatter-required fields: [a, b]                  fail if a matching file lacks any field in its YAML frontmatter
+#   heading-depth        max: <int>                      fail if a matching file has a heading deeper than max (## = 2)
+#   enum                 values: [..]  target: <name>    self-consistency: the named set must equal `values` (checked by self-check, Phase G)
+#   llm                  (no machine params)             soft check — judged by the defrag skill, never a hard exit-1 gate
+
+version: 1
+
+rules:
+  - id: hub-line-count
+    ref: token-efficiency.md
+    applies-to: "docs/_index.md"
+    check: line-count
+    max: 40
+
+  - id: leaf-line-count
+    ref: agent-doc-layout.md
+    applies-to: "docs/**/*.md"
+    exclude: [docs/_index.md, docs/_router.md]
+    check: line-count
+    max: 500
+
+  - id: skill-frontmatter
+    ref: doc-type-selector.md
+    applies-to: ".cursor/skills/*/SKILL.md"
+    check: frontmatter-required
+    fields: [name, description]
+
+  - id: leaf-frontmatter
+    ref: agent-doc-layout.md
+    applies-to: "docs/**/*.md"
+    exclude: [docs/_index.md, docs/_router.md]
+    check: frontmatter-required
+    fields: [audience, category, last_verified, load-when]
+
+  - id: hub-heading-depth
+    ref: agent-doc-layout.md
+    applies-to: "docs/_index.md"
+    check: heading-depth
+    max: 2
+
+  - id: leaf-heading-depth
+    ref: agent-doc-layout.md
+    applies-to: "docs/**/*.md"
+    exclude: [docs/_index.md, docs/_router.md]
+    check: heading-depth
+    max: 3
+
+  - id: canonical-skills
+    ref: doc-type-selector.md
+    applies-to: ".cursor/skills/"
+    check: enum
+    target: skills-dirs
+    values: [docs-write, docs-verify, docs-defrag, docs-commit]
+
+  - id: one-concept-per-leaf
+    ref: agent-doc-layout.md
+    applies-to: "docs/**/*.md"
+    exclude: [docs/_index.md, docs/_router.md]
+    check: llm
+
+  # Router (RKF §5) — the task→file routing artifact. Reserved file, NOT a leaf (excluded above).
+  - id: router-line-count
+    ref: agent-doc-layout.md
+    applies-to: "docs/_router.md"
+    check: line-count
+    max: 80
+
+  - id: router-heading-depth
+    ref: agent-doc-layout.md
+    applies-to: "docs/_router.md"
+    check: heading-depth
+    max: 2
+
+  - id: router-frontmatter
+    ref: agent-doc-layout.md
+    applies-to: "docs/_router.md"
+    check: frontmatter-required
+    fields: [type, description]
+
+# Optional frontmatter for the self-healing drift loop (Phase I). NOT required — a leaf without
+# `sources` is simply invisible to the staleness check (no false alarm). Code-adjacent leaves
+# (architecture, codemaps) SHOULD set them; purely conceptual leaves may omit them.
+#   sources: [src/foo.ts, src/bar/]   files/dirs this leaf documents (repo-relative)
+#   sources_stamp: <commit>           the code commit this leaf was last verified against
+# check-doc-staleness.sh flags a leaf as stale when its sources have commits newer than sources_stamp.
+#
+# `type` is the OKF/RKF self-describing kind field (e.g. "Codemap", "ADR", "Runbook"). Optional here so
+# a Polaris bundle is a valid OKF/RKF bundle (RKF requires `type`; we keep it non-blocking on leaves and
+# only enforce it on the router). See _shared/reference/agent-doc-layout.md for the small vocabulary.
+optional-frontmatter:
+  - sources
+  - sources_stamp
+  - type

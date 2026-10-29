@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# pre-commit-staleness — vendored doc-to-code drift WARNING for a satellite repo.
+#
+# Runs on `git commit`: checks whether any STAGED change touches the `sources:` of a doc leaf, and if
+# so WARNS (never blocks) and records the stale leaves in a marker file. The next docs-defrag / agent
+# run picks up that marker and proposes a docs-write update — the doc patch itself is never written
+# here. This hook ALWAYS exits 0; it must not stop a commit.
+#
+# Installed by scaffold-repo-skills.sh into <repo>/.git/hooks/pre-commit (idempotent, marker-bounded),
+# so it coexists with husky/lefthook/existing hooks. Lives in the managed _shared family — do not fork.
+set -uo pipefail   # NOTE: no -e; a failure here must never break the commit.
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+STALENESS="$ROOT/.cursor/skills/_shared/scripts/check-doc-staleness.sh"
+MARKER="$ROOT/.cursor/skills/.staleness-pending"
+
+# Nothing vendored here (e.g. fresh clone before scaffold) → silently allow the commit.
+[[ -f "$STALENESS" ]] || exit 0
+
+out="$(REPO_ROOT="$ROOT" bash "$STALENESS" --staged 2>/dev/null || true)"
+n="$(printf '%s\n' "$out" | sed -n 's/^check-doc-staleness: stale=\([0-9]*\)$/\1/p' | tail -1)"
+n="${n:-0}"
+
+if [[ "$n" -gt 0 ]]; then
+  # Record the stale leaf paths for the next docs-defrag / agent run to act on.
+  printf '%s\n' "$out" | sed -n 's/^STALE \(.*\)$/\1/p' > "$MARKER" 2>/dev/null || true
+
+  echo "" >&2
+  echo "┌─ polaris-docs: documentation may be stale ─────────────────────────────" >&2
+  echo "│ $n doc leaf/leaves document code you just staged. They may be out of date:" >&2
+  printf '%s\n' "$out" | sed -n 's/^STALE /│   • /p; s/^  staged: /│       staged: /p' >&2
+  echo "│" >&2
+  echo "│ Commit is NOT blocked. Run 'docs-defrag' (or invoke docs-write update mode)" >&2
+  echo "│ to refresh these leaves. Recorded in .cursor/skills/.staleness-pending." >&2
+  echo "└────────────────────────────────────────────────────────────────────────" >&2
+  echo "" >&2
+fi
+
+exit 0
