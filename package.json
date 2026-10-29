@@ -1,0 +1,41 @@
+{
+  "name": "vectoria",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "packageManager": "npm@11.7.0",
+  "scripts": {
+    "dev": "concurrently --names server,client --prefix-colors blue,magenta \"npm run dev -w @vectoria/server\" \"npm run dev -w @vectoria/client\"",
+    "build": "npm run build -w @vectoria/server -w @vectoria/client",
+    "start": "npm run start -w @vectoria/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm run typecheck",
+    "services:up": "docker compose up -d",
+    "services:down": "docker compose down",
+    "db:generate": "npm run db:generate -w @vectoria/server",
+    "db:migrate": "npm run db:migrate -w @vectoria/server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

@@ -5,17 +5,29 @@ detail lives in one leaf per topic under `docs/`.
 
 ## Commands
 
+Run from the repo root (npm workspaces; Node ≥ 22.12).
+
 | Task | Command |
 | ---- | ------- |
-| *(install / dev / test / lint — add once the stack exists)* | |
+| Install | `npm install` |
+| Dev (server :3001 + client :5173) | `npm run dev` |
+| Pre-commit gate (format, lint, types) | `npm run check` |
+| Build / run production server | `npm run build` / `npm start` |
+| Postgres + Redis (Docker) | `npm run services:up` |
+| DB migrations | `npm run db:generate` / `npm run db:migrate` |
+| Add a dependency | `npm i <pkg> -w @vectoria/<client\|server\|shared>` |
 
 ## Stack
 
-*(Not chosen yet — record languages, frameworks, and runtime here; structure goes in
-[`docs/AGENTS_ARCHITECTURE.md`](docs/AGENTS_ARCHITECTURE.md).)*
+npm-workspace monorepo: `apps/client` (React 19, Vite, PixiJS 8, Tailwind 4, zustand),
+`apps/server` (Node, `ws`, Drizzle + `pg`, `ioredis`), `packages/shared` (protocol + game types).
+TypeScript 6 (pinned `~6.0` until `typescript-eslint` supports 7), ESLint flat config, Prettier.
+Shape and protocol: [`docs/AGENTS_ARCHITECTURE.md`](docs/AGENTS_ARCHITECTURE.md).
 
 ## Invariants
 
+- The server is authoritative: clients send intents, the server validates and owns all game state.
+- Network message and game-entity types live only in `packages/shared`; never redeclare them in an app.
 - Agent docs live under `docs/`; never create root `ARCHITECTURE.md` or `DEPLOYMENT.md`.
 - One SSOT per topic: hubs (`AGENTS.md`, `docs/_index.md`) link, leaves own the detail.
 - Every `docs/**` leaf carries frontmatter: `audience`, `category`, `last_verified`, `load-when`.

@@ -23,9 +23,9 @@ Layout: `.cursor/skills/_shared/reference/agent-doc-layout.md`. Navigation (what
 | Task | Load |
 | ---- | ---- |
 | Understand the system / where does X live | [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md) |
-| Change server / API / DB / middleware | [AGENTS_SERVER.md](./AGENTS_SERVER.md) (+ ARCHITECTURE if cross-cutting) |
-| Change UI / composables / app | [AGENTS_APP.md](./AGENTS_APP.md) |
-| Deploy / rollback / ops | [DEPLOYMENT.md](./DEPLOYMENT.md) |
+| Change network protocol / shared types | [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md) (+ SERVER and APP) |
+| Change server / game loop / WebSocket / DB / Redis | [AGENTS_SERVER.md](./AGENTS_SERVER.md) (+ ARCHITECTURE if cross-cutting) |
+| Change rendering / camera / HUD / client state | [AGENTS_APP.md](./AGENTS_APP.md) |
 | Understand a past decision | the relevant `adr/*.md` |
 
 ## Overrides
