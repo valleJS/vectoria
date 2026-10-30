@@ -2,23 +2,31 @@ import { createServer } from 'node:http';
 import { config } from './config';
 import { GameLoop } from './game/GameLoop';
 import { GameState } from './game/GameState';
+import { Persistence } from './game/persistence';
 import { log } from './logger';
 import { GameServer } from './net/GameServer';
+import { handleHttp } from './net/http';
 import { connectServices } from './services';
+
+const newSeed = () => Math.floor(Math.random() * 2 ** 31) + 1;
 
 async function main(): Promise<void> {
   const services = await connectServices(config);
-  const state = new GameState(config.map);
+  const persistence = new Persistence(config.dataFile);
+  const state = new GameState({ seed: config.mapSeed, ...config.game }, await persistence.load());
 
   const http = createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/healthz') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({ status: 'ok', tick: state.tick, connections: gameServer.connectionCount }),
-      );
-      return;
-    }
-    res.writeHead(404).end();
+    void handleHttp(
+      {
+        state,
+        adminToken: config.adminToken,
+        connectionCount: () => gameServer.connectionCount,
+        onChange: () => gameServer.broadcastState(),
+        newSeed,
+      },
+      req,
+      res,
+    );
   });
 
   const gameServer = new GameServer(http, state, {
@@ -27,18 +35,16 @@ async function main(): Promise<void> {
   });
 
   const loop = new GameLoop(config.tickRate, (dtMs) => {
-    state.update(dtMs / 1000);
-    gameServer.broadcast({
-      type: 'snapshot',
-      tick: state.tick,
-      entities: state.snapshotEntities(),
-    });
+    state.update(dtMs);
+    gameServer.broadcastState();
   });
 
   await new Promise<void>((resolve) => http.listen(config.port, config.host, resolve));
   loop.start();
+  persistence.start(state);
   log.info(
-    `Listening on http://${config.host}:${config.port} (ws path /ws, ${config.tickRate} ticks/s, map seed ${config.map.seed})`,
+    `Listening on http://${config.host}:${config.port} (ws /ws, ${config.tickRate} ticks/s, ` +
+      `hours ${config.game.hours}, time scale ${config.game.timeScale}, phase ${state.phase})`,
   );
 
   let shuttingDown = false;
@@ -47,6 +53,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     log.info(`${signal} received, shutting down`);
     loop.stop();
+    await persistence.stop(state);
     await gameServer.close();
     http.closeAllConnections();
     await new Promise<void>((resolve) => http.close(() => resolve()));

@@ -12,6 +12,7 @@ Layout: `.cursor/skills/_shared/reference/agent-doc-layout.md`.
 | [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md) | System diagram, directory tree, network protocol, shared package |
 | [AGENTS_SERVER.md](./AGENTS_SERVER.md) | Game loop, WebSocket server, DB/Redis, env config |
 | [AGENTS_APP.md](./AGENTS_APP.md) | PixiJS renderer, camera, HUD, client state + networking |
+| [AGENTS_GAME.md](./AGENTS_GAME.md) | Game rules: phases, gameday clock, economy, armies, combat, cards |
 
 Entry: [`AGENTS.md`](../AGENTS.md).
 
@@ -20,3 +21,4 @@ Entry: [`AGENTS.md`](../AGENTS.md).
 | Doc | Topic |
 | --- | ----- |
 | [adr/0001-monorepo-and-authoritative-server.md](./adr/0001-monorepo-and-authoritative-server.md) | Monorepo layout, authoritative server, shared-source package, imperative Pixi |
+| [adr/0002-prototype-game-rules.md](./adr/0002-prototype-game-rules.md) | Prototype rules, clock model, auth, admin, JSON persistence |

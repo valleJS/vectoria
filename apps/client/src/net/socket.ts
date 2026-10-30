@@ -1,4 +1,5 @@
 import {
+  CLOSE_UNKNOWN_TOKEN,
   encode,
   parseServerMessage,
   PROTOCOL_VERSION,
@@ -13,6 +14,7 @@ const MAX_RECONNECT_DELAY_MS = 10_000;
 /** WebSocket client with auto-reconnect and RTT measurement. Writes inbound state to the store. */
 export class GameSocket {
   private readonly url: string;
+  private token = '';
   private ws: WebSocket | null = null;
   private shouldReconnect = false;
   private reconnectAttempts = 0;
@@ -24,7 +26,8 @@ export class GameSocket {
     this.url = url;
   }
 
-  connect(): void {
+  connect(token: string): void {
+    this.token = token;
     this.shouldReconnect = true;
     if (!this.ws) this.open();
   }
@@ -47,7 +50,7 @@ export class GameSocket {
 
   private open(): void {
     useGameStore.getState().setStatus('connecting');
-    const ws = new WebSocket(this.url);
+    const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(this.token)}`);
     this.ws = ws;
 
     ws.onopen = () => {
@@ -63,11 +66,18 @@ export class GameSocket {
       if (message) this.handleMessage(message);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       // Ignore close events from sockets we already replaced or deliberately closed.
       if (this.ws !== ws) return;
       this.ws = null;
       clearInterval(this.pingTimer);
+      if (event.code === CLOSE_UNKNOWN_TOKEN) {
+        // Session is gone (kicked or server reset); back to the join screen.
+        this.shouldReconnect = false;
+        useGameStore.getState().setStatus('idle');
+        useGameStore.getState().setToken(null);
+        return;
+      }
       useGameStore.getState().setStatus('closed');
       if (this.shouldReconnect) this.scheduleReconnect();
     };
@@ -94,14 +104,18 @@ export class GameSocket {
         }
         store.applyWelcome(message);
         break;
+      case 'map':
+        store.setMap(message.map);
+        break;
       case 'pong':
         store.setLatency(performance.now() - message.sentAt);
         break;
-      case 'snapshot':
-        store.applySnapshot(message);
+      case 'state':
+        store.applyState(message);
         break;
       case 'error':
-        console.warn(`Server error (${message.code}): ${message.message}`);
+        if (message.code === 'rejected') store.showNotice(message.message);
+        else console.warn(`Server error (${message.code}): ${message.message}`);
         break;
     }
   }

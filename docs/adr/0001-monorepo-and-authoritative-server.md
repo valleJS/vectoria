@@ -20,7 +20,7 @@ on at compile time, and a map view that stays smooth at thousands of tiles.
 
 1. **npm workspaces** (`apps/*`, `packages/*`) rather than pnpm — no extra tooling to install;
    revisit if install time or phantom dependencies become a problem.
-2. **Authoritative server.** Clients send intents (`selectTile`, …); the server validates them
+2. **Authoritative server.** Clients send intents (`sendArmy`, `buy`, …); the server validates them
    and owns all state, broadcasting a `snapshot` each tick from a fixed-rate loop.
 3. **Shared package ships TypeScript source.** No build step for `@vectoria/shared`; Vite and
    `tsx` compile it in place, `tsup` bundles it into the server. Protocol changes are type

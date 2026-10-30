@@ -1,14 +1,15 @@
-import { randomUUID } from 'node:crypto';
-import type { Server as HttpServer } from 'node:http';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import {
+  CLOSE_UNKNOWN_TOKEN,
   encode,
   parseClientMessage,
   PROTOCOL_VERSION,
   type ClientMessage,
+  type MapData,
   type ServerMessage,
 } from '@vectoria/shared';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { GameState } from '../game/GameState';
+import { RuleError, type GameState } from '../game/GameState';
 import { log } from '../logger';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -21,6 +22,8 @@ interface Client {
   /** Token bucket for inbound message rate limiting. */
   tokens: number;
   lastRefill: number;
+  /** Last map sent, so a new one (game start / reset) is pushed once. */
+  map: MapData | null;
 }
 
 export interface GameServerOptions {
@@ -29,6 +32,10 @@ export interface GameServerOptions {
   allowedOrigins: string[];
 }
 
+/**
+ * WebSocket endpoint. Connections authenticate with `?token=` from `POST /api/join`; each client
+ * gets its own filtered `state` view, because card effects hide details from other players.
+ */
 export class GameServer {
   private readonly wss: WebSocketServer;
   private readonly state: GameState;
@@ -46,7 +53,7 @@ export class GameServer {
       verifyClient: ({ origin }: { origin: string }) =>
         options.allowedOrigins.length === 0 || options.allowedOrigins.includes(origin),
     });
-    this.wss.on('connection', (ws) => this.handleConnection(ws));
+    this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
     this.heartbeat = setInterval(() => this.checkHeartbeats(), HEARTBEAT_INTERVAL_MS);
   }
 
@@ -54,10 +61,20 @@ export class GameServer {
     return this.clients.size;
   }
 
-  broadcast(message: ServerMessage): void {
-    const data = encode(message);
-    for (const ws of this.clients.keys()) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(data);
+  /** Sends every client its current view; drops clients whose player was kicked. */
+  broadcastState(): void {
+    for (const [ws, client] of this.clients) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      const view = this.state.viewFor(client.playerId);
+      if (!view) {
+        ws.close(CLOSE_UNKNOWN_TOKEN, 'Unknown player');
+        continue;
+      }
+      if (client.map !== this.state.map) {
+        client.map = this.state.map;
+        this.send(ws, { type: 'map', map: client.map });
+      }
+      this.send(ws, { type: 'state', tick: this.state.tick, view });
     }
   }
 
@@ -67,16 +84,24 @@ export class GameServer {
     return new Promise((resolve) => this.wss.close(() => resolve()));
   }
 
-  private handleConnection(ws: WebSocket): void {
+  private handleConnection(ws: WebSocket, req: IncomingMessage): void {
+    const token = new URL(req.url ?? '/', 'http://localhost').searchParams.get('token') ?? '';
+    const playerId = this.state.playerIdForToken(token);
+    if (!playerId) {
+      ws.close(CLOSE_UNKNOWN_TOKEN, 'Unknown token');
+      return;
+    }
+
     const client: Client = {
-      playerId: randomUUID(),
+      playerId,
       isAlive: true,
       tokens: RATE_LIMIT_PER_SECOND,
       lastRefill: Date.now(),
+      map: this.state.map,
     };
     this.clients.set(ws, client);
-    this.state.addPlayer(client.playerId);
-    log.info(`Player ${client.playerId} connected (${this.clients.size} online)`);
+    this.state.setOnline(playerId, true);
+    log.info(`Player ${playerId} connected (${this.clients.size} online)`);
 
     ws.on('pong', () => {
       client.isAlive = true;
@@ -98,36 +123,47 @@ export class GameServer {
 
     ws.on('close', () => {
       this.clients.delete(ws);
-      this.state.removePlayer(client.playerId);
-      log.info(`Player ${client.playerId} disconnected (${this.clients.size} online)`);
+      this.state.setOnline(playerId, false);
+      log.info(`Player ${playerId} disconnected (${this.clients.size} online)`);
     });
 
-    ws.on('error', (error) => log.warn(`Socket error for ${client.playerId}`, error));
+    ws.on('error', (error) => log.warn(`Socket error for ${playerId}`, error));
 
     this.send(ws, {
       type: 'welcome',
       protocolVersion: PROTOCOL_VERSION,
-      playerId: client.playerId,
+      playerId,
       tickRate: this.options.tickRate,
       map: this.state.map,
     });
   }
 
   private handleMessage(ws: WebSocket, client: Client, message: ClientMessage): void {
-    switch (message.type) {
-      case 'ping':
-        this.send(ws, {
-          type: 'pong',
-          id: message.id,
-          sentAt: message.sentAt,
-          serverTime: Date.now(),
-        });
-        break;
-      case 'selectTile':
-        if (!this.state.selectTile(client.playerId, message)) {
-          this.send(ws, { type: 'error', code: 'invalid_tile', message: 'Tile out of bounds' });
-        }
-        break;
+    const { playerId } = client;
+    try {
+      switch (message.type) {
+        case 'ping':
+          this.send(ws, {
+            type: 'pong',
+            id: message.id,
+            sentAt: message.sentAt,
+            serverTime: Date.now(),
+          });
+          return;
+        case 'setActivity':
+          return this.state.setActivity(playerId, message.resource);
+        case 'buy':
+          return this.state.buy(playerId, message.item, message.count);
+        case 'sendArmy':
+          return this.state.sendArmy(playerId, message.troops, message.target, message.cards);
+        case 'recallArmy':
+          return this.state.recallArmy(playerId, message.armyId);
+        case 'playCard':
+          return this.state.playCard(playerId, message.card);
+      }
+    } catch (error) {
+      if (!(error instanceof RuleError)) throw error;
+      this.send(ws, { type: 'error', code: 'rejected', message: error.message });
     }
   }
 

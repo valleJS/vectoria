@@ -3,7 +3,7 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
 sources_stamp: a5083e462ac390d3f65dfa7e8e09140f02d11bb8
@@ -25,7 +25,9 @@ flowchart LR
   subgraph Server [apps/server]
     WS[GameServer /ws] --> State[(GameState)]
     Loop[GameLoop tick] --> State
-    Loop -->|snapshot| WS
+    Loop -->|per-player state| WS
+    HTTP[/api join + admin/] --> State
+    State --> Save[(data/game.json)]
   end
   Socket <-->|JSON messages| WS
   Server -.optional.-> PG[(PostgreSQL)]
@@ -41,7 +43,7 @@ apps/
   client/          React + Vite + PixiJS + Tailwind  → AGENTS_APP.md
   server/          Node + ws + Drizzle + ioredis     → AGENTS_SERVER.md
 packages/
-  shared/src/      map.ts, entities.ts, messages.ts (types + JSON codec)
+  shared/src/      map.ts, entities.ts, rules.ts, messages.ts (types, balance, JSON codec)
 tsconfig.json      base compiler options; workspaces extend it
 eslint.config.js   flat config for all workspaces
 docker-compose.yml local Postgres 17 + Redis 7
@@ -55,24 +57,33 @@ must stay free of DOM and Node APIs.
 
 ## Network protocol
 
-One WebSocket at `/ws`, JSON text frames, `{ type, ... }` discriminated unions in
-`packages/shared/src/messages.ts`. Bump `PROTOCOL_VERSION` on breaking changes.
+One WebSocket at `/ws?token=…`, JSON text frames, `{ type, ... }` discriminated unions in
+`packages/shared/src/messages.ts`. Bump `PROTOCOL_VERSION` on breaking changes. Unknown token →
+close code `4001` (client drops its token and shows the join screen).
 
 | Direction | Type | Purpose |
 | --------- | ---- | ------- |
 | C→S | `ping` | RTT probe; echoed as `pong` |
-| C→S | `selectTile` | Player selects a tile; server bounds-checks |
-| S→C | `welcome` | On connect: `playerId`, `tickRate`, full `MapData` |
-| S→C | `snapshot` | Every tick: `tick` + all `EntityState`s |
-| S→C | `error` | `bad_message` / `invalid_tile` / `rate_limited` |
+| C→S | `setActivity` | Base activity for the next gameday |
+| C→S | `buy` | Troop batches or victory points |
+| C→S | `sendArmy` | Troops + target (`castle`/`spot`/`chest`) + march cards |
+| C→S | `recallArmy` / `playCard` | Recall an army / play an instant card |
+| S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
+| S→C | `map` | Map changed (game start / reset) |
+| S→C | `state` | Every tick: this player's filtered `GameView` |
+| S→C | `error` | `bad_message` / `rate_limited` / `rejected` (rule violation, shown as toast) |
 
-Server validates every client message with `parseClientMessage`; add a case there for each new
-client message type.
+HTTP (same port): `POST /api/join`, `GET /api/lobby`, `GET /api/admin/state`,
+`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`.
+
+Server validates every client message with `parseClientMessage` and admin bodies with
+`parseAdminAction`; add a case there for each new type. Game rules: [AGENTS_GAME.md](./AGENTS_GAME.md).
 
 ## Where should I change X?
 
 | Change | Go to |
 | ------ | ----- |
 | Message shape, tile/entity types | `packages/shared/src/` (then both apps) |
+| Balance numbers, cards | `packages/shared/src/rules.ts` → [AGENTS_GAME.md](./AGENTS_GAME.md) |
 | Simulation, tick, connections, DB/Redis | [AGENTS_SERVER.md](./AGENTS_SERVER.md) |
 | Rendering, camera, HUD, client networking | [AGENTS_APP.md](./AGENTS_APP.md) |
