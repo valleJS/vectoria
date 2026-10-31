@@ -10,11 +10,18 @@ import {
   type GameView,
   type Vec2,
 } from '@vectoria/shared';
-import { useState } from 'react';
-import { describeTarget, formatGameDuration, playerName } from '../game/format';
+import { useState, type ReactNode } from 'react';
+import {
+  cssColor,
+  describeTarget,
+  formatGameDuration,
+  playerColor,
+  playerName,
+} from '../game/format';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { Button, Panel } from './Panel';
+import { BannerIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
+import { Button } from './Panel';
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -54,7 +61,16 @@ function SendForm({
   };
 
   return (
-    <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+    <div className="mt-2 space-y-2 border-t border-ink/30 pt-2">
+      <input
+        type="range"
+        min={home > 0 ? 1 : 0}
+        max={home}
+        value={troops}
+        onChange={(e) => setTroops(Number(e.target.value))}
+        className="w-full accent-seal"
+        aria-label="Truppen"
+      />
       <div className="flex items-center gap-2">
         <input
           type="number"
@@ -62,9 +78,9 @@ function SendForm({
           max={home}
           value={troops}
           onChange={(e) => setTroops(Math.floor(Number(e.target.value)))}
-          className="w-20 rounded border border-white/10 bg-slate-800 px-2 py-1 tabular-nums"
+          className="w-20 border border-ink/50 bg-parchment-dark px-2 py-1 tabular-nums"
         />
-        <span className="text-slate-400">/ {home} zu Hause</span>
+        <span className="text-ink-soft">/ {home} zu Hause</span>
         <Button onClick={() => setTroops(home)} disabled={home === 0}>
           Alle
         </Button>
@@ -72,14 +88,11 @@ function SendForm({
       {marchCards.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {marchCards.map((card) => (
-            <label
-              key={card}
-              className="flex items-center gap-1 text-slate-300"
-              title={CARDS[card].description}
-            >
+            <label key={card} className="flex items-center gap-1" title={CARDS[card].description}>
               <input
                 type="checkbox"
                 checked={cards.includes(card)}
+                className="accent-seal"
                 onChange={(e) =>
                   setCards(e.target.checked ? [...cards, card] : cards.filter((c) => c !== card))
                 }
@@ -90,11 +103,20 @@ function SendForm({
         </div>
       )}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-slate-400">Ankunft in {formatGameDuration(eta)} Spielzeit</span>
+        <span className="text-ink-soft">Ankunft in {formatGameDuration(eta)} Spielzeit</span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function Title({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mb-1 flex items-center gap-2 text-base italic">
+      {icon}
+      {children}
     </div>
   );
 }
@@ -104,18 +126,18 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   const remaining = army.arriveClock !== null ? army.arriveClock - view.clock.clock : null;
   return (
     <>
-      <div className="font-medium">
-        Truppenzug von {own ? 'dir' : playerName(view, army.ownerId)}
-      </div>
-      <div className="text-slate-300">
+      <Title icon={<BannerIcon color={cssColor(playerColor(view, army.ownerId))} />}>
+        Heerzug von {own ? 'dir' : playerName(view, army.ownerId)}
+      </Title>
+      <div>
         {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
       </div>
-      <div className="text-slate-400">
+      <div className="text-ink-soft">
         Ziel: {describeTarget(view, army.target)}
         {remaining !== null && ` · noch ${formatGameDuration(remaining)}`}
       </div>
       {(army.fog || army.stealth || army.forcedMarch) && (
-        <div className="text-xs text-sky-300">
+        <div className="text-xs text-sea-dark italic">
           {[army.fog && 'Nebel', army.stealth && 'Tarnung', army.forcedMarch && 'Eilmarsch']
             .filter(Boolean)
             .join(' · ')}
@@ -145,11 +167,13 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       const own = player.id === view.self.id;
       return (
         <>
-          <div className="font-medium">{own ? 'Deine Burg' : `Burg von ${player.name}`}</div>
-          <div className="text-slate-300">
+          <Title icon={<CastleIcon color={cssColor(playerColor(view, player.id))} />}>
+            {own ? 'Deine Burg' : `Burg von ${player.name}`}
+          </Title>
+          <div>
             {player.homeTroops} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
-          {player.fortified && <div className="text-sky-300">Bollwerk aktiv (+50 %)</div>}
+          {player.fortified && <div className="text-sea-dark italic">Bollwerk aktiv (+50 %)</div>}
           {!own && (
             <SendForm
               key={selection.id}
@@ -170,13 +194,15 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       );
       return (
         <>
-          <div className="font-medium">{RESOURCE_NAMES[spot.resource]}-Vorkommen</div>
-          <div className="text-slate-400">
+          <Title icon={<ResourceIcon resource={spot.resource} size={26} />}>
+            {RESOURCE_NAMES[spot.resource]}-Vorkommen
+          </Title>
+          <div className="text-ink-soft">
             100 Truppen bauen {GATHER_PER_100_TROOPS_PER_DAY} {RESOURCE_NAMES[spot.resource]} pro
             Gameday ({formatGameDuration(GAMEDAY_MS)}) ab.
           </div>
           {here.length > 0 && (
-            <div className="text-slate-300">
+            <div>
               Hier:{' '}
               {here.map((a) => `${playerName(view, a.ownerId)} (${a.troops ?? '?'})`).join(', ')}
             </div>
@@ -196,8 +222,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       if (!chest) return null;
       return (
         <>
-          <div className="font-medium">Truhe</div>
-          <div className="text-slate-400">
+          <Title icon={<ChestIcon size={26} />}>Truhe</Title>
+          <div className="text-ink-soft">
             Enthält eine Spezialkarte. Wer zuerst ankommt, bekommt sie; danach kehren die Truppen
             heim.
           </div>
@@ -227,30 +253,29 @@ function selectionExists(view: GameView, selection: Selection): boolean {
   }
 }
 
-export function SelectionPanel({ view }: { view: GameView }) {
+/** Details and actions for the selected map object; a hint when nothing is selected. */
+export function SelectionContent({ view }: { view: GameView }) {
   const selection = useGameStore((s) => s.selection);
   const select = useGameStore((s) => s.select);
   // A chest that was opened or an army that disbanded leaves a stale selection behind.
   if (!selection || !selectionExists(view, selection)) {
     return (
-      <Panel className="text-slate-400">
-        Klicke auf eine Burg, ein Vorkommen, eine Truhe oder einen Truppenzug.
-      </Panel>
+      <p className="py-2 text-ink-soft italic">
+        Klicke auf der Karte auf eine Burg, ein Vorkommen, eine Truhe oder einen Heerzug.
+      </p>
     );
   }
   return (
-    <Panel>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className="-mt-1 -mr-1 text-slate-500 hover:text-slate-300"
-          onClick={() => select(null)}
-          aria-label="Auswahl schließen"
-        >
-          ×
-        </button>
-      </div>
+    <div>
+      <button
+        type="button"
+        className="float-right -mt-0.5 text-lg leading-none text-ink-soft hover:text-seal"
+        onClick={() => select(null)}
+        aria-label="Auswahl schließen"
+      >
+        ×
+      </button>
       <SelectionBody view={view} selection={selection} />
-    </Panel>
+    </div>
   );
 }

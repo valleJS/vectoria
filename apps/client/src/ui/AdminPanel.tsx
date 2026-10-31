@@ -94,7 +94,7 @@ export function AdminPanel() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Admin-Token"
-              className="flex-1 rounded border border-white/10 bg-slate-800 px-2 py-1"
+              className="flex-1 border border-ink/50 bg-parchment-dark px-2 py-1"
             />
             <Button type="submit" variant="primary">
               Login
@@ -108,7 +108,7 @@ export function AdminPanel() {
   return (
     <div className="mx-auto h-full max-w-5xl space-y-3 overflow-y-auto p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Vectoria · Admin</h1>
+        <h1 className="text-2xl font-bold italic">Vectoria · Admin</h1>
         <Button
           onClick={() => {
             localStorage.removeItem(TOKEN_KEY);
@@ -119,12 +119,12 @@ export function AdminPanel() {
           Logout
         </Button>
       </div>
-      {error && <Panel className="border-rose-500/50 text-rose-300">{error}</Panel>}
+      {error && <Panel className="border-seal/60 text-seal">{error}</Panel>}
 
       {state && (
         <>
           <Panel title="Spiel">
-            <div className="text-slate-300">
+            <div className="text-ink">
               Phase: <b>{PHASE_NAMES[state.phase]}</b> · {state.players.length} Spieler:innen
               {state.mapSize && ` · Karte ${state.mapSize}×${state.mapSize}`}
               {state.phase !== 'registration' && (
@@ -197,18 +197,18 @@ export function AdminPanel() {
           </Panel>
 
           <Panel title="Spieler:innen">
-            <div className="mb-2 flex items-center gap-2 text-slate-400">
+            <div className="mb-2 flex items-center gap-2 text-ink-soft">
               Gutschrift:
               <input
                 type="number"
                 value={grant.amount}
                 onChange={(e) => setGrant({ ...grant, amount: Math.trunc(Number(e.target.value)) })}
-                className="w-16 rounded border border-white/10 bg-slate-800 px-2 py-0.5"
+                className="w-16 border border-ink/50 bg-parchment-dark px-2 py-0.5"
               />
               <select
                 value={grant.resource}
                 onChange={(e) => setGrant({ ...grant, resource: e.target.value as ResourceType })}
-                className="rounded border border-white/10 bg-slate-800 px-2 py-0.5"
+                className="border border-ink/50 bg-parchment-dark px-2 py-0.5"
               >
                 {RESOURCES.map((r) => (
                   <option key={r} value={r}>
@@ -218,7 +218,7 @@ export function AdminPanel() {
               </select>
             </div>
             <table className="w-full text-left tabular-nums">
-              <thead className="text-slate-400">
+              <thead className="text-ink-soft">
                 <tr>
                   <th className="py-1">Name</th>
                   <th>SP</th>
@@ -230,9 +230,9 @@ export function AdminPanel() {
               </thead>
               <tbody>
                 {state.players.map((p) => (
-                  <tr key={p.id} className="border-t border-white/5">
+                  <tr key={p.id} className="border-t border-ink/20">
                     <td className="py-1">
-                      <span className={p.online ? 'text-emerald-300' : ''}>{p.name}</span>
+                      <span className={p.online ? 'text-moss' : ''}>{p.name}</span>
                     </td>
                     <td>{p.victoryPoints}</td>
                     <td>

@@ -70,13 +70,28 @@ export class Camera {
     this.onZoomChange?.(next);
   }
 
-  /** Centres a world-space rectangle in the viewport at the largest zoom that fits it. */
-  fit(width: number, height: number, viewWidth: number, viewHeight: number, padding = 32): void {
+  /**
+   * Centres a world-space rectangle at the largest zoom that fits it inside the viewport minus
+   * `insets` (screen px covered by overlays).
+   */
+  fit(
+    width: number,
+    height: number,
+    viewWidth: number,
+    viewHeight: number,
+    padding = 32,
+    insets = { top: 0, right: 0, bottom: 0, left: 0 },
+  ): void {
+    const areaWidth = viewWidth - insets.left - insets.right;
+    const areaHeight = viewHeight - insets.top - insets.bottom;
     const zoom = this.clampZoom(
-      Math.min((viewWidth - padding * 2) / width, (viewHeight - padding * 2) / height),
+      Math.min((areaWidth - padding * 2) / width, (areaHeight - padding * 2) / height),
     );
     this.world.scale.set(zoom);
-    this.world.position.set((viewWidth - width * zoom) / 2, (viewHeight - height * zoom) / 2);
+    this.world.position.set(
+      insets.left + (areaWidth - width * zoom) / 2,
+      insets.top + (areaHeight - height * zoom) / 2,
+    );
     this.onZoomChange?.(zoom);
   }
 

@@ -1,23 +1,38 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
+/** Parchment sheet with a double ink rule. */
 export function Panel({
   title,
+  icon,
   className = '',
   children,
 }: {
-  title?: string;
+  title?: ReactNode;
+  icon?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <div
-      className={`pointer-events-auto rounded-lg border border-white/10 bg-slate-900/85 px-3 py-2 text-sm shadow-lg backdrop-blur ${className}`}
+      className={`pointer-events-auto border border-ink bg-parchment p-[3px] text-sm text-ink shadow-[2px_3px_0_rgba(59,42,24,0.35)] ${className}`}
     >
-      {title && (
-        <div className="mb-1.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
-          {title}
-        </div>
-      )}
+      <div className="border border-ink/40 px-3 py-2">
+        {title && (
+          <div className="mb-1.5 flex items-center gap-2 text-base italic">
+            {icon}
+            {title}
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Small-caps section label inside a panel. */
+export function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-3 mb-1 border-b border-ink/25 pb-0.5 text-xs tracking-wider text-ink-soft uppercase">
       {children}
     </div>
   );
@@ -27,16 +42,19 @@ export function Button({
   variant = 'default',
   className = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'default' | 'primary' | 'danger' | 'selected';
+}) {
   const styles = {
-    default: 'bg-slate-700 hover:bg-slate-600',
-    primary: 'bg-amber-500 text-slate-950 hover:bg-amber-400',
-    danger: 'bg-rose-700 hover:bg-rose-600',
+    default: 'border-ink/60 bg-parchment-deep/70 text-ink hover:bg-parchment-deep',
+    primary: 'border-ink bg-seal text-parchment hover:bg-seal-light',
+    danger: 'border-ink bg-[#6e1f14] text-parchment hover:bg-seal',
+    selected: 'border-ink bg-ink text-parchment',
   }[variant];
   return (
     <button
       type="button"
-      className={`rounded px-2.5 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${styles} ${className}`}
+      className={`border px-2.5 py-1 font-serif text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${styles} ${className}`}
       {...props}
     />
   );
