@@ -13,7 +13,6 @@ import {
   mountain,
   ship,
   spotMedallion,
-  wave,
   type Art,
 } from './svg';
 
@@ -36,7 +35,6 @@ export interface MapArt {
   snowyMountains: ArtTexture[];
   tuft: ArtTexture;
   flowers: ArtTexture[];
-  wave: ArtTexture;
   ship: ArtTexture;
   spots: Record<ResourceType, ArtTexture>;
   chest: ArtTexture;
@@ -89,7 +87,6 @@ export function loadMapArt(): Promise<MapArt> {
       snowyMountains,
       tuft: await rasterise(grassTuft()),
       flowers: flowerArt,
-      wave: await rasterise(wave()),
       ship: await rasterise(ship()),
       chest: await rasterise(chest()),
       castles: new Map(

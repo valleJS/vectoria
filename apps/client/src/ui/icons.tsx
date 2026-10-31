@@ -1,5 +1,5 @@
 import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
-import { dataUrl, resourceIcon } from '../art/svg';
+import { castle, dataUrl, resourceIcon } from '../art/svg';
 import type { ReactNode } from 'react';
 
 // HUD icons. Resources come from the shared art (src/art/svg.ts); the small glyphs here mirror
@@ -90,19 +90,21 @@ export function TroopIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-export function CastleIcon({ size = 22, color }: { size?: number; color: string }) {
+const castleUrls = new Map<string, string>();
+
+/** The map's castle art in the owner's colour. */
+export function CastleIcon({ size = 26, color }: { size?: number; color: string }) {
+  let url = castleUrls.get(color);
+  if (!url) castleUrls.set(color, (url = dataUrl(castle(color).svg)));
   return (
-    <Glyph size={size}>
-      <g transform="translate(0 4) scale(0.62)" stroke={INK} strokeWidth={1.4}>
-        <rect x={-14} y={-2} width={28} height={13} fill="#e9dfc6" />
-        <rect x={-18} y={-10} width={8} height={21} fill="#f3ead4" />
-        <rect x={10} y={-10} width={8} height={21} fill="#f3ead4" />
-        <path d="M-19-10L-14-19L-9-10Z" fill={color} />
-        <path d="M9-10L14-19L19-10Z" fill={color} />
-        <rect x={-6} y={-14} width={12} height={16} fill="#f3ead4" />
-        <path d="M-7-14L0-25L7-14Z" fill={color} />
-      </g>
-    </Glyph>
+    <img
+      src={url}
+      width={size}
+      height={size}
+      alt=""
+      className="inline-block shrink-0"
+      draggable={false}
+    />
   );
 }
 

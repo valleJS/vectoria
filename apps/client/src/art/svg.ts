@@ -23,49 +23,27 @@ export function dataUrl(markup: string): string {
 
 // ---- Resources ----
 
-function logEnd(cx: number, cy: number): string {
-  return `<g>
-    <circle cx="${cx}" cy="${cy}" r="11.5" fill="#7a4a22" stroke="${INK}" stroke-width="2.2"/>
-    <circle cx="${cx}" cy="${cy}" r="8.6" fill="#ebbd82"/>
-    <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="#c48d52" stroke-width="1.3"/>
-    <circle cx="${cx}" cy="${cy}" r="3.2" fill="none" stroke="#c48d52" stroke-width="1.2"/>
-    <circle cx="${cx}" cy="${cy}" r="1" fill="#a8723c"/>
-    <path d="M${cx - 6} ${cy - 5.5} a8 8 0 0 1 6-2.4" fill="none" stroke="#fff3dc" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>
-  </g>`;
-}
-
-function block(x: number, y: number, w: number, h: number, d: number): string {
-  const r = d * 0.6;
-  return `<g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
-    <path d="M${x} ${y}L${x + d} ${y - r}H${x + w + d}L${x + w} ${y}Z" fill="#e3e6ea"/>
-    <path d="M${x + w} ${y}L${x + w + d} ${y - r}V${y + h - r}L${x + w} ${y + h}Z" fill="#7f8792"/>
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#adb4bd"/>
-  </g>
-  <path d="M${x + w * 0.3} ${y + h * 0.35}l${w * 0.12} ${h * 0.18}l-${w * 0.05} ${h * 0.22}" fill="none" stroke="#6c737c" stroke-width="1.2" stroke-linecap="round"/>
-  <path d="M${x + 2.5} ${y + 2.5}h${w * 0.45}" stroke="#d3d7dc" stroke-width="1.4" stroke-linecap="round"/>`;
-}
-
-function coin(cx: number, cy: number): string {
-  return `<g stroke="${INK}" stroke-width="2">
-    <path d="M${cx - 13} ${cy}v4a13 5 0 0 0 26 0v-4" fill="#c9951b"/>
-    <ellipse cx="${cx}" cy="${cy}" rx="13" ry="5" fill="#f7cf3d"/>
-  </g>
-  <ellipse cx="${cx}" cy="${cy}" rx="8.5" ry="3" fill="none" stroke="#d8a523" stroke-width="1.3"/>`;
-}
-
 const RESOURCE_BODY: Record<ResourceType, string> = {
-  wood: `${logEnd(21, 41)}${logEnd(43, 41)}${logEnd(32, 22)}
-    <path d="M47 13c4-5 9-5 11-3c-2 4-7 6-11 3z" fill="#6aa046" stroke="${INK}" stroke-width="1.6"/>
-    <path d="M47 13l7-2" stroke="${INK}" stroke-width="1"/>`,
-  stone: `${block(7, 34, 30, 20, 9)}${block(31, 40, 18, 14, 7)}${block(16, 18, 18, 14, 7)}`,
-  gold: `${coin(32, 50)}${coin(32, 43)}${coin(32, 36)}${coin(30, 29)}
-    <g transform="translate(46 20) rotate(18)" stroke="${INK}" stroke-width="2">
-      <ellipse cx="0" cy="0" rx="6" ry="13" fill="#c9951b"/>
-      <ellipse cx="2" cy="0" rx="6" ry="13" fill="#f7cf3d"/>
-      <ellipse cx="2" cy="0" rx="3.4" ry="8.5" fill="none" stroke="#d8a523" stroke-width="1.3"/>
+  // One log, end grain towards the viewer.
+  wood: `<g transform="rotate(-18 32 34)" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round">
+      <path d="M14 23h31v22H14a7 11 0 0 1 0-22z" fill="#9a6431"/>
+      <path d="M17 29h22M19 39h17" fill="none" stroke="#6e4420" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="45" cy="34" rx="8" ry="11" fill="#eabc80"/>
+      <ellipse cx="45" cy="34" rx="4.4" ry="6.4" fill="none" stroke="#c18a50" stroke-width="1.6"/>
+    </g>`,
+  // One cut block.
+  stone: `<g stroke="${INK}" stroke-width="2.6" stroke-linejoin="round">
+      <path d="M9 28L23 17H55L41 28Z" fill="#e4e7eb"/>
+      <path d="M41 28L55 17V42L41 53Z" fill="#7d8590"/>
+      <rect x="9" y="28" width="32" height="25" fill="#aab1ba"/>
     </g>
-    <path d="M14 14l1.6 4.2l4.2 1.6l-4.2 1.6l-1.6 4.2l-1.6-4.2l-4.2-1.6l4.2-1.6z" fill="#fff6c2" stroke="${INK}" stroke-width=".8"/>
-    <path d="M22 26q4-1.6 8-1" fill="none" stroke="#fff6c2" stroke-width="1.6" stroke-linecap="round"/>`,
+    <path d="M13 32h14" stroke="#d6dadf" stroke-width="2" stroke-linecap="round"/>`,
+  // One coin.
+  gold: `<circle cx="34" cy="35" r="22" fill="#b07f14" stroke="${INK}" stroke-width="2.6"/>
+    <circle cx="31" cy="32" r="22" fill="#f4c533" stroke="${INK}" stroke-width="2.6"/>
+    <circle cx="31" cy="32" r="15.5" fill="none" stroke="#c9951b" stroke-width="2"/>
+    <path d="M31 22l3 6.2l6.8 1l-4.9 4.8l1.2 6.8l-6.1-3.2l-6.1 3.2l1.2-6.8l-4.9-4.8l6.8-1z" fill="#e2ad25" stroke="#a87a14" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M18 24a15 15 0 0 1 8-6" fill="none" stroke="#fff3c4" stroke-width="2.6" stroke-linecap="round"/>`,
 };
 
 /** Resource icon, 64×64. */
@@ -86,7 +64,7 @@ export function spotMedallion(resource: ResourceType): Art {
     <circle cx="40" cy="38" r="31" fill="${INK}"/>
     <circle cx="40" cy="38" r="28.5" fill="${SPOT_RING[resource]}"/>
     <circle cx="40" cy="38" r="23.5" fill="#f6ecd2" stroke="${INK}" stroke-width="1.5"/>
-    <g transform="translate(18 16) scale(.69)">${RESOURCE_BODY[resource]}</g>`;
+    <g transform="translate(14.4 12.4) scale(.8)">${RESOURCE_BODY[resource]}</g>`;
   return { svg: svg(80, 80, body), width: 80, height: 80, anchor: { x: 40, y: 38 } };
 }
 
@@ -226,11 +204,6 @@ export function flowers(color: string): Art {
   return { svg: svg(22, 16, body), width: 22, height: 16, anchor: { x: 11, y: 14 } };
 }
 
-export function wave(): Art {
-  const body = `<path d="M2 9q4-6 8 0t8 0t8 0" fill="none" stroke="#e8f6f6" stroke-width="1.8" stroke-linecap="round" opacity=".85"/>`;
-  return { svg: svg(28, 14, body), width: 28, height: 14, anchor: { x: 14, y: 7 } };
-}
-
 export function ship(): Art {
   const body = `
     <path d="M8 40h44l-8 10H16z" fill="#8a5a2b" stroke="${INK}" stroke-width="2" stroke-linejoin="round"/>
@@ -238,8 +211,7 @@ export function ship(): Art {
     <path d="M30 40V6" stroke="${INK}" stroke-width="2"/>
     <path d="M32 9q14 12 0 28z" fill="#f6efd9" stroke="${INK}" stroke-width="1.6"/>
     <path d="M28 12q-12 10 0 24z" fill="#ebe0c2" stroke="${INK}" stroke-width="1.6"/>
-    <path d="M30 6l9 3l-9 3z" fill="#d4472f" stroke="${INK}" stroke-width="1"/>
-    <path d="M2 52q6-4 12 0t12 0t12 0t12 0t10 0" fill="none" stroke="#e8f6f6" stroke-width="1.6" opacity=".8"/>`;
+    <path d="M30 6l9 3l-9 3z" fill="#d4472f" stroke="${INK}" stroke-width="1"/>`;
   return { svg: svg(62, 56, body), width: 62, height: 56, anchor: { x: 30, y: 46 } };
 }
 
@@ -257,38 +229,98 @@ function shade(color: string, f: number): string {
   return `#${channel(1)}${channel(3)}${channel(5)}`;
 }
 
-/** Castle with two towers and a keep; roofs and banner in the owner's colour. 100×100. */
+const STONE = '#d9cdb5';
+const STONE_LIGHT = '#e8dfcc';
+const STONE_SHADE = '#b5a68a';
+const MORTAR = '#ab9c7f';
+
+/** Castle: round towers with roofs, a crenellated keep with a flag, gate and wall banners.
+ *  Roofs, flag and banners in the owner's colour. 120×110, standing at (60, 96). */
 export function castle(color: string): Art {
-  const dark = shade(color, 0.68);
-  const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
+  const dark = shade(color, 0.66);
+  const light = shade(color, 1.25);
+  const line = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
+  const merlons = (xs: number[], y: number, fill: string) =>
+    xs
+      .map((x) => `<rect x="${x}" y="${y}" width="5.5" height="6.5" fill="${fill}" ${line}/>`)
+      .join('');
+  const bricks = (x0: number, x1: number, rows: number[]) =>
+    rows
+      .map((y, i) => {
+        let d = `M${x0 + 2} ${y}H${x1 - 2}`;
+        for (let x = x0 + (i % 2 ? 5 : 10); x < x1 - 3; x += 10) d += `M${x} ${y}v-7`;
+        return d;
+      })
+      .join('');
   const tower = (x: number) => `
-    <rect x="${x}" y="44" width="20" height="44" fill="#f1e8d2" ${line}/>
-    <rect x="${x + 14}" y="45.1" width="4.9" height="41.8" fill="#d9ccb0"/>
-    <rect x="${x + 8}" y="56" width="4" height="9" rx="2" fill="${INK}"/>
-    <path d="M${x - 3} 46L${x + 10} 22L${x + 23} 46Z" fill="${color}" ${line}/>
-    <path d="M${x + 10} 22L${x + 23} 46H${x + 10}Z" fill="${dark}"/>
-    <path d="M${x - 3} 46L${x + 10} 22L${x + 23} 46Z" fill="none" ${line}/>`;
-  const merlons = [16, 24, 32, 40, 48, 56, 64, 72, 79]
-    .map((x) => `<rect x="${x}" y="55" width="5" height="6" fill="#e9dfc6" ${line}/>`)
-    .join('');
+    <path d="M${x} 50H${x + 26}V95Q${x + 13} 99 ${x} 95Z" fill="${STONE}" ${line}/>
+    <path d="M${x + 19} 51.2H${x + 24.8}V94.5Q${x + 22} 96.4 ${x + 19} 97Z" fill="${STONE_SHADE}"/>
+    <path d="${bricks(x, x + 26, [62, 69, 76, 83, 90])}" stroke="${MORTAR}" stroke-width="1" fill="none" opacity=".8"/>
+    <path d="M${x + 10} 72v-5a3 3 0 0 1 6 0v5z" fill="${INK}"/>
+    <path d="M${x} 95Q${x + 13} 99 ${x + 26} 95V50" fill="none" ${line}/>
+    <path d="M${x - 4} 51L${x + 13} 14L${x + 30} 51Q${x + 13} 57 ${x - 4} 51Z" fill="${color}" ${line}/>
+    <path d="M${x + 13} 14L${x + 30} 51Q${x + 22} 54 ${x + 13} 54.4Z" fill="${dark}"/>
+    <path d="M${x + 6} 40L${x + 12} 22" stroke="${light}" stroke-width="2" stroke-linecap="round"/>
+    <path d="M${x - 4} 51L${x + 13} 14L${x + 30} 51Q${x + 13} 57 ${x - 4} 51Z" fill="none" ${line}/>
+    <circle cx="${x + 13}" cy="13" r="2.6" fill="#f2c230" stroke="${INK}" stroke-width="1.4"/>`;
+  const banner = (x: number) =>
+    `<path d="M${x} 66h9v15l-4.5-3.4L${x} 81Z" fill="${color}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
+     <path d="M${x + 2} 70h5" stroke="${light}" stroke-width="1.4"/>`;
   const body = `
-    <ellipse cx="50" cy="89" rx="42" ry="7" fill="${INK}" opacity=".28"/>
-    <rect x="38" y="38" width="24" height="26" fill="#f1e8d2" ${line}/>
-    <path d="M47 50a3 3 0 0 1 6 0v6h-6z" fill="${INK}"/>
-    <path d="M35 40L50 16L65 40Z" fill="${color}" ${line}/>
-    <path d="M50 16L65 40H50Z" fill="${dark}"/>
-    <path d="M35 40L50 16L65 40Z" fill="none" ${line}/>
-    <path d="M50 16V3" stroke="${INK}" stroke-width="2"/>
-    <path d="M50 3.5L66 7.5L50 11.5Z" fill="${color}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
-    ${merlons}
-    <rect x="16" y="60" width="68" height="28" fill="#e9dfc6" ${line}/>
-    <g stroke="#c9bb9a" stroke-width="1.2" stroke-linecap="round">
-      <path d="M22 68h8M34 74h7M62 70h8M24 80h6M66 80h8M58 64h6"/>
-    </g>
-    <path d="M41 88V75a9 9 0 0 1 18 0V88Z" fill="#4a3520" ${line}/>
-    <path d="M45 74v14M50 71v17M55 74v14M41 80h18" stroke="#7a5a33" stroke-width="1.2"/>
-    ${tower(6)}${tower(74)}`;
-  return { svg: svg(100, 100, body), width: 100, height: 100, anchor: { x: 50, y: 84 } };
+    <ellipse cx="60" cy="97" rx="56" ry="8" fill="${INK}" opacity=".28"/>
+    <path d="M60 30V5" stroke="${INK}" stroke-width="2.2"/>
+    <path d="M60 6H86L80.5 12L86 18H60Z" fill="${color}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M60 13H83L86 18H60Z" fill="${dark}"/>
+    <path d="M60 6H86L80.5 12L86 18H60Z" fill="none" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+    ${merlons([41, 50, 58.5, 67, 73.5], 25, STONE_LIGHT)}
+    <rect x="41" y="31" width="38" height="36" fill="${STONE_LIGHT}" ${line}/>
+    <rect x="71" y="32.2" width="6.8" height="33.6" fill="${STONE}"/>
+    <path d="${bricks(41, 79, [40, 47, 54, 61])}" stroke="${MORTAR}" stroke-width="1" fill="none" opacity=".7"/>
+    <path d="M55 52v-8a5 5 0 0 1 10 0v8z" fill="#f2c230" stroke="${INK}" stroke-width="2"/>
+    <path d="M60 39v13M55 46h10" stroke="${INK}" stroke-width="1.4"/>
+    ${merlons([30, 38.5, 47, 55.5, 64, 72.5, 81], 55, STONE)}
+    <rect x="30" y="61" width="60" height="35" fill="${STONE}" ${line}/>
+    <rect x="30" y="88" width="60" height="8" fill="${STONE_SHADE}" ${line}/>
+    <path d="${bricks(30, 90, [68, 75, 82])}" stroke="${MORTAR}" stroke-width="1" fill="none" opacity=".8"/>
+    <path d="M48 96V80a12 12 0 0 1 24 0V96Z" fill="${STONE_SHADE}" ${line}/>
+    <path d="M51.5 96V80.5a8.5 8.5 0 0 1 17 0V96Z" fill="#7a4b22" stroke="${INK}" stroke-width="1.8"/>
+    <path d="M56 96V75M60 96V72M64 96V75M51.5 84h17M51.5 90h17" stroke="#5a3616" stroke-width="1.3"/>
+    ${banner(34)}${banner(77)}
+    ${tower(4)}${tower(90)}`;
+  return { svg: svg(120, 110, body), width: 120, height: 110, anchor: { x: 60, y: 96 } };
+}
+
+/** Compass rose for the HUD, 110×120 (centre at 55, 65). */
+export function compassRose(): string {
+  const cx = 55;
+  const cy = 65;
+  const point = (angle: number, length: number, half: number, dark: string, lit: string) => {
+    const a = (angle * Math.PI) / 180;
+    const tip = [cx + Math.sin(a) * length, cy - Math.cos(a) * length];
+    const left = [cx - Math.cos(a) * half, cy - Math.sin(a) * half];
+    const right = [cx + Math.cos(a) * half, cy + Math.sin(a) * half];
+    const f = (p: number[]) => `${p[0]!.toFixed(2)} ${p[1]!.toFixed(2)}`;
+    return `<path d="M${cx} ${cy}L${f(tip)}L${f(left)}Z" fill="${lit}"/>
+      <path d="M${cx} ${cy}L${f(tip)}L${f(right)}Z" fill="${dark}"/>
+      <path d="M${f(left)}L${f(tip)}L${f(right)}" fill="none" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`;
+  };
+  let ticks = '';
+  for (let i = 0; i < 32; i++) {
+    const a = (i * Math.PI) / 16;
+    const inner = i % 4 === 0 ? 37 : 39.5;
+    ticks += `<path d="M${(cx + Math.sin(a) * inner).toFixed(2)} ${(cy - Math.cos(a) * inner).toFixed(2)}L${(cx + Math.sin(a) * 42).toFixed(2)} ${(cy - Math.cos(a) * 42).toFixed(2)}"/>`;
+  }
+  const body = `
+    <circle cx="${cx}" cy="${cy}" r="47" fill="#f6eedb" stroke="${INK}" stroke-width="2.2"/>
+    <circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="${INK}" stroke-width="1"/>
+    <circle cx="${cx}" cy="${cy}" r="24" fill="none" stroke="${INK}" stroke-width=".8" opacity=".5"/>
+    <g stroke="${INK}" stroke-width="1">${ticks}</g>
+    ${[45, 135, 225, 315].map((a) => point(a, 27, 6, '#8a7550', '#e9dcbc')).join('')}
+    ${[90, 180, 270].map((a) => point(a, 40, 8, INK, '#e9dcbc')).join('')}
+    ${point(0, 40, 8, '#9e2a1a', '#e2735f')}
+    <circle cx="${cx}" cy="${cy}" r="5" fill="#f2c230" stroke="${INK}" stroke-width="1.6"/>
+    <text x="${cx}" y="15" text-anchor="middle" font-family="Georgia, serif" font-size="16" font-weight="bold" fill="${INK}">N</text>`;
+  return svg(110, 120, body);
 }
 
 /** Treasure chest with gold trim and sparkles, 56×48. */

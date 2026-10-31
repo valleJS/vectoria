@@ -24,10 +24,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/net/api.ts` | HTTP client for join, lobby, admin |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
 | `src/game/GameRenderer.ts` | Pixi layers (terrain, routes, sites, selection, armies); click → nearest pick |
-| `src/game/terrain.ts` | Static map: smooth fields → watercolour bitmap, inked coast + ripple contours, detail sprites, frame |
+| `src/game/terrain.ts` | Static map: tile fields → flat vector regions (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector army banner and fallback castle; dashed line/circle helpers |
-| `src/art/svg.ts` | All illustrated art as SVG source: resources, spot medallions, trees, mountains, castles, chest, ship |
+| `src/art/svg.ts` | All illustrated art as SVG source: resources, spot medallions, trees, mountains, castles, chest, ship, compass |
 | `src/art/textures.ts` | Rasterises the SVG art once into Pixi textures (`loadMapArt`) |
 | `src/game/palette.ts` | Pixi colours (ink, parchment, sea, resources) and heraldic player palette |
 | `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world |
@@ -53,8 +53,9 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 - **One art source:** illustrations live as SVG in `src/art/svg.ts`. The map uses them as
   textures rasterised at 3× (`loadMapArt`, awaited before the renderer starts); the HUD uses the
   same markup as `<img>` data URLs. Map sizes are in glyph units (`u = tileSize / 24`).
-- **Terrain is drawn once per map** (`buildTerrain`): the tile grid is resampled into blurred,
-  noise-perturbed fields, so coasts are smooth curves rather than tiles. Decoration is hashed
-  from positions, so it is stable across redraws and clients. Details near castles, spots and
-  chests are hidden (`Terrain.clearAround`) to keep sites readable.
+- **Terrain is drawn once per map** (`buildTerrain`): the tile grid is resampled into lightly
+  blurred fields whose iso-lines follow tile edges with rounded corners; regions are flat vector
+  fills (no gradients or noise). Decoration is hashed from positions, so it is stable across
+  redraws and clients. Details near castles, spots and chests are hidden
+  (`Terrain.clearAround`) to keep sites readable.
 - **UI language is German**; code and comments stay English.

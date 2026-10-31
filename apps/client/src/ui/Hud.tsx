@@ -12,6 +12,7 @@ import {
   type Resources,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
+import { compassRose, dataUrl } from '../art/svg';
 import { cssColor, describeTarget, formatGameDuration, playerColor } from '../game/format';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
@@ -425,24 +426,10 @@ function EndBanner({ view }: { view: GameView }) {
   );
 }
 
+const COMPASS_URL = dataUrl(compassRose());
+
 function CompassRose() {
-  return (
-    <svg viewBox="-32 -36 64 68" className="h-20 w-20 opacity-90" aria-hidden>
-      <circle r={22} fill="#f3e7c4" fillOpacity={0.85} stroke="#3b2a18" />
-      <path d="M0-28L5 0L0 28L-5 0Z" fill="#d4472f" stroke="#3b2a18" strokeWidth={0.8} />
-      <path d="M-28 0L0-5L28 0L0 5Z" fill="#3b6ea5" stroke="#3b2a18" strokeWidth={0.8} />
-      <text
-        y={-30}
-        textAnchor="middle"
-        fontFamily="Georgia, serif"
-        fontSize={9}
-        fontWeight="bold"
-        fill="#3b2a18"
-      >
-        N
-      </text>
-    </svg>
-  );
+  return <img src={COMPASS_URL} alt="" className="h-28 w-auto" draggable={false} />;
 }
 
 /**
