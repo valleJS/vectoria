@@ -1,5 +1,20 @@
 @import 'tailwindcss';
 
+/* Cartography theme. Keep in sync with the Pixi palette in src/game/palette.ts. */
+@theme {
+  --font-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  --color-parchment: #f6eedb;
+  --color-parchment-dark: #f1e3bd;
+  --color-parchment-deep: #e3d2a4;
+  --color-ink: #3b2a18;
+  --color-ink-soft: #6b5434;
+  --color-seal: #a3311f;
+  --color-seal-light: #bf3d28;
+  --color-sea: #5d9fb5;
+  --color-sea-dark: #2f5f86;
+  --color-moss: #4f7a2a;
+}
+
 html,
 body,
 #root {
@@ -8,7 +23,8 @@ body,
 }
 
 body {
-  background: var(--color-slate-950);
-  color: var(--color-slate-100);
+  background: var(--color-sea);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
   overscroll-behavior: none;
 }

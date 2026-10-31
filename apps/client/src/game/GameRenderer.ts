@@ -1,27 +1,27 @@
-import { TileType, type ArmyView, type GameView, type MapData, type Vec2 } from '@vectoria/shared';
+import type { GameView, MapData, Vec2 } from '@vectoria/shared';
 import { Application, Container, Graphics, Text, type PointData, type Ticker } from 'pixi.js';
 import { useGameStore, type Selection } from '../state/store';
 import { Camera } from './Camera';
 import { playerColor } from './format';
+import { dashedCircle, dashedLine, drawBanner, drawCastle, drawChest, drawSpot } from './glyphs';
+import { INK, PARCHMENT, SEA, SERIF } from './palette';
+import { buildTerrain } from './terrain';
 
-const TILE_COLORS: Record<TileType, number> = {
-  [TileType.Grass]: 0x6a9f4b,
-  [TileType.Water]: 0x2f6690,
-  [TileType.Forest]: 0x2d5a27,
-  [TileType.Mountain]: 0x8a8178,
-};
-const SPOT_COLORS = { wood: 0x8b5a2b, stone: 0xb8b8c0, gold: 0xffd700 } as const;
-const SPOT_LABELS = { wood: 'H', stone: 'S', gold: 'G' } as const;
 /** Time constant for easing armies toward their latest server position. */
 const UNIT_SMOOTHING_MS = 150;
 /** Clicks within this many tiles of a site or army select it. */
 const PICK_RADIUS_TILES = 0.9;
+/** Selection ring rotation, radians per second. */
+const SELECTION_SPIN = 0.6;
+const FORTIFY_BLUE = 0x3b6ea5;
 
 interface ArmySprite {
   container: Container;
-  marker: Graphics;
+  banner: Graphics;
   label: Text;
   target: PointData;
+  /** Colour + status the banner was last drawn with, so it is only redrawn on change. */
+  look: string;
 }
 
 /** Owns the Pixi application and draws store state. Created and destroyed by <GameCanvas>. */
@@ -29,7 +29,7 @@ export class GameRenderer {
   private readonly app: Application;
   private readonly camera: Camera;
   private readonly world = new Container();
-  private readonly terrain = new Graphics();
+  private readonly terrain = new Container();
   private readonly routes = new Graphics();
   private readonly siteLayer = new Container();
   private readonly selectionRing = new Graphics();
@@ -45,7 +45,7 @@ export class GameRenderer {
     const app = new Application();
     await app.init({
       resizeTo: host,
-      background: 0x0b1020,
+      background: SEA,
       antialias: true,
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
@@ -70,7 +70,7 @@ export class GameRenderer {
       onZoomChange: (zoom) => useGameStore.getState().setZoom(zoom),
     });
 
-    app.ticker.add(this.animateArmies);
+    app.ticker.add(this.animate);
 
     const initial = useGameStore.getState();
     this.setMap(initial.map);
@@ -94,6 +94,11 @@ export class GameRenderer {
   private px(position: Vec2): PointData {
     const size = this.map?.tileSize ?? 32;
     return { x: position.x * size, y: position.y * size };
+  }
+
+  /** World pixels per glyph unit (glyphs are authored on a 24-unit tile). */
+  private get unit(): number {
+    return (this.map?.tileSize ?? 32) / 24;
   }
 
   /** Nearest army or site to a world point, within the pick radius. */
@@ -133,28 +138,22 @@ export class GameRenderer {
   private setMap(map: MapData | null): void {
     this.map = map;
     this.sitesKey = '';
-    this.terrain.clear();
+    for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
     if (!map) return;
-
-    const { width, height, tileSize, tiles } = map;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const type = tiles[y * width + x] ?? TileType.Water;
-        this.terrain.rect(x * tileSize, y * tileSize, tileSize, tileSize).fill(TILE_COLORS[type]);
-      }
-    }
+    this.terrain.addChild(buildTerrain(map));
     this.camera.fit(
-      width * tileSize,
-      height * tileSize,
+      map.width * map.tileSize,
+      map.height * map.tileSize,
       this.app.screen.width,
       this.app.screen.height,
+      48,
     );
   }
 
   private setView(view: GameView | null, selfId: string | null): void {
     this.view = view;
     this.drawSites(view, selfId);
-    this.drawArmies(view?.armies ?? [], selfId);
+    this.drawArmies(view);
   }
 
   /** Castles, spots and chests change rarely; redraw them wholesale when anything differs. */
@@ -166,78 +165,127 @@ export class GameRenderer {
     this.sitesKey = key;
     for (const child of this.siteLayer.removeChildren()) child.destroy({ children: true });
     if (!view || !this.map) return;
-    const size = this.map.tileSize;
+    const u = this.unit;
 
     for (const spot of view.spots) {
-      const { x, y } = this.px(spot.position);
-      const g = new Graphics()
-        .poly([x, y - size * 0.45, x + size * 0.4, y + size * 0.3, x - size * 0.4, y + size * 0.3])
-        .fill(SPOT_COLORS[spot.resource])
-        .stroke({ width: 2, color: 0x1b1b1b });
-      const label = this.label(SPOT_LABELS[spot.resource], size * 0.35, 0x1b1b1b);
-      label.position.set(x, y + size * 0.02);
-      this.siteLayer.addChild(g, label);
+      const g = drawSpot(new Graphics(), spot.resource, u);
+      g.position.copyFrom(this.px(spot.position));
+      this.siteLayer.addChild(g);
     }
 
     for (const chest of view.chests) {
-      const { x, y } = this.px(chest.position);
-      const g = new Graphics()
-        .roundRect(x - size * 0.3, y - size * 0.22, size * 0.6, size * 0.44, 3)
-        .fill(0x9c6b30)
-        .stroke({ width: 2, color: 0xf5c542 });
+      const g = drawChest(new Graphics(), u);
+      g.position.copyFrom(this.px(chest.position));
       this.siteLayer.addChild(g);
     }
 
     for (const player of view.players) {
       if (!player.castle) continue;
-      const { x, y } = this.px(player.castle);
-      const color = playerColor(player.id, selfId);
-      const g = new Graphics()
-        .rect(x - size * 0.5, y - size * 0.5, size, size)
-        .fill(color)
-        .stroke({ width: player.fortified ? 4 : 2, color: player.fortified ? 0xffffff : 0x1b1b1b });
-      const name = this.label(`${player.name} · ${player.homeTroops}`, size * 0.4, 0xffffff);
-      name.position.set(x, y - size * 0.95);
-      this.siteLayer.addChild(g, name);
+      const color = playerColor(view, player.id);
+      const castle = new Container();
+      castle.position.copyFrom(this.px(player.castle));
+      const rings = new Graphics();
+      if (player.id === view.self.id) {
+        dashedCircle(rings, 27 * u, 18).stroke({ width: 2 * u, color });
+      }
+      if (player.fortified) {
+        rings
+          .circle(0, 0, 23 * u)
+          .stroke({ width: 3 * u, color: FORTIFY_BLUE, alpha: 0.85 })
+          .circle(0, 0, 19.5 * u)
+          .stroke({ width: u, color: FORTIFY_BLUE, alpha: 0.85 });
+      }
+      castle.addChild(rings, drawCastle(new Graphics(), color, u));
+      castle.addChild(this.nameplate(`${player.name} · ${player.homeTroops}`, color, u));
+      if (!player.online) castle.alpha = 0.85;
+      this.siteLayer.addChild(castle);
     }
   }
 
-  private drawArmies(armies: ArmyView[], selfId: string | null): void {
-    if (!this.map) return;
-    const size = this.map.tileSize;
+  /** Parchment label with ribbon tails in the owner's colour, below a castle. */
+  private nameplate(text: string, color: number, u: number): Container {
+    const label = this.label(text, 12 * u, INK, true);
+    const w = label.width + 14 * u;
+    const top = 18 * u;
+    const h = 16 * u;
+    const plate = new Graphics();
+    for (const side of [-1, 1]) {
+      const edge = (side * w) / 2;
+      plate
+        .poly([
+          edge,
+          top + 2 * u,
+          edge + side * 7 * u,
+          top + 2 * u,
+          edge + side * 3 * u,
+          top + 2 * u + h / 2,
+          edge + side * 7 * u,
+          top + 2 * u + h,
+          edge,
+          top + 2 * u + h,
+        ])
+        .fill(color)
+        .stroke({ width: 0.8 * u, color: INK });
+    }
+    plate
+      .rect(-w / 2, top, w, h)
+      .fill(PARCHMENT)
+      .stroke({ width: 0.9 * u, color: INK });
+    label.position.set(0, top + h / 2);
+    const container = new Container();
+    container.addChild(plate, label);
+    return container;
+  }
+
+  private drawArmies(view: GameView | null): void {
+    if (!this.map || !view) return;
+    const u = this.unit;
     const seen = new Set<string>();
     this.routes.clear();
 
-    for (const army of armies) {
+    for (const army of view.armies) {
       seen.add(army.id);
-      const color = playerColor(army.ownerId, selfId);
+      const color = playerColor(view, army.ownerId);
       const target = this.px(army.position);
       if (army.to && army.status !== 'stationed') {
         const to = this.px(army.to);
-        this.routes
-          .moveTo(target.x, target.y)
-          .lineTo(to.x, to.y)
-          .stroke({ width: 2, color, alpha: army.status === 'returning' ? 0.35 : 0.7 });
+        const alpha = army.status === 'returning' ? 0.5 : 1;
+        dashedLine(this.routes, target, to, 7 * u, 5 * u).stroke({
+          width: 4 * u,
+          color: INK,
+          alpha: alpha * 0.8,
+          cap: 'round',
+        });
+        dashedLine(this.routes, target, to, 7 * u, 5 * u).stroke({
+          width: 2.4 * u,
+          color,
+          alpha,
+          cap: 'round',
+        });
+        if (army.status === 'outbound') {
+          this.routes.circle(to.x, to.y, 14 * u).stroke({ width: 1.6 * u, color, alpha: 0.9 });
+        }
       }
 
       let sprite = this.armies.get(army.id);
       if (!sprite) {
         const container = new Container();
-        const marker = new Graphics();
-        const label = this.label('', size * 0.38, 0xffffff);
-        label.position.set(0, size * 0.55);
-        container.addChild(marker, label);
-        container.position.set(target.x, target.y);
+        const banner = new Graphics();
+        const label = this.label('', 12 * u, 0xffffff);
+        label.position.set(0, -8 * u);
+        container.addChild(banner, label);
+        container.position.copyFrom(target);
         this.armyLayer.addChild(container);
-        sprite = { container, marker, label, target };
+        sprite = { container, banner, label, target, look: '' };
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
-      sprite.marker
-        .clear()
-        .circle(0, 0, size * 0.28)
-        .fill(color)
-        .stroke({ width: 2, color: army.status === 'stationed' ? 0xffffff : 0x1b1b1b });
+      const look = `${color}:${army.status}`;
+      if (look !== sprite.look) {
+        sprite.look = look;
+        drawBanner(sprite.banner.clear(), color, u);
+        sprite.container.alpha = army.status === 'returning' ? 0.75 : 1;
+      }
       sprite.label.text = army.troops === null ? '?' : String(army.troops);
     }
 
@@ -253,10 +301,13 @@ export class GameRenderer {
     if (!selection || !this.view || !this.map) return;
     const position = this.selectionPosition(selection, this.view);
     if (!position) return;
-    const { x, y } = this.px(position);
-    this.selectionRing
-      .circle(x, y, this.map.tileSize * 0.8)
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+    this.selectionRing.position.copyFrom(this.px(position));
+    const radius = (selection.kind === 'castle' ? 32 : 19) * this.unit;
+    dashedCircle(this.selectionRing, radius, 14).stroke({
+      width: 2.5 * this.unit,
+      color: INK,
+      cap: 'round',
+    });
   }
 
   private selectionPosition(selection: Selection, view: GameView): Vec2 | null {
@@ -272,27 +323,34 @@ export class GameRenderer {
     }
   }
 
-  private label(text: string, fontSize: number, fill: number): Text {
+  private label(text: string, fontSize: number, fill: number, italic = false): Text {
     const label = new Text({
       text,
       style: {
-        fontFamily: 'system-ui, sans-serif',
+        fontFamily: SERIF,
         fontSize,
-        fontWeight: '600',
+        fontStyle: italic ? 'italic' : 'normal',
+        fontWeight: italic ? 'normal' : 'bold',
         fill,
-        stroke: { color: 0x000000, width: fill === 0xffffff ? 3 : 0 },
       },
-      resolution: 2,
+      resolution: 3,
     });
     label.anchor.set(0.5);
     return label;
   }
 
-  private readonly animateArmies = (ticker: Ticker): void => {
+  private readonly animate = (ticker: Ticker): void => {
     const t = 1 - Math.exp(-ticker.deltaMS / UNIT_SMOOTHING_MS);
     for (const { container, target } of this.armies.values()) {
       container.x += (target.x - container.x) * t;
       container.y += (target.y - container.y) * t;
+    }
+    this.selectionRing.rotation += (SELECTION_SPIN * ticker.deltaMS) / 1000;
+    // A selected army moves; keep the ring on it.
+    const selection = useGameStore.getState().selection;
+    if (selection?.kind === 'army') {
+      const sprite = this.armies.get(selection.id);
+      if (sprite) this.selectionRing.position.copyFrom(sprite.container.position);
     }
   };
 }

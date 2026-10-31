@@ -1,4 +1,5 @@
 import { RESOURCE_NAMES, type ArmyTarget, type GameView } from '@vectoria/shared';
+import { PLAYER_PALETTE, SELF_COLOR } from './palette';
 
 /** Game-clock duration as "3h 20m". */
 export function formatGameDuration(ms: number): string {
@@ -8,13 +9,19 @@ export function formatGameDuration(ms: number): string {
   return h > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${m}m`;
 }
 
-/** Stable per-player colour; the viewer's own castle and armies are always gold. */
-export function playerColor(playerId: string, selfId: string | null): number {
-  if (playerId === selfId) return 0xf5c542;
+/**
+ * Heraldic per-player colour: the viewer is always red, the others take palette slots in join
+ * order (stable, since players are listed in registration order).
+ */
+export function playerColor(view: Pick<GameView, 'players' | 'self'>, playerId: string): number {
+  if (playerId === view.self.id) return SELF_COLOR;
+  const index = view.players
+    .filter((p) => p.id !== view.self.id)
+    .findIndex((p) => p.id === playerId);
+  if (index >= 0 && index < PLAYER_PALETTE.length) return PLAYER_PALETTE[index]!;
   let hash = 0;
   for (const char of playerId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-  const hue = Math.abs(hash) % 360;
-  return hslToHex(hue, 0.65, 0.55);
+  return hslToHex(Math.abs(hash) % 360, 0.55, 0.45);
 }
 
 export function cssColor(hex: number): string {
