@@ -1,11 +1,20 @@
 import type { GameView, MapData, Vec2 } from '@vectoria/shared';
-import { Application, Container, Graphics, Text, type PointData, type Ticker } from 'pixi.js';
+import {
+  Application,
+  Container,
+  Graphics,
+  Sprite,
+  Text,
+  type PointData,
+  type Ticker,
+} from 'pixi.js';
+import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import { useGameStore, type Selection } from '../state/store';
 import { Camera } from './Camera';
 import { playerColor } from './format';
-import { dashedCircle, dashedLine, drawBanner, drawCastle, drawChest, drawSpot } from './glyphs';
+import { dashedCircle, dashedLine, drawBanner, drawCastle } from './glyphs';
 import { INK, PARCHMENT, SEA, SERIF } from './palette';
-import { buildTerrain } from './terrain';
+import { buildTerrain, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
 const UNIT_SMOOTHING_MS = 150;
@@ -14,6 +23,14 @@ const PICK_RADIUS_TILES = 0.9;
 /** Selection ring rotation, radians per second. */
 const SELECTION_SPIN = 0.6;
 const FORTIFY_BLUE = 0x3b6ea5;
+
+/** Sprite of map art, `width` world px wide, anchored at its ground point. */
+function artSprite(art: ArtTexture, width: number): Sprite {
+  const sprite = new Sprite(art.texture);
+  sprite.anchor.set(art.anchor.x / art.width, art.anchor.y / art.height);
+  sprite.scale.set(width / art.width);
+  return sprite;
+}
 
 interface ArmySprite {
   container: Container;
@@ -27,6 +44,7 @@ interface ArmySprite {
 /** Owns the Pixi application and draws store state. Created and destroyed by <GameCanvas>. */
 export class GameRenderer {
   private readonly app: Application;
+  private readonly art: MapArt;
   private readonly camera: Camera;
   private readonly world = new Container();
   private readonly terrain = new Container();
@@ -37,25 +55,30 @@ export class GameRenderer {
   private readonly armies = new Map<string, ArmySprite>();
   private readonly unsubscribe: () => void;
   private map: MapData | null = null;
+  private built: Terrain | null = null;
   private view: GameView | null = null;
   /** Fingerprint of the last drawn sites, so labels aren't re-rasterised every tick. */
   private sitesKey = '';
 
   static async create(host: HTMLElement): Promise<GameRenderer> {
     const app = new Application();
-    await app.init({
-      resizeTo: host,
-      background: SEA,
-      antialias: true,
-      autoDensity: true,
-      resolution: window.devicePixelRatio || 1,
-    });
+    const [art] = await Promise.all([
+      loadMapArt(),
+      app.init({
+        resizeTo: host,
+        background: SEA,
+        antialias: true,
+        autoDensity: true,
+        resolution: window.devicePixelRatio || 1,
+      }),
+    ]);
     host.appendChild(app.canvas);
-    return new GameRenderer(app);
+    return new GameRenderer(app, art);
   }
 
-  private constructor(app: Application) {
+  private constructor(app: Application, art: MapArt) {
     this.app = app;
+    this.art = art;
     this.world.addChild(
       this.terrain,
       this.routes,
@@ -140,7 +163,8 @@ export class GameRenderer {
     this.sitesKey = '';
     for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
     if (!map) return;
-    this.terrain.addChild(buildTerrain(map));
+    this.built = buildTerrain(map, this.art);
+    this.terrain.addChild(this.built.root);
     this.camera.fit(
       map.width * map.tileSize,
       map.height * map.tileSize,
@@ -166,17 +190,23 @@ export class GameRenderer {
     for (const child of this.siteLayer.removeChildren()) child.destroy({ children: true });
     if (!view || !this.map) return;
     const u = this.unit;
+    // Keep castles, spots and chests readable: no trees or peaks on top of them.
+    this.built?.clearAround([
+      ...view.players.flatMap((p) => (p.castle ? [{ ...this.px(p.castle), radius: 36 * u }] : [])),
+      ...view.spots.map((s) => ({ ...this.px(s.position), radius: 26 * u })),
+      ...view.chests.map((c) => ({ ...this.px(c.position), radius: 18 * u })),
+    ]);
 
     for (const spot of view.spots) {
-      const g = drawSpot(new Graphics(), spot.resource, u);
-      g.position.copyFrom(this.px(spot.position));
-      this.siteLayer.addChild(g);
+      const sprite = artSprite(this.art.spots[spot.resource], 40 * u);
+      sprite.position.copyFrom(this.px(spot.position));
+      this.siteLayer.addChild(sprite);
     }
 
     for (const chest of view.chests) {
-      const g = drawChest(new Graphics(), u);
-      g.position.copyFrom(this.px(chest.position));
-      this.siteLayer.addChild(g);
+      const sprite = artSprite(this.art.chest, 30 * u);
+      sprite.position.copyFrom(this.px(chest.position));
+      this.siteLayer.addChild(sprite);
     }
 
     for (const player of view.players) {
@@ -186,16 +216,25 @@ export class GameRenderer {
       castle.position.copyFrom(this.px(player.castle));
       const rings = new Graphics();
       if (player.id === view.self.id) {
-        dashedCircle(rings, 27 * u, 18).stroke({ width: 2 * u, color });
+        dashedCircle(rings, 34 * u, 20).stroke({ width: 2 * u, color });
       }
       if (player.fortified) {
         rings
-          .circle(0, 0, 23 * u)
+          .circle(0, 0, 30 * u)
           .stroke({ width: 3 * u, color: FORTIFY_BLUE, alpha: 0.85 })
-          .circle(0, 0, 19.5 * u)
+          .circle(0, 0, 26.5 * u)
           .stroke({ width: u, color: FORTIFY_BLUE, alpha: 0.85 });
       }
-      castle.addChild(rings, drawCastle(new Graphics(), color, u));
+      const art = this.art.castles.get(color);
+      let building: Container;
+      if (art) {
+        building = artSprite(art, 58 * u);
+        // Centre the castle body, not its ground line, on the castle tile.
+        (building as Sprite).anchor.y = 0.6;
+      } else {
+        building = drawCastle(new Graphics(), color, u);
+      }
+      castle.addChild(rings, building);
       castle.addChild(this.nameplate(`${player.name} · ${player.homeTroops}`, color, u));
       if (!player.online) castle.alpha = 0.85;
       this.siteLayer.addChild(castle);
@@ -204,10 +243,10 @@ export class GameRenderer {
 
   /** Parchment label with ribbon tails in the owner's colour, below a castle. */
   private nameplate(text: string, color: number, u: number): Container {
-    const label = this.label(text, 12 * u, INK, true);
+    const label = this.label(text, 13 * u, INK, true);
     const w = label.width + 14 * u;
-    const top = 18 * u;
-    const h = 16 * u;
+    const top = 23 * u;
+    const h = 17 * u;
     const plate = new Graphics();
     for (const side of [-1, 1]) {
       const edge = (side * w) / 2;
@@ -302,7 +341,7 @@ export class GameRenderer {
     const position = this.selectionPosition(selection, this.view);
     if (!position) return;
     this.selectionRing.position.copyFrom(this.px(position));
-    const radius = (selection.kind === 'castle' ? 32 : 19) * this.unit;
+    const radius = (selection.kind === 'castle' ? 38 : 22) * this.unit;
     dashedCircle(this.selectionRing, radius, 14).stroke({
       width: 2.5 * this.unit,
       color: INK,

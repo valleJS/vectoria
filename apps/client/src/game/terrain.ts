@@ -1,273 +1,310 @@
 import { TileType, type MapData } from '@vectoria/shared';
-import { Container, Graphics } from 'pixi.js';
-import { INK, SEA } from './palette';
+import { CanvasSource, Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
+import type { ArtTexture, MapArt } from '../art/textures';
+import {
+  blur,
+  contours,
+  createField,
+  distanceToEdge,
+  fbm,
+  hash2,
+  smooth,
+  type Field,
+} from './fields';
+import { INK } from './palette';
 
-// Draws the static map once per MapData: sea, layered coastline, terrain washes and hand-drawn
-// details (trees, mountains, grass, waves, ships). Shapes are unions of per-tile circles, so the
-// tile grid reads as soft cartography; all randomness is a hash of the tile, so redraws match.
+// Draws the static map once per MapData. The tile grid is resampled into smooth fields: a
+// blurred, noise-perturbed land field gives an organic coastline; a distance field drives water
+// depth colours and offshore ripple lines. Colours go into a small bitmap that the GPU upscales
+// (soft watercolour washes); coast and ripples are crisp vector lines; trees, mountains and
+// other details are sprites of the shared SVG art. All randomness is hashed from positions.
 
-/** Sea margin around the map, in tiles, so coast rings at the edge aren't clipped. */
+/** Sea margin around the map, in tiles. */
 export const SEA_MARGIN_TILES = 3;
-/** How far (tiles) coast distances are searched; beyond this a tile counts as interior. */
-const COAST_SEARCH = 4;
+/** Field samples per tile. */
+const K = 6;
 
-/** Coastline bands from outside in: [radius in tiles, colour]. Each pair leaves a ring. */
-const COAST_RINGS: [number, number][] = [
-  [2.5, 0x4d8ea4],
-  [2.375, SEA],
-  [1.625, 0x46879d],
-  [1.5, 0x86c2cc],
-  [1.025, 0xa9d8d6],
-  [0.95, INK],
+type Rgb = [number, number, number];
+const hex = (value: string): Rgb => [
+  parseInt(value.slice(1, 3), 16),
+  parseInt(value.slice(3, 5), 16),
+  parseInt(value.slice(5, 7), 16),
 ];
-const LAND_RADIUS = 0.75;
-const BEACH = 0xecdcaa;
+const SHALLOW = hex('#a4d9cf');
+const MID_WATER = hex('#6eb2c3');
+const DEEP = hex('#4a8aab');
+const SAND = hex('#ecdcaa');
+const GRASS = hex('#bed37f');
+const MEADOW = hex('#a8c66f');
+const FOREST = hex('#8db564');
+const ROCK = hex('#cdb98f');
 
-const WASH: Record<Exclude<TileType, typeof TileType.Water>, { color: number; radius: number }> = {
-  [TileType.Grass]: { color: 0xc8d98a, radius: 0.69 },
-  [TileType.Forest]: { color: 0x94bf6a, radius: 0.875 },
-  [TileType.Mountain]: { color: 0xd6b77e, radius: 0.875 },
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+];
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 };
-const WASH_ORDER = [TileType.Grass, TileType.Forest, TileType.Mountain] as const;
 
-const TREE_CROWNS = [0x3f7f37, 0x52933e, 0x2f6b33, 0x67a446];
-const AUTUMN_CROWNS = [0xd9822b, 0xc0452a];
-const FLOWERS = [0xe0534a, 0xf2c230, 0xffffff, 0xb45bd0];
-
-/** Deterministic 0..1 value for a tile and a salt. */
-function hash(x: number, y: number, salt: number): number {
-  let h =
-    Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263) ^ Math.imul(salt + 1, 2246822519);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+export interface Terrain {
+  root: Container;
+  /** Hides details (trees, peaks, grass) within `radius` world px of each point. */
+  clearAround(points: { x: number; y: number; radius: number }[]): void;
 }
 
-interface Detail {
-  y: number;
-  draw(g: Graphics): void;
-}
-
-export function buildTerrain(map: MapData): Container {
+export function buildTerrain(map: MapData, art: MapArt): Terrain {
   const { width, height, tileSize: T, tiles } = map;
-  const u = T / 24;
-  const typeAt = (x: number, y: number): TileType =>
-    x < 0 || y < 0 || x >= width || y >= height
+  const gw = (width + SEA_MARGIN_TILES * 2) * K;
+  const gh = (height + SEA_MARGIN_TILES * 2) * K;
+  const typeAt = (tx: number, ty: number): TileType =>
+    tx < 0 || ty < 0 || tx >= width || ty >= height
       ? TileType.Water
-      : (tiles[y * width + x] ?? TileType.Water);
-  const isLand = (x: number, y: number) => typeAt(x, y) !== TileType.Water;
+      : (tiles[ty * width + tx] ?? TileType.Water);
 
-  // Distance (tile centres) from each tile to the nearest tile of the other kind; outside the
-  // map counts as water.
-  const coast = new Float32Array(width * height).fill(COAST_SEARCH + 1);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const land = isLand(x, y);
-      let best = COAST_SEARCH + 1;
-      for (let dy = -COAST_SEARCH; dy <= COAST_SEARCH; dy++) {
-        for (let dx = -COAST_SEARCH; dx <= COAST_SEARCH; dx++) {
-          if (isLand(x + dx, y + dy) !== land) best = Math.min(best, Math.hypot(dx, dy));
-        }
-      }
-      coast[y * width + x] = best;
+  // Indicator fields per terrain type, sampled from the tile grid.
+  const land = createField(gw, gh);
+  const forest = createField(gw, gh);
+  const rock = createField(gw, gh);
+  for (let j = 0; j < gh; j++) {
+    const ty = Math.floor(j / K) - SEA_MARGIN_TILES;
+    for (let i = 0; i < gw; i++) {
+      const type = typeAt(Math.floor(i / K) - SEA_MARGIN_TILES, ty);
+      const k = j * gw + i;
+      land.data[k] = type === TileType.Water ? 0 : 1;
+      forest.data[k] = type === TileType.Forest ? 1 : 0;
+      rock.data[k] = type === TileType.Mountain ? 1 : 0;
     }
   }
-  const coastAt = (x: number, y: number) => coast[y * width + x]!;
-  const cx = (x: number) => (x + 0.5) * T;
-  const cy = (y: number) => (y + 0.5) * T;
+  const landSmooth = blur(land, Math.round(K * 0.45));
+  const forestSmooth = blur(forest, Math.round(K * 0.6));
+  const rockSmooth = blur(rock, Math.round(K * 0.6));
+
+  // Perturb the coast with noise so it reads as drawn, not as a blurred grid.
+  const coastField: Field = createField(gw, gh);
+  const inside = new Uint8Array(gw * gh);
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      const k = j * gw + i;
+      const v = landSmooth.data[k]! + (fbm(i / (K * 1.4), j / (K * 1.4), 3) - 0.5) * 0.3;
+      coastField.data[k] = v;
+      inside[k] = v > 0.5 ? 1 : 0;
+    }
+  }
+  // Signed distance to the coast in tiles: positive at sea, negative on land.
+  const raw = distanceToEdge(inside, gw, gh);
+  const signed = createField(gw, gh);
+  for (let k = 0; k < raw.length; k++) signed.data[k] = ((inside[k] ? -1 : 1) * raw[k]!) / K;
+  const distance = blur(signed, 1, 1);
+  const distanceAt = (x: number, y: number) => {
+    const i = Math.round((x / T + SEA_MARGIN_TILES) * K - 0.5);
+    const j = Math.round((y / T + SEA_MARGIN_TILES) * K - 0.5);
+    if (i < 0 || j < 0 || i >= gw || j >= gh) return 99;
+    return distance.data[j * gw + i]!;
+  };
+
+  // Colour bitmap.
+  const canvas = document.createElement('canvas');
+  canvas.width = gw;
+  canvas.height = gh;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(gw, gh);
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      const k = j * gw + i;
+      const d = distance.data[k]!;
+      const grain = (fbm(i / K, j / K, 11) - 0.5) * 0.14;
+      let color: Rgb;
+      if (d > 0) {
+        const depth = smoothstep(0, 2.6, d);
+        color =
+          depth < 0.4
+            ? mix(SHALLOW, MID_WATER, depth / 0.4)
+            : mix(MID_WATER, DEEP, (depth - 0.4) / 0.6);
+      } else {
+        const f = forestSmooth.data[k]!;
+        const r = rockSmooth.data[k]!;
+        const meadow = mix(
+          GRASS,
+          MEADOW,
+          smoothstep(0.35, 0.75, fbm(i / (K * 3), j / (K * 3), 13)),
+        );
+        color = mix(mix(meadow, FOREST, smoothstep(0.15, 0.7, f)), ROCK, smoothstep(0.15, 0.7, r));
+        color = mix(SAND, color, smoothstep(0.08, 0.32, -d));
+      }
+      const o = k * 4;
+      image.data[o] = color[0] * (1 + grain);
+      image.data[o + 1] = color[1] * (1 + grain);
+      image.data[o + 2] = color[2] * (1 + grain);
+      image.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
 
   const root = new Container();
-  const margin = SEA_MARGIN_TILES * T;
-  const sea = new Graphics()
-    .rect(-margin, -margin, width * T + margin * 2, height * T + margin * 2)
-    .fill(SEA);
-  root.addChild(sea);
-
-  // Waves, specks and the odd ship on open water.
-  const water = new Graphics();
-  let ships = 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (isLand(x, y)) continue;
-      const open = coastAt(x, y);
-      const px = cx(x) + (hash(x, y, 1) - 0.5) * T * 0.6;
-      const py = cy(y) + (hash(x, y, 2) - 0.5) * T * 0.6;
-      if (open >= 2 && hash(x, y, 3) < 0.16) {
-        water
-          .moveTo(px - 8 * u, py)
-          .quadraticCurveTo(px - 4 * u, py - 4 * u, px, py)
-          .quadraticCurveTo(px + 4 * u, py - 4 * u, px + 8 * u, py)
-          .stroke({ width: 1.3 * u, color: 0xd6eef2, alpha: 0.7 });
-      } else if (hash(x, y, 4) < 0.25) {
-        water.circle(px, py, 0.8 * u).fill(0x4f8fa6);
-      }
-      if (open >= 3.5 && ships < 3 && hash(x, y, 5) < 0.01) {
-        ships++;
-        drawShip(water, cx(x), cy(y), u);
-      }
-    }
-  }
-  root.addChild(water);
-
-  // Coast rings, then the beach-coloured land body. Only tiles near the coast need circles.
-  const coastline = new Graphics();
-  for (const [radius, color] of COAST_RINGS) {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (isLand(x, y) && coastAt(x, y) <= radius + LAND_RADIUS) {
-          coastline.circle(cx(x), cy(y), radius * T);
-        }
-      }
-    }
-    coastline.fill(color);
-  }
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (!isLand(x, y)) continue;
-      if (coastAt(x, y) <= 1.5) coastline.circle(cx(x), cy(y), LAND_RADIUS * T);
-      else coastline.rect(x * T, y * T, T, T);
-    }
-  }
-  coastline.fill(BEACH);
-  root.addChild(coastline);
-
-  // Terrain washes: blobs at type borders, plain squares inside uniform areas.
-  const washes = new Graphics();
-  for (const type of WASH_ORDER) {
-    const { color, radius } = WASH[type];
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (typeAt(x, y) !== type) continue;
-        let uniform = true;
-        for (let dy = -1; dy <= 1 && uniform; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (typeAt(x + dx, y + dy) !== type) {
-              uniform = false;
-              break;
-            }
-          }
-        }
-        if (uniform) washes.rect(x * T - 1, y * T - 1, T + 2, T + 2);
-        else washes.circle(cx(x), cy(y), radius * T);
-      }
-    }
-    washes.fill(color);
-  }
+  const origin = -SEA_MARGIN_TILES * T;
+  const worldW = gw * (T / K);
+  const worldH = gh * (T / K);
+  const washes = new Sprite(new Texture({ source: new CanvasSource({ resource: canvas }) }));
+  washes.texture.source.scaleMode = 'linear';
+  washes.position.set(origin, origin);
+  washes.setSize(worldW, worldH);
   root.addChild(washes);
 
-  // Trees, peaks and grass, painted back to front.
-  const details: Detail[] = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const type = typeAt(x, y);
+  const paper = new TilingSprite({ texture: paperGrain(), width: worldW, height: worldH });
+  paper.position.set(origin, origin);
+  paper.blendMode = 'multiply';
+  paper.alpha = 0.5;
+  root.addChild(paper);
+
+  // Vector lines: offshore ripples, then the inked coastline.
+  const toWorld = (points: number[]) => points.map((p) => (p + 0.5) * (T / K) + origin);
+  const lines = new Graphics();
+  const strokeLevel = (field: Field, level: number, style: Parameters<Graphics['stroke']>[0]) => {
+    for (const line of contours(field, level)) {
+      if (line.points.length < 8) continue;
+      const pts = toWorld(smooth(line, 3).points);
+      lines.poly(pts, line.closed).stroke(style);
+    }
+  };
+  strokeLevel(distance, 0.9, { width: 1.2, color: 0xffffff, alpha: 0.28, join: 'round' });
+  strokeLevel(distance, 0.45, { width: 1.5, color: 0xffffff, alpha: 0.5, join: 'round' });
+  strokeLevel(coastField, 0.5, { width: 2.4, color: INK, join: 'round' });
+  root.addChild(lines);
+
+  // Details, painted back to front.
+  const details: Sprite[] = [];
+  const place = (a: ArtTexture, x: number, y: number, worldWidth: number, flip = false) => {
+    const sprite = new Sprite(a.texture);
+    sprite.anchor.set(a.anchor.x / a.width, a.anchor.y / a.height);
+    const scale = worldWidth / a.width;
+    sprite.scale.set(flip ? -scale : scale, scale);
+    sprite.position.set(x, y);
+    details.push(sprite);
+  };
+  const pick = <T>(items: T[], r: number): T => items[Math.floor(r * items.length) % items.length]!;
+
+  for (let ty = 0; ty < height; ty++) {
+    for (let tx = 0; tx < width; tx++) {
+      const type = typeAt(tx, ty);
       if (type === TileType.Forest) {
-        for (let i = 0; i < 3; i++) {
-          const tx = cx(x) + (hash(x, y, 10 + i) - 0.5) * T * 0.8;
-          const ty = cy(y) + (hash(x, y, 20 + i) - 0.5) * T * 0.8;
-          const pick = hash(x, y, 30 + i);
-          const crown =
-            pick > 0.92
-              ? AUTUMN_CROWNS[0]!
-              : pick > 0.86
-                ? AUTUMN_CROWNS[1]!
-                : TREE_CROWNS[Math.floor(pick * 4.65) % TREE_CROWNS.length]!;
-          details.push({ y: ty, draw: (g) => drawTree(g, tx, ty, crown, u) });
+        const pines = fbm(tx / 5, ty / 5, 21) > 0.58;
+        for (let n = 0; n < 4; n++) {
+          const x = (tx + 0.5 + (hash2(tx, ty, 10 + n) - 0.5) * 0.95) * T;
+          const y = (ty + 0.5 + (hash2(tx, ty, 20 + n) - 0.5) * 0.95) * T;
+          if (distanceAt(x, y) > -0.2) continue;
+          const r = hash2(tx, ty, 30 + n);
+          const size = T * (0.95 + hash2(tx, ty, 40 + n) * 0.35);
+          if (pines) place(pick(art.conifers, r), x, y, size * 0.85);
+          else if (r > 0.9) place(pick(art.autumn, r * 7), x, y, size, r > 0.95);
+          else place(pick(art.broadleaves, r * 3), x, y, size, hash2(tx, ty, 50 + n) > 0.5);
         }
-      } else if (type === TileType.Mountain && hash(x, y, 40) > 0.15) {
-        const mx = cx(x) + (hash(x, y, 41) - 0.5) * T * 0.3;
-        const my = cy(y) + (hash(x, y, 42) - 0.5) * T * 0.3;
-        const snow = hash(x, y, 43) > 0.5;
-        details.push({ y: my, draw: (g) => drawMountain(g, mx, my, snow, u) });
+      } else if (type === TileType.Mountain) {
+        const x = (tx + 0.5 + (hash2(tx, ty, 60) - 0.5) * 0.35) * T;
+        const y = (ty + 0.75 + (hash2(tx, ty, 61) - 0.5) * 0.25) * T;
+        if (distanceAt(x, y) > -0.3 || hash2(tx, ty, 62) < 0.08) continue;
+        const r = hash2(tx, ty, 63);
+        const snowy = fbm(tx / 4, ty / 4, 64) > 0.55;
+        const size = T * (2.1 + hash2(tx, ty, 65) * 0.5);
+        place(pick(snowy ? art.snowyMountains : art.mountains, r), x, y, size, r > 0.5);
       } else if (type === TileType.Grass) {
-        for (let i = 0; i < 2; i++) {
-          const gx = cx(x) + (hash(x, y, 50 + i) - 0.5) * T * 0.8;
-          const gy = cy(y) + (hash(x, y, 60 + i) - 0.5) * T * 0.8;
-          const pick = hash(x, y, 70 + i);
-          if (pick > 0.84) details.push({ y: gy, draw: (g) => drawTuft(g, gx, gy, u) });
-          else if (pick > 0.76) {
-            const color = FLOWERS[Math.floor(hash(x, y, 80 + i) * FLOWERS.length)]!;
-            details.push({ y: gy, draw: (g) => g.circle(gx, gy, 1.6 * u).fill(color) });
-          }
+        for (let n = 0; n < 2; n++) {
+          const x = (tx + 0.5 + (hash2(tx, ty, 70 + n) - 0.5) * 0.9) * T;
+          const y = (ty + 0.5 + (hash2(tx, ty, 80 + n) - 0.5) * 0.9) * T;
+          if (distanceAt(x, y) > -0.25) continue;
+          const r = hash2(tx, ty, 90 + n);
+          if (r > 0.8) place(art.tuft, x, y, T * 0.6, r > 0.9);
+          else if (r > 0.835) place(pick(art.flowers, hash2(tx, ty, 95 + n)), x, y, T * 0.55);
+          else if (r < 0.03) place(pick(art.broadleaves, r * 33), x, y, T * 1.05);
         }
+      }
+    }
+  }
+  // Waves and the odd ship on open water, including the margin.
+  let ships = 0;
+  for (let ty = -SEA_MARGIN_TILES; ty < height + SEA_MARGIN_TILES; ty++) {
+    for (let tx = -SEA_MARGIN_TILES; tx < width + SEA_MARGIN_TILES; tx++) {
+      const x = (tx + 0.5 + (hash2(tx, ty, 100) - 0.5) * 0.7) * T;
+      const y = (ty + 0.5 + (hash2(tx, ty, 101) - 0.5) * 0.7) * T;
+      const d = distanceAt(x, y);
+      if (d > 2.8 && ships < 3 && hash2(tx, ty, 102) < 0.012) {
+        ships++;
+        place(art.ship, x, y, T * 2.2, hash2(tx, ty, 103) > 0.5);
+      } else if (d > 1.4 && hash2(tx, ty, 104) < 0.05) {
+        place(art.wave, x, y, T * 1.0);
       }
     }
   }
   details.sort((a, b) => a.y - b.y);
-  const detailLayer = new Graphics();
-  for (const detail of details) detail.draw(detailLayer);
+  const detailLayer = new Container();
+  for (const sprite of details) detailLayer.addChild(sprite);
   root.addChild(detailLayer);
 
   // Double map frame.
-  const frame = new Graphics()
-    .rect(-margin + 4, -margin + 4, width * T + margin * 2 - 8, height * T + margin * 2 - 8)
-    .stroke({ width: 3, color: INK })
-    .rect(-margin + 10, -margin + 10, width * T + margin * 2 - 20, height * T + margin * 2 - 20)
-    .stroke({ width: 1, color: INK });
-  root.addChild(frame);
-
-  return root;
+  const fw = width * T - origin * 2;
+  const fh = height * T - origin * 2;
+  root.addChild(
+    new Graphics()
+      .rect(origin + 4, origin + 4, fw - 8, fh - 8)
+      .stroke({ width: 3, color: INK })
+      .rect(origin + 10, origin + 10, fw - 20, fh - 20)
+      .stroke({ width: 1, color: INK }),
+  );
+  return {
+    root,
+    clearAround(points) {
+      for (const sprite of details) {
+        sprite.visible = !points.some((p) => Math.hypot(sprite.x - p.x, sprite.y - p.y) < p.radius);
+      }
+    },
+  };
 }
 
-function drawTree(g: Graphics, x: number, y: number, crown: number, u: number): void {
-  g.moveTo(x, y + 4 * u)
-    .lineTo(x, y + 8 * u)
-    .stroke({ width: 1.8 * u, color: 0x5a3a1c });
-  g.circle(x, y, 5.4 * u)
-    .fill(crown)
-    .stroke({ width: 0.9 * u, color: INK });
-  g.circle(x - 1.7 * u, y - 1.7 * u, 1.7 * u).fill({ color: 0xffffff, alpha: 0.25 });
-}
+let grain: Texture | null = null;
 
-function drawMountain(g: Graphics, x: number, y: number, snow: boolean, u: number): void {
-  const base = y + 7 * u;
-  const peak = y - 11 * u;
-  g.poly([x - 13 * u, base, x, peak, x + 13 * u, base])
-    .fill(0xc9a46a)
-    .stroke({ width: 1.2 * u, color: INK });
-  g.poly([x, peak, x + 13 * u, base, x + 3 * u, base]).fill(0x9c7745);
-  g.moveTo(x - 13 * u, base)
-    .lineTo(x, peak)
-    .lineTo(x + 13 * u, base)
-    .stroke({ width: 1.2 * u, color: INK });
-  if (snow) {
-    g.poly([
-      x - 5 * u,
-      y - 4 * u,
-      x,
-      peak,
-      x + 5 * u,
-      y - 4 * u,
-      x + 2 * u,
-      y - 2.5 * u,
-      x,
-      y - 4.5 * u,
-      x - 2 * u,
-      y - 2.5 * u,
-    ])
-      .fill(0xffffff)
-      .stroke({ width: 0.6 * u, color: INK });
+/** Soft paper fibre texture, multiplied over the washes. */
+function paperGrain(): Texture {
+  if (grain) return grain;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Tileable: noise sampled on a torus-friendly lattice period.
+      const n =
+        hash2(x, y, 200) * 0.5 +
+        valueTile(x / 16, y / 16, 16, 201) * 0.35 +
+        valueTile(x / 4, y / 4, 64, 202) * 0.15;
+      const v = 255 - n * 26;
+      const o = (y * size + x) * 4;
+      image.data[o] = v;
+      image.data[o + 1] = v - 2;
+      image.data[o + 2] = v - 8;
+      image.data[o + 3] = 255;
+    }
   }
+  ctx.putImageData(image, 0, 0);
+  grain = new Texture({ source: new CanvasSource({ resource: canvas }) });
+  return grain;
 }
 
-function drawTuft(g: Graphics, x: number, y: number, u: number): void {
-  g.moveTo(x - 4 * u, y + 3 * u)
-    .lineTo(x - 2 * u, y - 2 * u)
-    .moveTo(x, y + 3 * u)
-    .lineTo(x, y - 3.5 * u)
-    .moveTo(x + 4 * u, y + 3 * u)
-    .lineTo(x + 2 * u, y - 2 * u)
-    .stroke({ width: 1.1 * u, color: 0x5f7d2e });
-}
-
-function drawShip(g: Graphics, x: number, y: number, u: number): void {
-  const line = { width: u, color: INK };
-  g.poly([x - 14 * u, y, x + 14 * u, y, x + 8 * u, y + 7 * u, x - 8 * u, y + 7 * u])
-    .fill(0x8a5a2b)
-    .stroke(line);
-  g.moveTo(x, y)
-    .lineTo(x, y - 21 * u)
-    .stroke(line);
-  g.poly([x + u, y - 20 * u, x + 12 * u, y - 3 * u, x + u, y - 3 * u])
-    .fill(0xf6efd9)
-    .stroke({ width: 0.8 * u, color: INK });
-  g.poly([x, y - 21 * u, x + 7 * u, y - 19 * u, x, y - 17 * u]).fill(0xd4472f);
+/** Value noise that wraps every `period` lattice cells. */
+function valueTile(x: number, y: number, period: number, salt: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const h = (a: number, b: number) =>
+    hash2(((a % period) + period) % period, ((b % period) + period) % period, salt);
+  const a = h(x0, y0);
+  const b = h(x0 + 1, y0);
+  const c = h(x0, y0 + 1);
+  const d = h(x0 + 1, y0 + 1);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
 }

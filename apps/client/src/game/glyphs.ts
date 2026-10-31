@@ -1,4 +1,3 @@
-import type { ResourceType } from '@vectoria/shared';
 import type { Graphics } from 'pixi.js';
 import { INK } from './palette';
 
@@ -7,13 +6,6 @@ import { INK } from './palette';
 
 const WALL = 0xe9dfc6;
 const STONEWORK = 0xf3ead4;
-const MEDALLION = 0xf3e7c4;
-
-export const SPOT_RING: Record<ResourceType, number> = {
-  wood: 0x7a4b22,
-  stone: 0x6b6f78,
-  gold: 0xc99a12,
-};
 
 const scaled = (u: number, points: number[]) => points.map((n) => n * u);
 
@@ -51,73 +43,6 @@ export function drawCastle(g: Graphics, color: number, u: number): Graphics {
     .closePath()
     .fill(INK);
   g.rect(-u, -10 * u, 2 * u, 4 * u).fill(INK);
-  return g;
-}
-
-/** Round medallion with logs, stone blocks or gold nuggets. */
-export function drawSpot(g: Graphics, resource: ResourceType, u: number): Graphics {
-  g.circle(0, 0, 11 * u)
-    .fill(MEDALLION)
-    .stroke({ width: 2 * u, color: SPOT_RING[resource] });
-  const line = { width: 0.7 * u, color: INK };
-  switch (resource) {
-    case 'wood':
-      g.roundRect(-7 * u, 0, 14 * u, 4 * u, 2 * u)
-        .fill(0xa0652e)
-        .stroke(line);
-      g.roundRect(-5 * u, -4 * u, 10 * u, 4 * u, 2 * u)
-        .fill(0xb8763a)
-        .stroke(line);
-      g.circle(6 * u, 2 * u, 1.4 * u).fill(0xe8c48a);
-      break;
-    case 'stone':
-      g.poly(scaled(u, [-7, 5, -5, -2, 1, -2, 3, 5]))
-        .fill(0x9aa0aa)
-        .stroke(line);
-      g.poly(scaled(u, [0, 5, 2, 0, 7, 0, 8, 5]))
-        .fill(0xb9bec6)
-        .stroke(line);
-      break;
-    case 'gold': {
-      const rim = { width: 0.7 * u, color: 0x7a5a08 };
-      g.circle(-3 * u, 2 * u, 3.6 * u)
-        .fill(0xf4c430)
-        .stroke(rim);
-      g.circle(3 * u, u, 3 * u)
-        .fill(0xffd95a)
-        .stroke(rim);
-      g.circle(0, -3 * u, 2.6 * u)
-        .fill(0xf4c430)
-        .stroke(rim);
-      g.moveTo(6 * u, -7 * u)
-        .lineTo(6 * u, -3 * u)
-        .moveTo(4 * u, -5 * u)
-        .lineTo(8 * u, -5 * u)
-        .stroke({ width: u, color: 0xffffff });
-      break;
-    }
-  }
-  return g;
-}
-
-/** Treasure chest with a gold band and a sparkle. */
-export function drawChest(g: Graphics, u: number): Graphics {
-  const line = { width: u, color: INK };
-  g.moveTo(-9 * u, -2 * u)
-    .quadraticCurveTo(0, -10 * u, 9 * u, -2 * u)
-    .closePath()
-    .fill(0x9a5b22)
-    .stroke(line);
-  g.rect(-9 * u, -2 * u, 18 * u, 10 * u)
-    .fill(0xb8702c)
-    .stroke(line);
-  g.rect(-9 * u, u, 18 * u, 2 * u).fill(0xf2c230);
-  g.rect(-2 * u, 0, 4 * u, 5 * u)
-    .fill(0xf2c230)
-    .stroke({ width: 0.5 * u, color: INK });
-  g.poly(
-    scaled(u, [11, -10, 12.5, -7, 15.5, -5.5, 12.5, -4, 11, -1, 9.5, -4, 6.5, -5.5, 9.5, -7]),
-  ).fill(0xfff6c2);
   return g;
 }
 

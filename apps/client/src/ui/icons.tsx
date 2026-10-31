@@ -1,7 +1,9 @@
-import type { CardType, ResourceType } from '@vectoria/shared';
+import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
+import { dataUrl, resourceIcon } from '../art/svg';
 import type { ReactNode } from 'react';
 
-// SVG twins of the Pixi map glyphs (src/game/glyphs.ts) for the HUD, on the same 24-unit grid.
+// HUD icons. Resources come from the shared art (src/art/svg.ts); the small glyphs here mirror
+// the Pixi map glyphs (src/game/glyphs.ts) on the same 24-unit grid.
 
 const INK = '#3b2a18';
 
@@ -21,37 +23,11 @@ function Glyph({ size, children, title }: { size: number; children: ReactNode; t
   );
 }
 
-const RESOURCE_GLYPHS: Record<ResourceType, { ring: string; art: ReactNode }> = {
-  wood: {
-    ring: '#7a4b22',
-    art: (
-      <g stroke={INK} strokeWidth={0.7}>
-        <rect x={-7} y={0} width={14} height={4} rx={2} fill="#a0652e" />
-        <rect x={-5} y={-4} width={10} height={4} rx={2} fill="#b8763a" />
-      </g>
-    ),
-  },
-  stone: {
-    ring: '#6b6f78',
-    art: (
-      <g stroke={INK} strokeWidth={0.7}>
-        <path d="M-7 5l2-7h6l2 7z" fill="#9aa0aa" />
-        <path d="M0 5l2-5h5l1 5z" fill="#b9bec6" />
-      </g>
-    ),
-  },
-  gold: {
-    ring: '#c99a12',
-    art: (
-      <g stroke="#7a5a08" strokeWidth={0.7}>
-        <circle cx={-3} cy={2} r={3.6} fill="#f4c430" />
-        <circle cx={3} cy={1} r={3} fill="#ffd95a" />
-        <circle cx={0} cy={-3} r={2.6} fill="#f4c430" />
-      </g>
-    ),
-  },
-};
+const RESOURCE_URLS = Object.fromEntries(
+  RESOURCES.map((r) => [r, dataUrl(resourceIcon(r))]),
+) as Record<ResourceType, string>;
 
+/** Resource art from the shared SVG source (same drawing as the map medallions). */
 export function ResourceIcon({
   resource,
   size = 22,
@@ -61,12 +37,16 @@ export function ResourceIcon({
   size?: number;
   title?: string;
 }) {
-  const { ring, art } = RESOURCE_GLYPHS[resource];
   return (
-    <Glyph size={size} title={title}>
-      <circle r={10.5} fill="#f3e7c4" stroke={ring} strokeWidth={2} />
-      {art}
-    </Glyph>
+    <img
+      src={RESOURCE_URLS[resource]}
+      width={size}
+      height={size}
+      alt={title ?? ''}
+      title={title}
+      className="inline-block shrink-0"
+      draggable={false}
+    />
   );
 }
 

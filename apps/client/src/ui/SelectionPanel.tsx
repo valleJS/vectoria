@@ -21,7 +21,7 @@ import {
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
 import { BannerIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
-import { Button, Panel } from './Panel';
+import { Button } from './Panel';
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -253,30 +253,29 @@ function selectionExists(view: GameView, selection: Selection): boolean {
   }
 }
 
-export function SelectionPanel({ view }: { view: GameView }) {
+/** Details and actions for the selected map object; a hint when nothing is selected. */
+export function SelectionContent({ view }: { view: GameView }) {
   const selection = useGameStore((s) => s.selection);
   const select = useGameStore((s) => s.select);
   // A chest that was opened or an army that disbanded leaves a stale selection behind.
   if (!selection || !selectionExists(view, selection)) {
     return (
-      <Panel className="text-ink-soft italic">
-        Klicke auf eine Burg, ein Vorkommen, eine Truhe oder einen Truppenzug.
-      </Panel>
+      <p className="py-2 text-ink-soft italic">
+        Klicke auf der Karte auf eine Burg, ein Vorkommen, eine Truhe oder einen Heerzug.
+      </p>
     );
   }
   return (
-    <Panel>
-      <div className="float-right">
-        <button
-          type="button"
-          className="-mt-1 -mr-1 text-lg leading-none text-ink-soft hover:text-seal"
-          onClick={() => select(null)}
-          aria-label="Auswahl schließen"
-        >
-          ×
-        </button>
-      </div>
+    <div>
+      <button
+        type="button"
+        className="float-right -mt-0.5 text-lg leading-none text-ink-soft hover:text-seal"
+        onClick={() => select(null)}
+        aria-label="Auswahl schließen"
+      >
+        ×
+      </button>
       <SelectionBody view={view} selection={selection} />
-    </Panel>
+    </div>
   );
 }

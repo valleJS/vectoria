@@ -11,21 +11,13 @@ import {
   type GameView,
   type Resources,
 } from '@vectoria/shared';
-import { useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { cssColor, describeTarget, formatGameDuration, playerColor } from '../game/format';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
-import {
-  BannerIcon,
-  CardArt,
-  ResourceIcon,
-  ShieldIcon,
-  StarIcon,
-  SunIcon,
-  TroopIcon,
-} from './icons';
+import { CardArt, ResourceIcon, ShieldIcon, StarIcon, SunIcon, TroopIcon } from './icons';
 import { Button, Panel, SectionLabel } from './Panel';
-import { SelectionPanel } from './SelectionPanel';
+import { SelectionContent } from './SelectionPanel';
 
 const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = {
   idle: { label: 'Offline', dot: 'bg-ink-soft' },
@@ -66,46 +58,72 @@ function TopBar({ view }: { view: GameView }) {
       : 'Ruhezeit (Mo–Fr 10–18 Uhr)';
 
   return (
-    <header className="pointer-events-auto flex flex-wrap items-center gap-x-6 gap-y-1 border-b-[3px] border-double border-ink bg-parchment-dark px-4 py-1.5 shadow-[0_2px_0_rgba(59,42,24,0.25)]">
-      <span className="text-xl font-bold italic">Vectoria</span>
-      <span className="flex items-center gap-1.5">
-        <SunIcon lit={clock.running} />
-        Spieltag {clock.gameday}
-        <span className="text-sm text-ink-soft">· {clockLabel}</span>
-        {clock.timeScale !== 1 && (
-          <span className="text-sm text-seal">· {clock.timeScale}× schneller</span>
-        )}
-      </span>
-      <span className="flex items-center gap-4 text-lg font-bold tabular-nums">
-        {RESOURCES.map((r) => (
-          <span key={r} className="flex items-center gap-1" title={RESOURCE_NAMES[r]}>
-            <ResourceIcon resource={r} size={24} title={RESOURCE_NAMES[r]} />
-            {self.resources[r]}
+    <header className="pointer-events-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-b-[3px] border-double border-ink bg-parchment-dark px-4 py-1.5 shadow-[0_2px_0_rgba(59,42,24,0.25)]">
+      <span className="mr-2 text-xl font-bold italic">Vectoria</span>
+      <span className="flex items-center gap-2 leading-tight">
+        <SunIcon size={22} lit={clock.running} />
+        <span>
+          <b>Spieltag {clock.gameday}</b>
+          <span className="block text-xs text-ink-soft">
+            {clockLabel}
+            {clock.timeScale !== 1 && <span className="text-seal"> · {clock.timeScale}×</span>}
           </span>
+        </span>
+      </span>
+      <span className="mx-auto flex items-center gap-2">
+        {RESOURCES.map((r) => (
+          <Stat key={r} title={RESOURCE_NAMES[r]} icon={<ResourceIcon resource={r} size={26} />}>
+            {self.resources[r]}
+          </Stat>
         ))}
+        <Stat
+          title="Truppen zu Hause (unterwegs)"
+          icon={<TroopIcon size={24} />}
+          extra={away > 0 ? `+${away}` : undefined}
+        >
+          {me?.homeTroops ?? 0}
+        </Stat>
       </span>
-      <span className="flex items-center gap-1 tabular-nums" title="Truppen zu Hause · unterwegs">
-        <TroopIcon />
-        <b className="text-lg">{me?.homeTroops ?? 0}</b>
-        {away > 0 && <span className="text-ink-soft">+ {away} unterwegs</span>}
-      </span>
-      <span className="ml-auto flex items-center gap-2 tabular-nums" title="Siegpunkte">
-        <StarIcon size={22} />
-        <b className="text-lg">
-          {vp} / {view.victoryPointsToWin}
-        </b>
-        <span className="h-2 w-20 border border-ink bg-parchment-deep">
+      <Stat title="Siegpunkte" icon={<StarIcon size={24} />}>
+        {vp}
+        <span className="text-sm font-normal text-ink-soft"> / {view.victoryPointsToWin}</span>
+        <span className="ml-2 inline-block h-2 w-16 border border-ink bg-parchment-deep align-middle">
           <span
             className="block h-full bg-seal"
             style={{ width: `${Math.min(100, (vp / view.victoryPointsToWin) * 100)}%` }}
           />
         </span>
-      </span>
-      <span className="flex items-center gap-1.5 text-sm text-ink-soft" title={label}>
+      </Stat>
+      <span className="flex items-center gap-1.5 text-xs text-ink-soft" title={label}>
         <span className={`h-2.5 w-2.5 rounded-full border border-ink/60 ${dot}`} />
         {status === 'open' && latencyMs !== null ? `${Math.round(latencyMs)} ms` : label}
       </span>
     </header>
+  );
+}
+
+/** Icon + big number in a framed chip; the title doubles as tooltip and accessible label. */
+function Stat({
+  title,
+  icon,
+  extra,
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  extra?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      title={title}
+      aria-label={title}
+      className="flex items-center gap-1.5 border border-ink/40 bg-parchment px-2 py-0.5 text-lg font-bold tabular-nums"
+    >
+      {icon}
+      {children}
+      {extra && <span className="text-sm font-normal text-ink-soft">{extra}</span>}
+    </span>
   );
 }
 
@@ -226,59 +244,69 @@ function CardHand({ view }: { view: GameView }) {
   );
 }
 
-function ArmiesPanel({ view }: { view: GameView }) {
+function ArmiesList({ view }: { view: GameView }) {
   const select = useGameStore((s) => s.select);
   const mine = view.armies.filter((a) => a.ownerId === view.self.id);
-  if (mine.length === 0) return null;
-  const color = cssColor(playerColor(view, view.self.id));
+  if (mine.length === 0) {
+    return (
+      <p className="py-2 text-ink-soft italic">
+        Keine Heerzüge unterwegs. Wähle ein Ziel auf der Karte, um Truppen zu entsenden.
+      </p>
+    );
+  }
   return (
-    <Panel title="Deine Heerzüge" icon={<BannerIcon color={color} size={20} />}>
-      <ul className="space-y-1">
-        {mine.map((army) => (
-          <li key={army.id} className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="text-left hover:text-seal"
-              onClick={() => select({ kind: 'army', id: army.id })}
+    <ul className="divide-y divide-ink/15">
+      {mine.map((army) => (
+        <li key={army.id} className="flex items-center justify-between gap-2 py-1.5">
+          <button
+            type="button"
+            className="min-w-0 text-left hover:text-seal"
+            onClick={() => select({ kind: 'army', id: army.id })}
+          >
+            <b className="tabular-nums">{army.troops}</b> → {describeTarget(view, army.target)}
+            <span className="block text-xs text-ink-soft">
+              {army.status === 'stationed'
+                ? 'baut ab'
+                : `${army.status === 'returning' ? 'Rückweg' : 'Ankunft'} in ${formatGameDuration(
+                    (army.arriveClock ?? view.clock.clock) - view.clock.clock,
+                  )}`}
+            </span>
+          </button>
+          {army.status !== 'returning' && (
+            <Button
+              title="Zurückrufen"
+              onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}
             >
-              <b className="tabular-nums">{army.troops}</b> → {describeTarget(view, army.target)}
-              <span className="text-ink-soft">
-                {army.arriveClock !== null
-                  ? ` · ${formatGameDuration(army.arriveClock - view.clock.clock)}`
-                  : ' · baut ab'}
-              </span>
-            </button>
-            {army.status !== 'returning' && (
-              <Button
-                title="Zurückrufen"
-                onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}
-              >
-                ↩
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </Panel>
+              ↩
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
 function Leaderboard({ view }: { view: GameView }) {
   const ranked = [...view.players].sort((a, b) => b.victoryPoints - a.victoryPoints);
   return (
-    <Panel title="Rangliste" icon={<StarIcon size={18} />}>
-      <ol className="space-y-1 tabular-nums">
-        {ranked.map((p) => {
+    <>
+      <p className="mb-1.5 text-xs text-ink-soft">
+        Wer zuerst {view.victoryPointsToWin} Siegpunkte hat, gewinnt.
+      </p>
+      <ol className="space-y-1.5 tabular-nums">
+        {ranked.map((p, rank) => {
           const color = cssColor(playerColor(view, p.id));
           return (
             <li key={p.id} className="flex items-center gap-2">
+              <span className="w-4 text-right text-xs text-ink-soft">{rank + 1}.</span>
               <ShieldIcon color={color} />
               <span
                 className={`min-w-0 flex-1 truncate ${p.online ? '' : 'text-ink-soft italic'} ${p.id === view.self.id ? 'font-bold' : ''}`}
+                title={p.online ? undefined : 'offline'}
               >
                 {p.name}
               </span>
-              <span className="h-1.5 w-14 border border-ink/50 bg-parchment-deep">
+              <span className="h-1.5 w-16 border border-ink/50 bg-parchment-deep">
                 <span
                   className="block h-full"
                   style={{
@@ -292,28 +320,82 @@ function Leaderboard({ view }: { view: GameView }) {
           );
         })}
       </ol>
-    </Panel>
+    </>
   );
 }
 
 function Chronicle({ view }: { view: GameView }) {
-  if (view.self.log.length === 0) return null;
+  if (view.self.log.length === 0) {
+    return <p className="py-2 text-ink-soft italic">Noch nichts geschehen.</p>;
+  }
   return (
-    <Panel title="Chronik" className="flex min-h-0 flex-col">
-      <ul className="max-h-48 space-y-0.5 overflow-y-auto">
-        {view.self.log.map((entry, i) => (
-          <li key={`${entry.at}-${i}`}>
-            <span className="text-ink-soft tabular-nums">
-              {new Date(entry.at).toLocaleTimeString('de-DE', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </span>{' '}
-            {entry.text}
-          </li>
+    <ul className="divide-y divide-ink/15">
+      {view.self.log.map((entry, i) => (
+        <li key={`${entry.at}-${i}`} className="flex gap-2 py-1">
+          <span className="shrink-0 text-ink-soft tabular-nums">
+            {new Date(entry.at).toLocaleTimeString('de-DE', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+          <span>{entry.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type SidebarTab = 'selection' | 'armies' | 'ranking' | 'log';
+
+/** Right-hand sidebar: one tab at a time, so the map stays visible. */
+function Sidebar({ view }: { view: GameView }) {
+  const selection = useGameStore((s) => s.selection);
+  const [tab, setTab] = useState<SidebarTab>('ranking');
+  const [seenSelection, setSeenSelection] = useState(selection);
+  // Selecting something on the map brings its details forward.
+  if (selection !== seenSelection) {
+    setSeenSelection(selection);
+    if (selection) setTab('selection');
+  }
+  const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
+  const tabs: { id: SidebarTab; label: string; badge?: number }[] = [
+    { id: 'selection', label: 'Auswahl' },
+    { id: 'armies', label: 'Heerzüge', badge: armies },
+    { id: 'ranking', label: 'Rangliste' },
+    { id: 'log', label: 'Chronik' },
+  ];
+  return (
+    <div className="pointer-events-auto flex max-h-full min-h-0 flex-col border border-ink bg-parchment text-sm shadow-[2px_3px_0_rgba(59,42,24,0.35)]">
+      <nav className="flex shrink-0 border-b border-ink bg-parchment-dark" role="tablist">
+        {tabs.map(({ id, label, badge }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`flex flex-1 items-center justify-center gap-1 border-r border-ink/30 px-1 py-1.5 last:border-r-0 ${
+              tab === id
+                ? '-mb-px border-b-2 border-b-seal bg-parchment font-bold'
+                : 'text-ink-soft hover:bg-parchment-deep/60 hover:text-ink'
+            }`}
+          >
+            {label}
+            {badge ? (
+              <span className="rounded-full bg-seal px-1.5 text-[11px] leading-4 text-parchment">
+                {badge}
+              </span>
+            ) : null}
+          </button>
         ))}
-      </ul>
-    </Panel>
+      </nav>
+      <div className="min-h-0 overflow-y-auto px-3 py-2">
+        {tab === 'selection' && <SelectionContent view={view} />}
+        {tab === 'armies' && <ArmiesList view={view} />}
+        {tab === 'ranking' && <Leaderboard view={view} />}
+        {tab === 'log' && <Chronicle view={view} />}
+      </div>
+    </div>
   );
 }
 
@@ -376,7 +458,6 @@ export function Hud() {
       <div className="relative flex min-h-0 flex-1 justify-between gap-4 p-3">
         <div className="flex w-72 min-h-0 flex-col gap-3">
           <RealmPanel view={view} />
-          <Chronicle view={view} />
           <div className="mt-auto">
             <CardHand view={view} />
           </div>
@@ -384,10 +465,8 @@ export function Hud() {
         <div className="flex flex-1 flex-col items-center justify-end">
           <EndBanner view={view} />
         </div>
-        <div className="flex w-80 min-h-0 flex-col gap-3 overflow-y-auto">
-          <SelectionPanel view={view} />
-          <ArmiesPanel view={view} />
-          <Leaderboard view={view} />
+        <div className="flex w-80 min-h-0 flex-col items-stretch gap-3">
+          <Sidebar view={view} />
           <div className="mt-auto flex justify-end">
             <CompassRose />
           </div>
