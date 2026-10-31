@@ -38,7 +38,9 @@ function SendForm({
   const me = view.players.find((p) => p.id === view.self.id);
   const map = useGameStore((s) => s.map);
   const home = me?.homeTroops ?? 0;
-  const [troops, setTroops] = useState(() => Math.min(home, 50));
+  const [chosen, setTroops] = useState(50);
+  // Home troops shrink as armies leave; never offer more than are there.
+  const troops = Math.min(chosen, home);
   const [cards, setCards] = useState<CardType[]>([]);
   if (!me?.castle || !map) return null;
 
@@ -212,10 +214,24 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
   }
 }
 
+function selectionExists(view: GameView, selection: Selection): boolean {
+  switch (selection.kind) {
+    case 'army':
+      return view.armies.some((a) => a.id === selection.id);
+    case 'castle':
+      return view.players.some((p) => p.id === selection.id);
+    case 'spot':
+      return view.spots.some((s) => s.id === selection.id);
+    case 'chest':
+      return view.chests.some((c) => c.id === selection.id);
+  }
+}
+
 export function SelectionPanel({ view }: { view: GameView }) {
   const selection = useGameStore((s) => s.selection);
   const select = useGameStore((s) => s.select);
-  if (!selection) {
+  // A chest that was opened or an army that disbanded leaves a stale selection behind.
+  if (!selection || !selectionExists(view, selection)) {
     return (
       <Panel className="text-slate-400">
         Klicke auf eine Burg, ein Vorkommen, eine Truhe oder einen Truppenzug.
