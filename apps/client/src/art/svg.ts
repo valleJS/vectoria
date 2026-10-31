@@ -24,12 +24,17 @@ export function dataUrl(markup: string): string {
 // ---- Resources ----
 
 const RESOURCE_BODY: Record<ResourceType, string> = {
-  // One log, end grain towards the viewer.
-  wood: `<g transform="rotate(-18 32 34)" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round">
-      <path d="M14 23h31v22H14a7 11 0 0 1 0-22z" fill="#9a6431"/>
-      <path d="M17 29h22M19 39h17" fill="none" stroke="#6e4420" stroke-width="2" stroke-linecap="round"/>
-      <ellipse cx="45" cy="34" rx="8" ry="11" fill="#eabc80"/>
-      <ellipse cx="45" cy="34" rx="4.4" ry="6.4" fill="none" stroke="#c18a50" stroke-width="1.6"/>
+  // One log lying diagonally, end grain towards the viewer, with a leafy twig.
+  wood: `<g transform="rotate(-24 32 34)" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round">
+      <path d="M17 22H50a6 12 0 0 1 0 24H17Z" fill="#8f5a2a"/>
+      <path d="M17 22H50a6 12 0 0 1 4.4 4.2H17Z" fill="#a8703a" stroke="none"/>
+      <path d="M24 30q8 2 18 0M27 39q7-2 16 0" fill="none" stroke="#5e3a18" stroke-width="1.8" stroke-linecap="round"/>
+      <ellipse cx="38" cy="34.5" rx="2.4" ry="1.8" fill="#6b4220" stroke-width="1.4"/>
+      <path d="M35 22v-6" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M35 17c5-6 11-5 13-3c-3 5-9 6-13 3z" fill="#6aa046" stroke-width="1.8"/>
+      <ellipse cx="17" cy="34" rx="8" ry="12" fill="#eec58c"/>
+      <ellipse cx="17" cy="34" rx="5" ry="7.6" fill="none" stroke="#c99256" stroke-width="1.6"/>
+      <ellipse cx="17" cy="34" rx="2.2" ry="3.4" fill="none" stroke="#c99256" stroke-width="1.4"/>
     </g>`,
   // One cut block.
   stone: `<g stroke="${INK}" stroke-width="2.6" stroke-linejoin="round">
@@ -321,6 +326,22 @@ export function compassRose(): string {
     <circle cx="${cx}" cy="${cy}" r="5" fill="#f2c230" stroke="${INK}" stroke-width="1.6"/>
     <text x="${cx}" y="15" text-anchor="middle" font-family="Georgia, serif" font-size="16" font-weight="bold" fill="${INK}">N</text>`;
   return svg(110, 120, body);
+}
+
+/** Army banner: pole with a swallow-tailed flag in the owner's colour, 48×64, standing at (14, 58). */
+export function banner(color: string): Art {
+  const dark = shade(color, 0.66);
+  const light = shade(color, 1.3);
+  const body = `
+    <ellipse cx="18" cy="58" rx="13" ry="4" fill="${INK}" opacity=".3"/>
+    <path d="M14 58V7" stroke="${INK}" stroke-width="4.4" stroke-linecap="round"/>
+    <path d="M14 58V7" stroke="#8a5a2b" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M14 9H44L37 21L44 33H14Z" fill="${color}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M14 26H40.2L44 33H14Z" fill="${dark}"/>
+    <path d="M18 13H38" stroke="${light}" stroke-width="2" stroke-linecap="round"/>
+    <path d="M14 9H44L37 21L44 33H14Z" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+    <circle cx="14" cy="6" r="3.6" fill="#f2c230" stroke="${INK}" stroke-width="1.8"/>`;
+  return { svg: svg(48, 64, body), width: 48, height: 64, anchor: { x: 14, y: 58 } };
 }
 
 /** Treasure chest with gold trim and sparkles, 56×48. */

@@ -2,6 +2,7 @@ import { RESOURCES, type ResourceType } from '@vectoria/shared';
 import { CanvasSource, Texture } from 'pixi.js';
 import { PLAYER_PALETTE, SELF_COLOR } from '../game/palette';
 import {
+  banner,
   broadleaf,
   castle,
   chest,
@@ -40,6 +41,8 @@ export interface MapArt {
   chest: ArtTexture;
   /** Castles keyed by owner colour (0xrrggbb), for the self colour and the palette. */
   castles: Map<number, ArtTexture>;
+  /** Army banners keyed like `castles`. */
+  banners: Map<number, ArtTexture>;
 }
 
 async function rasterise(art: Art): Promise<ArtTexture> {
@@ -61,6 +64,15 @@ async function rasterise(art: Art): Promise<ArtTexture> {
     height: art.height,
     anchor: art.anchor,
   };
+}
+
+/** One texture per heraldic colour (self colour and palette). */
+async function byColour(make: (color: string) => Art): Promise<Map<number, ArtTexture>> {
+  const colours = [SELF_COLOR, ...PLAYER_PALETTE];
+  const textures = await Promise.all(
+    colours.map((c) => rasterise(make(`#${c.toString(16).padStart(6, '0')}`))),
+  );
+  return new Map(colours.map((c, i) => [c, textures[i]!]));
 }
 
 let loading: Promise<MapArt> | null = null;
@@ -89,14 +101,8 @@ export function loadMapArt(): Promise<MapArt> {
       flowers: flowerArt,
       ship: await rasterise(ship()),
       chest: await rasterise(chest()),
-      castles: new Map(
-        await Promise.all(
-          [SELF_COLOR, ...PLAYER_PALETTE].map(
-            async (c) =>
-              [c, await rasterise(castle(`#${c.toString(16).padStart(6, '0')}`))] as const,
-          ),
-        ),
-      ),
+      castles: await byColour(castle),
+      banners: await byColour(banner),
       spots: Object.fromEntries(RESOURCES.map((r, i) => [r, spots[i]!])) as Record<
         ResourceType,
         ArtTexture

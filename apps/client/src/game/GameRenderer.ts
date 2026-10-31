@@ -14,7 +14,7 @@ import { Camera } from './Camera';
 import { playerColor } from './format';
 import { dashedCircle, dashedLine, drawBanner, drawCastle } from './glyphs';
 import { INK, PARCHMENT, SEA, SERIF } from './palette';
-import { buildTerrain, type Terrain } from './terrain';
+import { buildTerrain, type Clearing, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
 const UNIT_SMOOTHING_MS = 150;
@@ -23,6 +23,8 @@ const PICK_RADIUS_TILES = 0.9;
 /** Selection ring rotation, radians per second. */
 const SELECTION_SPIN = 0.6;
 const FORTIFY_BLUE = 0x3b6ea5;
+/** Screen space the HUD covers (Hud.tsx: top bar, w-72 left column, w-80 sidebar + gaps). */
+const HUD_INSETS = { top: 60, left: 300, right: 336 };
 
 /** Sprite of map art, `width` world px wide, anchored at its ground point. */
 function artSprite(art: ArtTexture, width: number): Sprite {
@@ -34,7 +36,9 @@ function artSprite(art: ArtTexture, width: number): Sprite {
 
 interface ArmySprite {
   container: Container;
-  banner: Graphics;
+  /** Holds the banner art (or the vector fallback for colours without a texture). */
+  figure: Container;
+  plate: Graphics;
   label: Text;
   target: PointData;
   /** Colour + status the banner was last drawn with, so it is only redrawn on change. */
@@ -56,6 +60,8 @@ export class GameRenderer {
   private readonly unsubscribe: () => void;
   private map: MapData | null = null;
   private built: Terrain | null = null;
+  /** Castle and spot positions the terrain was last built around. */
+  private clearingsKey = '';
   private view: GameView | null = null;
   /** Fingerprint of the last drawn sites, so labels aren't re-rasterised every tick. */
   private sitesKey = '';
@@ -162,16 +168,38 @@ export class GameRenderer {
     this.map = map;
     this.sitesKey = '';
     for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
+    this.built = null;
+    this.clearingsKey = '';
     if (!map) return;
-    this.built = buildTerrain(map, this.art);
+    this.buildGround(this.view);
+    const { width, height } = this.app.screen;
+    // Fit the map into the area the HUD leaves free (top bar, side panels) when there is room.
+    const wide = width >= 900;
+    this.camera.fit(map.width * map.tileSize, map.height * map.tileSize, width, height, 24, {
+      top: HUD_INSETS.top,
+      left: wide ? HUD_INSETS.left : 0,
+      right: wide ? HUD_INSETS.right : 0,
+      bottom: 0,
+    });
+  }
+
+  /** (Re)draws the terrain; castles and spots get open ground, so it waits for their positions. */
+  private buildGround(view: GameView | null): void {
+    if (!this.map) return;
+    const clearings: Clearing[] = view
+      ? [
+          ...view.players.flatMap((p) =>
+            p.castle ? [{ ...p.castle, radius: 1.4, open: true }] : [],
+          ),
+          ...view.spots.map((s) => ({ ...s.position, radius: 0.75, open: false })),
+        ]
+      : [];
+    const key = JSON.stringify(clearings);
+    if (this.built && key === this.clearingsKey) return;
+    this.clearingsKey = key;
+    for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
+    this.built = buildTerrain(this.map, this.art, clearings);
     this.terrain.addChild(this.built.root);
-    this.camera.fit(
-      map.width * map.tileSize,
-      map.height * map.tileSize,
-      this.app.screen.width,
-      this.app.screen.height,
-      48,
-    );
   }
 
   private setView(view: GameView | null, selfId: string | null): void {
@@ -189,11 +217,12 @@ export class GameRenderer {
     this.sitesKey = key;
     for (const child of this.siteLayer.removeChildren()) child.destroy({ children: true });
     if (!view || !this.map) return;
+    this.buildGround(view);
     const u = this.unit;
     // Keep castles, spots and chests readable: no trees or peaks on top of them.
     this.built?.clearAround([
       ...view.players.flatMap((p) => (p.castle ? [{ ...this.px(p.castle), radius: 36 * u }] : [])),
-      ...view.spots.map((s) => ({ ...this.px(s.position), radius: 26 * u })),
+      ...view.spots.map((s) => ({ ...this.px(s.position), radius: 18 * u })),
       ...view.chests.map((c) => ({ ...this.px(c.position), radius: 18 * u })),
     ]);
 
@@ -309,23 +338,35 @@ export class GameRenderer {
       let sprite = this.armies.get(army.id);
       if (!sprite) {
         const container = new Container();
-        const banner = new Graphics();
-        const label = this.label('', 12 * u, 0xffffff);
-        label.position.set(0, -8 * u);
-        container.addChild(banner, label);
+        const figure = new Container();
+        const plate = new Graphics();
+        const label = this.label('', 11 * u, INK);
+        label.position.set(0, 9 * u);
+        container.addChild(figure, plate, label);
         container.position.copyFrom(target);
         this.armyLayer.addChild(container);
-        sprite = { container, banner, label, target, look: '' };
+        sprite = { container, figure, plate, label, target, look: '' };
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
       const look = `${color}:${army.status}`;
       if (look !== sprite.look) {
         sprite.look = look;
-        drawBanner(sprite.banner.clear(), color, u);
+        for (const child of sprite.figure.removeChildren()) child.destroy();
+        const art = this.art.banners.get(color);
+        sprite.figure.addChild(art ? artSprite(art, 32 * u) : drawBanner(new Graphics(), color, u));
         sprite.container.alpha = army.status === 'returning' ? 0.75 : 1;
       }
-      sprite.label.text = army.troops === null ? '?' : String(army.troops);
+      const text = army.troops === null ? '?' : String(army.troops);
+      if (text !== sprite.label.text) {
+        sprite.label.text = text;
+        const w = sprite.label.width + 8 * u;
+        sprite.plate
+          .clear()
+          .roundRect(-w / 2, 2.5 * u, w, 13 * u, 2 * u)
+          .fill(PARCHMENT)
+          .stroke({ width: u, color: INK });
+      }
     }
 
     for (const [id, sprite] of this.armies) {

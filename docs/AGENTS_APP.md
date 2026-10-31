@@ -27,10 +27,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/game/terrain.ts` | Static map: tile fields → flat vector regions (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector army banner and fallback castle; dashed line/circle helpers |
-| `src/art/svg.ts` | All illustrated art as SVG source: resources, spot medallions, trees, mountains, castles, chest, ship, compass |
+| `src/art/svg.ts` | All illustrated art as SVG source: resources, spot medallions, trees, mountains, castles, army banners, chest, ship, compass |
 | `src/art/textures.ts` | Rasterises the SVG art once into Pixi textures (`loadMapArt`) |
 | `src/game/palette.ts` | Pixi colours (ink, parchment, sea, resources) and heraldic player palette |
-| `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world |
+| `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets |
 | `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target labels |
 | `src/ui/Hud.tsx` | Game overlay: top bar stats, realm/shop, card hand, tabbed sidebar (selection, armies, ranking, chronicle) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, small glyph twins (castle, chest, banner, cards) |
@@ -56,6 +56,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 - **Terrain is drawn once per map** (`buildTerrain`): the tile grid is resampled into lightly
   blurred fields whose iso-lines follow tile edges with rounded corners; regions are flat vector
   fills (no gradients or noise). Decoration is hashed from positions, so it is stable across
-  redraws and clients. Details near castles, spots and chests are hidden
-  (`Terrain.clearAround`) to keep sites readable.
+  redraws and clients. The terrain is rebuilt when castle/spot positions change: castles get
+  open ground and spots get land (`Clearing`), so no site stands in water; details overlapping
+  castles, spots and chests are hidden (`Terrain.clearAround`, by sprite bounds).
 - **UI language is German**; code and comments stay English.
