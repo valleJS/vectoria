@@ -61,20 +61,34 @@ export function drawBanner(g: Graphics, color: number, u: number): Graphics {
   return g;
 }
 
-export function dashedLine(
+/** Dashed line through `points`; the dash pattern runs on across corners. */
+export function dashedPolyline(
   g: Graphics,
-  from: { x: number; y: number },
-  to: { x: number; y: number },
+  points: readonly { x: number; y: number }[],
   dash: number,
   gap: number,
 ): Graphics {
-  const length = Math.hypot(to.x - from.x, to.y - from.y);
-  if (length === 0) return g;
-  const dx = (to.x - from.x) / length;
-  const dy = (to.y - from.y) / length;
-  for (let d = 0; d < length; d += dash + gap) {
-    const end = Math.min(d + dash, length);
-    g.moveTo(from.x + dx * d, from.y + dy * d).lineTo(from.x + dx * end, from.y + dy * end);
+  const period = dash + gap;
+  let offset = 0;
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1]!;
+    const to = points[i]!;
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length === 0) continue;
+    const dx = (to.x - from.x) / length;
+    const dy = (to.y - from.y) / length;
+    // `offset` is how far into the current period the segment starts.
+    for (let d = -offset; d < length; d += period) {
+      const start = Math.max(0, d);
+      const end = Math.min(d + dash, length);
+      if (end > start) {
+        g.moveTo(from.x + dx * start, from.y + dy * start).lineTo(
+          from.x + dx * end,
+          from.y + dy * end,
+        );
+      }
+    }
+    offset = (offset + length) % period;
   }
   return g;
 }

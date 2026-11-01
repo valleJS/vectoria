@@ -3,10 +3,10 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-10-30
+last_verified: 2026-11-01
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 63d84a40a61e6dab14eafa95a6291e77a2b054e5
+sources_stamp: fd9732a7f89f9a8ac4d828e11431f2cfb133914f
 ---
 
 # Architecture
@@ -26,7 +26,8 @@ flowchart LR
     WS[GameServer /ws] --> State[(GameState)]
     Loop[GameLoop tick] --> State
     Loop -->|per-player state| WS
-    HTTP[/api join + admin/] --> State
+    HTTP[/api auth + admin/] --> State
+    HTTP --> Mail[(SMTP)]
     State --> Save[(data/game.json)]
   end
   Socket <-->|JSON messages| WS
@@ -43,7 +44,8 @@ apps/
   client/          React + Vite + PixiJS + Tailwind  → AGENTS_APP.md
   server/          Node + ws + Drizzle + ioredis     → AGENTS_SERVER.md
 packages/
-  shared/src/      map.ts, entities.ts, rules.ts, messages.ts (types, balance, JSON codec)
+  shared/src/      map.ts, entities.ts, rules.ts, messages.ts, pathfinding.ts
+                   (types, balance, JSON codec, land routes + raid planning)
 tsconfig.json      base compiler options; workspaces extend it
 eslint.config.js   flat config for all workspaces
 docker-compose.yml local Postgres 17 + Redis 7
@@ -66,15 +68,20 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
 | C→S | `buy` | Troop batches or victory points |
-| C→S | `sendArmy` | Troops + target (`castle`/`spot`/`chest`) + march cards |
+| C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), march cards, `cargo` |
+| C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` / `playCard` | Recall an army / play an instant card |
 | S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
 | S→C | `map` | Map changed (game start / reset) |
 | S→C | `state` | Every tick: this player's filtered `GameView` |
 | S→C | `error` | `bad_message` / `rate_limited` / `rejected` (rule violation, shown as toast) |
 
-HTTP (same port): `POST /api/join`, `GET /api/lobby`, `GET /api/admin/state`,
+HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
+`POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state`,
 `POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`.
+
+`pathfinding.ts` is shared so the client previews routes, travel times and raid meeting points
+with exactly the server's maths.
 
 Server validates every client message with `parseClientMessage` and admin bodies with
 `parseAdminAction`; add a case there for each new type. Game rules: [AGENTS_GAME.md](./AGENTS_GAME.md).

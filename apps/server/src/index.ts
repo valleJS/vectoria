@@ -4,6 +4,8 @@ import { GameLoop } from './game/GameLoop';
 import { GameState } from './game/GameState';
 import { Persistence } from './game/persistence';
 import { log } from './logger';
+import { createMailer } from './mail';
+import { EmailAuth } from './net/auth';
 import { GameServer } from './net/GameServer';
 import { handleHttp } from './net/http';
 import { connectServices } from './services';
@@ -14,11 +16,13 @@ async function main(): Promise<void> {
   const services = await connectServices(config);
   const persistence = new Persistence(config.dataFile);
   const state = new GameState({ seed: config.mapSeed, ...config.game }, await persistence.load());
+  const auth = new EmailAuth(state, createMailer(config), config.publicUrl);
 
   const http = createServer((req, res) => {
     void handleHttp(
       {
         state,
+        auth,
         adminToken: config.adminToken,
         connectionCount: () => gameServer.connectionCount,
         onChange: () => gameServer.broadcastState(),

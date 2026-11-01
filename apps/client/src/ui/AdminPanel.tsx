@@ -137,7 +137,7 @@ export function AdminPanel() {
                       ? 'läuft'
                       : 'außerhalb Spielzeit'}{' '}
                   · Modus {state.clock.mode}, {state.clock.timeScale}× · {state.armies} Züge ·{' '}
-                  {state.chests} Truhen
+                  {state.chests} Truhen · {state.outposts} Stützpunkte
                 </>
               )}
             </div>
@@ -221,8 +221,9 @@ export function AdminPanel() {
               <thead className="text-ink-soft">
                 <tr>
                   <th className="py-1">Name</th>
+                  <th>E-Mail</th>
                   <th>SP</th>
-                  <th>Truppen (Haus / weg)</th>
+                  <th>Truppen (Burg / weg)</th>
                   <th>Ressourcen</th>
                   <th>Karten</th>
                   <th />
@@ -233,6 +234,19 @@ export function AdminPanel() {
                   <tr key={p.id} className="border-t border-ink/20">
                     <td className="py-1">
                       <span className={p.online ? 'text-moss' : ''}>{p.name}</span>
+                    </td>
+                    <td className="text-xs">
+                      <button
+                        type="button"
+                        className="text-left underline decoration-dotted hover:text-seal"
+                        title="E-Mail für den Login ändern"
+                        onClick={() => {
+                          const email = window.prompt(`Login-E-Mail für ${p.name}:`, p.email ?? '');
+                          if (email) run({ action: 'setEmail', playerId: p.id, email });
+                        }}
+                      >
+                        {p.email ?? 'keine — setzen'}
+                      </button>
                     </td>
                     <td>{p.victoryPoints}</td>
                     <td>

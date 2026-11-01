@@ -14,6 +14,10 @@ export const RESOURCE_COLORS: Record<ResourceType, number> = {
 
 /** The viewer is always red; everyone else takes a heraldic colour in join order. */
 export const SELF_COLOR = 0xd4472f;
+/** Unowned outposts. */
+export const NEUTRAL_COLOR = 0x8c8577;
+/** Routes and halos of armies carrying resources. */
+export const CARGO_GOLD = 0xe0a919;
 export const PLAYER_PALETTE = [
   0x7a46b8, 0x1f8fa8, 0xd9a21b, 0x3f8f3a, 0x2f5fa8, 0xc0567f, 0xe07a2a, 0x8a5a2b, 0x4f6d7a,
   0xa33b8f, 0x8a9a2a,
