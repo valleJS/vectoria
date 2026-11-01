@@ -10,7 +10,7 @@
   --color-ink-soft: #6b5434;
   --color-seal: #a3311f;
   --color-seal-light: #bf3d28;
-  --color-sea: #5d9fb5;
+  --color-sea: #b8a27a; /* the map's brown sea (palette.ts SEA) */
   --color-sea-dark: #2f5f86;
   --color-moss: #4f7a2a;
 }

@@ -31,7 +31,7 @@ import {
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { BannerIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
+import { SoldiersIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
 import { Button } from './Panel';
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -361,7 +361,7 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   const carrying = hasResources(army.cargo);
   return (
     <>
-      <Title icon={<BannerIcon color={cssColor(playerColor(view, army.ownerId))} />}>
+      <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
         Heerzug von {own ? 'dir' : playerName(view, army.ownerId)}
       </Title>
       <div>

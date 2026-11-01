@@ -21,6 +21,23 @@ export function dataUrl(markup: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
 }
 
+/** Darkens (f < 1) or lightens (f > 1) a #rrggbb colour. */
+function shade(color: string, f: number): string {
+  const channel = (i: number) => {
+    const v = parseInt(color.slice(i, i + 2), 16);
+    const out = f < 1 ? v * f : v + (255 - v) * (f - 1);
+    return Math.round(Math.min(255, Math.max(0, out)))
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
+}
+
+// Two tiers. Terrain decoration (trees, peaks, flowers, ships) draws with thin tonal lines — a
+// darker shade of its own colour — and avoids the reds and golds of players, chests and gold, so
+// it stays a backdrop. Everything players act on (sites, chests, armies) uses heavier INK lines
+// and gets a parchment cut-out edge on the map (textures.ts), so it reads as a piece on the map.
+
 // ---- Resources ----
 
 const RESOURCE_BODY: Record<ResourceType, string> = {
@@ -85,8 +102,8 @@ export const FOLIAGE: Foliage[] = [
   { base: '#5f9a3f', shade: '#3d722c', light: '#8fc25c' },
   { base: '#4c8a3c', shade: '#2e6129', light: '#78ad4f' },
   { base: '#6f9c36', shade: '#4b7524', light: '#a0c75a' },
-  { base: '#d8892c', shade: '#a6601b', light: '#f2b450' },
-  { base: '#c3532f', shade: '#8e3621', light: '#e3804f' },
+  { base: '#a9a540', shade: '#7a7a2a', light: '#cfc865' },
+  { base: '#8f9a3a', shade: '#646e26', light: '#b8c05e' },
 ];
 
 const CROWN = [
@@ -98,12 +115,13 @@ const CROWN = [
 
 /** Broadleaf tree, 48×56, standing at (24, 50). */
 export function broadleaf(f: Foliage): Art {
+  const line = shade(f.shade, 0.55);
   const circles = (extra: string) =>
     CROWN.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" ${extra}/>`).join('');
   const body = `
-    <ellipse cx="26" cy="50" rx="13" ry="3.6" fill="${INK}" opacity=".28"/>
-    <path d="M21.5 50l1.2-14h2.6l1.2 14z" fill="#6b4423" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>
-    ${circles(`fill="${INK}" stroke="${INK}" stroke-width="3.4"`)}
+    <ellipse cx="26" cy="50" rx="13" ry="3.6" fill="${line}" opacity=".22"/>
+    <path d="M21.5 50l1.2-14h2.6l1.2 14z" fill="#6b4423" stroke="${line}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${circles(`fill="${line}" stroke="${line}" stroke-width="2.4"`)}
     ${circles(`fill="${f.base}"`)}
     <circle cx="28" cy="32" r="7.5" fill="${f.shade}"/>
     <circle cx="35" cy="28" r="5" fill="${f.shade}"/>
@@ -117,9 +135,10 @@ export function broadleaf(f: Foliage): Art {
 
 /** Conifer, 40×60, standing at (20, 54). */
 export function conifer(dark: boolean): Art {
-  const [base, shade, light] = dark
+  const [base, dim, light] = dark
     ? ['#3b6b45', '#244a2f', '#5a8f5f']
     : ['#4a7d4a', '#2f5a34', '#6fa064'];
+  const line = shade(dim, 0.55);
   const tiers = [
     [20, 5, 11, 22],
     [20, 14, 14, 34],
@@ -135,14 +154,14 @@ export function conifer(dark: boolean): Art {
     .map(
       ([x, top, half, bottom]) =>
         `<path d="M${x} ${top}L${x! + half!} ${bottom}Q${x} ${bottom! + 3} ${x! - half!} ${bottom}Z" fill="${base}"/>
-         <path d="M${x} ${top}L${x! + half!} ${bottom}Q${x! + half! / 2} ${bottom! + 2} ${x! + 1} ${bottom! + 1.5}Z" fill="${shade}"/>
+         <path d="M${x} ${top}L${x! + half!} ${bottom}Q${x! + half! / 2} ${bottom! + 2} ${x! + 1} ${bottom! + 1.5}Z" fill="${dim}"/>
          <path d="M${x} ${top! + 3}L${x! - half! + 4} ${bottom! - 1}" stroke="${light}" stroke-width="1.6" stroke-linecap="round"/>`,
     )
     .join('');
   const body = `
-    <ellipse cx="22" cy="54" rx="11" ry="3.2" fill="${INK}" opacity=".28"/>
-    <path d="M18.5 54v-7h3v7z" fill="#6b4423" stroke="${INK}" stroke-width="1.3"/>
-    <g fill="${INK}" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round">${outline}</g>
+    <ellipse cx="22" cy="54" rx="11" ry="3.2" fill="${line}" opacity=".22"/>
+    <path d="M18.5 54v-7h3v7z" fill="#6b4423" stroke="${line}" stroke-width="1.2"/>
+    <g fill="${line}" stroke="${line}" stroke-width="2.4" stroke-linejoin="round">${outline}</g>
     ${fills}`;
   return { svg: svg(40, 60, body), width: 40, height: 60, anchor: { x: 20, y: 54 } };
 }
@@ -160,38 +179,39 @@ const ROCK: Peak[] = [
   { lit: '#dcc193', shade: '#a27a4c' },
 ];
 
-function hatch(x: number, y: number, n: number, len: number): string {
+function hatch(x: number, y: number, n: number, len: number, color: string): string {
   let out = '';
   for (let i = 0; i < n; i++) {
     out += `<path d="M${x + i * 4} ${y + i * 3}l${len * 0.55} ${len}" />`;
   }
-  return `<g stroke="${INK}" stroke-width="1" opacity=".45" stroke-linecap="round">${out}</g>`;
+  return `<g stroke="${color}" stroke-width="1" opacity=".5" stroke-linecap="round">${out}</g>`;
 }
 
 /** Mountain, 100×72, standing at (50, 64). `variant` picks shape, `snow` adds a cap. */
 export function mountain(variant: number, snow: boolean): Art {
   const rock = ROCK[variant % ROCK.length]!;
   const twin = variant % 2 === 1;
+  const line = shade(rock.shade, 0.55);
   const back = twin
-    ? `<path d="M10 64L30 30L38 36L46 26L60 64Z" fill="${rock.lit}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+    ? `<path d="M10 64L30 30L38 36L46 26L60 64Z" fill="${rock.lit}" stroke="${line}" stroke-width="1.8" stroke-linejoin="round"/>
        <path d="M46 26L60 64H40L44 44Z" fill="${rock.shade}"/>
-       <path d="M46 26L60 64" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>`
-    : `<path d="M12 64L34 34L44 44L56 64Z" fill="${rock.lit}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+       <path d="M46 26L60 64" fill="none" stroke="${line}" stroke-width="1.8" stroke-linejoin="round"/>`
+    : `<path d="M12 64L34 34L44 44L56 64Z" fill="${rock.lit}" stroke="${line}" stroke-width="1.8" stroke-linejoin="round"/>
        <path d="M34 34L44 44L56 64H40Z" fill="${rock.shade}" opacity=".85"/>`;
   const cap = snow
-    ? `<path d="M48.5 24L56 12L64.5 25L61 23.5L58.5 28L55.5 24.5L52 28.5Z" fill="#fbfaf3" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>
+    ? `<path d="M48.5 24L56 12L64.5 25L61 23.5L58.5 28L55.5 24.5L52 28.5Z" fill="#fbfaf3" stroke="${line}" stroke-width="1.4" stroke-linejoin="round"/>
        <path d="M56 12L64.5 25L61 23.5L58.5 28L57 22Z" fill="#d9e2ea"/>`
     : '';
   const body = `
-    <ellipse cx="52" cy="65" rx="40" ry="5" fill="${INK}" opacity=".22"/>
+    <ellipse cx="52" cy="65" rx="40" ry="5" fill="${line}" opacity=".2"/>
     ${back}
-    <path d="M26 64L44 32L50 24L56 12L64 24L72 34L90 64Z" fill="${rock.lit}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M26 64L44 32L50 24L56 12L64 24L72 34L90 64Z" fill="${rock.lit}" stroke="${line}" stroke-width="2" stroke-linejoin="round"/>
     <path d="M56 12L64 24L72 34L90 64H62L57 48L60 34Z" fill="${rock.shade}"/>
-    ${hatch(64, 36, 5, 9)}
-    <path d="M56 12L60 34L57 48L62 64" fill="none" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round"/>
-    <path d="M44 32L47 40M38 44l3 5M48 50l2 4" fill="none" stroke="${INK}" stroke-width="1.1" opacity=".5" stroke-linecap="round"/>
+    ${hatch(64, 36, 5, 9, line)}
+    <path d="M56 12L60 34L57 48L62 64" fill="none" stroke="${line}" stroke-width="1.3" stroke-linejoin="round"/>
+    <path d="M44 32L47 40M38 44l3 5M48 50l2 4" fill="none" stroke="${line}" stroke-width="1.1" opacity=".5" stroke-linecap="round"/>
     ${cap}
-    <path d="M26 64L44 32L50 24L56 12L64 24L72 34L90 64" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>`;
+    <path d="M26 64L44 32L50 24L56 12L64 24L72 34L90 64" fill="none" stroke="${line}" stroke-width="2" stroke-linejoin="round"/>`;
   return { svg: svg(100, 72, body), width: 100, height: 72, anchor: { x: 50, y: 64 } };
 }
 
@@ -205,34 +225,22 @@ export function grassTuft(): Art {
 
 export function flowers(color: string): Art {
   const body = `<g stroke="#557a2a" stroke-width="1.2"><path d="M6 14v-6M12 14v-8M17 14v-5"/></g>
-    <g fill="${color}" stroke="${INK}" stroke-width=".7"><circle cx="6" cy="7" r="2.2"/><circle cx="12" cy="5" r="2.4"/><circle cx="17" cy="8" r="2"/></g>`;
+    <g fill="${color}" stroke="#557a2a" stroke-width=".7"><circle cx="6" cy="7" r="2.2"/><circle cx="12" cy="5" r="2.4"/><circle cx="17" cy="8" r="2"/></g>`;
   return { svg: svg(22, 16, body), width: 22, height: 16, anchor: { x: 11, y: 14 } };
 }
 
 export function ship(): Art {
   const body = `
-    <path d="M8 40h44l-8 10H16z" fill="#8a5a2b" stroke="${INK}" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M8 40h44l-8 10H16z" fill="#8a5a2b" stroke="#5e3b1a" stroke-width="2" stroke-linejoin="round"/>
     <path d="M12 44h36" stroke="#5e3b1a" stroke-width="1.4"/>
-    <path d="M30 40V6" stroke="${INK}" stroke-width="2"/>
-    <path d="M32 9q14 12 0 28z" fill="#f6efd9" stroke="${INK}" stroke-width="1.6"/>
-    <path d="M28 12q-12 10 0 24z" fill="#ebe0c2" stroke="${INK}" stroke-width="1.6"/>
-    <path d="M30 6l9 3l-9 3z" fill="#d4472f" stroke="${INK}" stroke-width="1"/>`;
+    <path d="M30 40V6" stroke="#5e3b1a" stroke-width="2"/>
+    <path d="M32 9q14 12 0 28z" fill="#f6efd9" stroke="#5e3b1a" stroke-width="1.6"/>
+    <path d="M28 12q-12 10 0 24z" fill="#ebe0c2" stroke="#5e3b1a" stroke-width="1.6"/>
+    <path d="M30 6l9 3l-9 3z" fill="#5f86a8" stroke="#5e3b1a" stroke-width="1"/>`;
   return { svg: svg(62, 56, body), width: 62, height: 56, anchor: { x: 30, y: 46 } };
 }
 
 // ---- Sites ----
-
-/** Darkens (f < 1) or lightens (f > 1) a #rrggbb colour. */
-function shade(color: string, f: number): string {
-  const channel = (i: number) => {
-    const v = parseInt(color.slice(i, i + 2), 16);
-    const out = f < 1 ? v * f : v + (255 - v) * (f - 1);
-    return Math.round(Math.min(255, Math.max(0, out)))
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${channel(1)}${channel(3)}${channel(5)}`;
-}
 
 const STONE = '#d9cdb5';
 const STONE_LIGHT = '#e8dfcc';
@@ -328,40 +336,74 @@ export function compassRose(): string {
   return svg(110, 120, body);
 }
 
-/** Army banner: pole with a swallow-tailed flag in the owner's colour, 48×64, standing at (14, 58). */
-export function banner(color: string): Art {
+/** One foot soldier standing at (x, y): helmet, spear, tunic and shield in the owner's colour. */
+function soldier(x: number, y: number, scale: number, color: string): string {
   const dark = shade(color, 0.66);
-  const light = shade(color, 1.3);
-  const body = `
-    <ellipse cx="18" cy="58" rx="13" ry="4" fill="${INK}" opacity=".3"/>
-    <path d="M14 58V7" stroke="${INK}" stroke-width="4.4" stroke-linecap="round"/>
-    <path d="M14 58V7" stroke="#8a5a2b" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M14 9H44L37 21L44 33H14Z" fill="${color}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
-    <path d="M14 26H40.2L44 33H14Z" fill="${dark}"/>
-    <path d="M18 13H38" stroke="${light}" stroke-width="2" stroke-linecap="round"/>
-    <path d="M14 9H44L37 21L44 33H14Z" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>
-    <circle cx="14" cy="6" r="3.6" fill="#f2c230" stroke="${INK}" stroke-width="1.8"/>`;
-  return { svg: svg(48, 64, body), width: 48, height: 64, anchor: { x: 14, y: 58 } };
+  const light = shade(color, 1.35);
+  return `<g transform="translate(${x} ${y}) scale(${scale})">
+    <ellipse cx="1" cy="0" rx="10" ry="2.8" fill="${INK}" opacity=".28"/>
+    <path d="M-3.2-.6V-8M3.2-.6V-8" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-3.2-.6V-8M3.2-.6V-8" stroke="#5a3a1e" stroke-width="2" stroke-linecap="round"/>
+    <path d="M7 2V-32" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M7 2V-32" stroke="#8a5a2b" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M7-39.5L9.6-32.5H4.4Z" fill="#dfe3e7" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round"/>
+    <path d="M-6-7L-5-19Q0-21.6 5-19L6-7Z" fill="${color}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M-5.6-11.5H5.6" stroke="${dark}" stroke-width="1.8"/>
+    <circle cx="6.6" cy="-14.5" r="2" fill="#efc69b" stroke="${INK}" stroke-width="1.2"/>
+    <circle cx="0" cy="-23.4" r="4" fill="#efc69b" stroke="${INK}" stroke-width="1.6"/>
+    <path d="M-4.8-23.6a4.8 4.8 0 0 1 9.6 0Z" fill="#aab1ba" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M-2.6-27a3.6 3.6 0 0 1 3-1.2" stroke="#e8ebee" stroke-width="1.1" stroke-linecap="round"/>
+    <path d="M-11-18H-1V-11Q-1-5-6-2.6Q-11-5-11-11Z" fill="${color}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M-11-18H-1V-14.5H-11Z" fill="${light}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    <circle cx="-6" cy="-9.5" r="1.6" fill="#f2c230" stroke="${INK}" stroke-width=".9"/>
+  </g>`;
 }
 
-/** Treasure chest with gold trim and sparkles, 56×48. */
+/** Army: three foot soldiers with spears and shields in the owner's colour, 60×56, standing at (30, 50). */
+export function soldiers(color: string): Art {
+  const body = `${soldier(17, 42, 0.82, color)}${soldier(43, 42, 0.82, color)}${soldier(30, 50, 1, color)}`;
+  return { svg: svg(60, 56, body), width: 60, height: 56, anchor: { x: 30, y: 50 } };
+}
+
+/** Treasure chest with gold bands and lock, 56×48, centred on its body at (28, 34). Sparkles are
+ *  animated on the map (`sparkle`). */
 export function chest(): Art {
-  const line = `stroke="${INK}" stroke-width="2" stroke-linejoin="round"`;
+  const line = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
   const body = `
-    <ellipse cx="28" cy="43" rx="19" ry="3.6" fill="${INK}" opacity=".28"/>
-    <path d="M10 22q18-16 36 0z" fill="#9a5b22" ${line}/>
-    <path d="M14 21q14-11 28 0" fill="none" stroke="#c07a35" stroke-width="2"/>
-    <rect x="10" y="22" width="36" height="20" rx="1.5" fill="#b8702c" ${line}/>
-    <path d="M10 30h36" stroke="${INK}" stroke-width="1.4"/>
-    <g fill="#f2c230" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round">
-      <rect x="15" y="22" width="5" height="20"/>
-      <rect x="36" y="22" width="5" height="20"/>
-      <rect x="24" y="26" width="8" height="9" rx="1.5"/>
+    <ellipse cx="28" cy="43" rx="21" ry="4" fill="${INK}" opacity=".28"/>
+    <path d="M8 21q20-18 40 0z" fill="#9a5b22" ${line}/>
+    <path d="M13 19.5q15-11 30 0" fill="none" stroke="#c48038" stroke-width="2.2" stroke-linecap="round"/>
+    <rect x="8" y="21" width="40" height="21" rx="1.5" fill="#b8702c" ${line}/>
+    <rect x="10.5" y="31" width="35" height="8.5" fill="#9a5b22"/>
+    <path d="M8 29.5h40" stroke="${INK}" stroke-width="1.6"/>
+    <g fill="#f2c230" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round">
+      <path d="M13 21V42h5.5V21Q15.8 14.6 13 21Z"/>
+      <path d="M37.5 21V42H43V21Q40.2 14.6 37.5 21Z"/>
+      <rect x="23.5" y="25" width="9" height="10" rx="1.6"/>
     </g>
-    <circle cx="28" cy="30" r="1.4" fill="${INK}"/>
-    <g fill="#fff6c2" stroke="${INK}" stroke-width=".8">
-      <path d="M47 6l1.4 3.6l3.6 1.4l-3.6 1.4l-1.4 3.6l-1.4-3.6l-3.6-1.4l3.6-1.4z"/>
-      <path d="M8 9l1 2.4l2.4 1l-2.4 1l-1 2.4l-1-2.4l-2.4-1l2.4-1z"/>
+    <path d="M14.5 23v17M39 23v17" stroke="#fff3c4" stroke-width="1.2" stroke-linecap="round" opacity=".8"/>
+    <path d="M28 28.4v3.6" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/>`;
+  return { svg: svg(56, 48, body), width: 56, height: 48, anchor: { x: 28, y: 34 } };
+}
+
+/** Four-pointed glint for chests on the map, 16×16 around its centre. */
+export function sparkle(): Art {
+  const body = `<path d="M8 .8l1.7 5.5l5.5 1.7l-5.5 1.7L8 15.2l-1.7-5.5L.8 8l5.5-1.7z" fill="#fff6c2" stroke="${INK}" stroke-width=".9" stroke-linejoin="round"/>`;
+  return { svg: svg(16, 16, body), width: 16, height: 16, anchor: { x: 8, y: 8 } };
+}
+
+/** Alarm badge for a site under attack: crossed swords on a red disc, 40×40 around its centre. */
+export function alarm(): Art {
+  const sword = (angle: number) => `<g transform="rotate(${angle} 20 20)">
+      <path d="M18.6 25.5V10L20 6.8L21.4 10V25.5Z" fill="#eef0f2" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M20 9v15" stroke="#b9c0c8" stroke-width=".9"/>
+      <rect x="14.6" y="25.5" width="10.8" height="2.4" rx=".8" fill="#f2c230" stroke="${INK}" stroke-width="1.2"/>
+      <rect x="19" y="27.9" width="2" height="4.6" fill="#6b4423" stroke="${INK}" stroke-width="1"/>
+      <circle cx="20" cy="33.6" r="1.6" fill="#f2c230" stroke="${INK}" stroke-width="1"/>
     </g>`;
-  return { svg: svg(56, 48, body), width: 56, height: 48, anchor: { x: 28, y: 36 } };
+  const body = `
+    <circle cx="20" cy="20" r="17.5" fill="#a3311f" stroke="${INK}" stroke-width="2.4"/>
+    <circle cx="20" cy="20" r="14" fill="none" stroke="#d0604c" stroke-width="1.4"/>
+    ${sword(-45)}${sword(45)}`;
+  return { svg: svg(40, 40, body), width: 40, height: 40, anchor: { x: 20, y: 20 } };
 }

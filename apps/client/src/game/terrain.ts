@@ -11,7 +11,7 @@ import {
   smooth,
   type Field,
 } from './fields';
-import { INK } from './palette';
+import { INK, SEA } from './palette';
 
 // Draws the static map once per MapData. The tile grid is resampled into slightly blurred
 // fields whose iso-lines follow the tile edges but round the corners; those outlines are filled
@@ -26,11 +26,12 @@ const K = 8;
 /** Width of the light shallow-water band along coasts, in tiles. */
 const SHALLOW_TILES = 0.55;
 
-const DEEP = 0x5b9dbb;
-const SHALLOW = 0x8fcbd0;
-const GRASS = 0xbdd480;
-const FOREST = 0x86b05e;
-const ROCK = 0xcfbc92;
+// Old-map tones: parchment land, brown sea (palette.ts SEA), so the pieces in colour stand out.
+const DEEP = SEA;
+const SHALLOW = 0xcdb98e;
+const GRASS = 0xecdcae;
+const FOREST = 0xdcc68e;
+const ROCK = 0xe4d6b2;
 
 export interface Terrain {
   root: Container;
