@@ -3,11 +3,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseAdminAction, type AdminAction, type ApiError } from '@vectoria/shared';
 import { RuleError, type GameState } from '../game/GameState';
 import { log } from '../logger';
+import type { EmailAuth } from './auth';
 
 const MAX_BODY_BYTES = 4 * 1024;
 
 export interface HttpContext {
   state: GameState;
+  auth: EmailAuth;
   adminToken: string;
   connectionCount: () => number;
   /** Called after any admin action so clients get the new state (and map) right away. */
@@ -63,6 +65,8 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.spawnChest();
     case 'kick':
       return state.kick(action.playerId);
+    case 'setEmail':
+      return state.setEmail(action.playerId, action.email);
     case 'grant':
       return state.grant(action.playerId, action.resource, action.amount);
   }
@@ -86,11 +90,13 @@ export async function handleHttp(
         });
       case 'GET /api/lobby':
         return json(res, 200, ctx.state.lobby());
-      case 'POST /api/join': {
-        const body = (await readJson(req)) as { name?: unknown };
-        if (typeof body?.name !== 'string') throw new RuleError('Name fehlt.');
-        const result = ctx.state.register(body.name);
-        log.info(`Player "${body.name.trim()}" registered`);
+      case 'POST /api/auth/start': {
+        const body = (await readJson(req)) as { email?: unknown; name?: unknown } | null;
+        return json(res, 200, await ctx.auth.start(body?.email, body?.name, req.headers.origin));
+      }
+      case 'POST /api/auth/verify': {
+        const body = (await readJson(req)) as { email?: unknown; code?: unknown } | null;
+        const result = ctx.auth.verify(body?.email, body?.code);
         ctx.onChange();
         return json(res, 200, result);
       }

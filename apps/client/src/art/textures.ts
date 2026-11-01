@@ -1,6 +1,6 @@
 import { RESOURCES, type ResourceType } from '@vectoria/shared';
 import { CanvasSource, Texture } from 'pixi.js';
-import { PLAYER_PALETTE, SELF_COLOR } from '../game/palette';
+import { NEUTRAL_COLOR, PLAYER_PALETTE, SELF_COLOR } from '../game/palette';
 import {
   banner,
   broadleaf,
@@ -12,6 +12,7 @@ import {
   FOLIAGE,
   grassTuft,
   mountain,
+  resourceIcon,
   ship,
   spotMedallion,
   type Art,
@@ -38,8 +39,10 @@ export interface MapArt {
   flowers: ArtTexture[];
   ship: ArtTexture;
   spots: Record<ResourceType, ArtTexture>;
+  /** Bare resource icons, for cargo carried by armies. */
+  resources: Record<ResourceType, ArtTexture>;
   chest: ArtTexture;
-  /** Castles keyed by owner colour (0xrrggbb), for the self colour and the palette. */
+  /** Castles keyed by owner colour (0xrrggbb): self colour, palette, and neutral grey. */
   castles: Map<number, ArtTexture>;
   /** Army banners keyed like `castles`. */
   banners: Map<number, ArtTexture>;
@@ -66,9 +69,9 @@ async function rasterise(art: Art): Promise<ArtTexture> {
   };
 }
 
-/** One texture per heraldic colour (self colour and palette). */
+/** One texture per heraldic colour (self colour, palette, neutral). */
 async function byColour(make: (color: string) => Art): Promise<Map<number, ArtTexture>> {
-  const colours = [SELF_COLOR, ...PLAYER_PALETTE];
+  const colours = [SELF_COLOR, ...PLAYER_PALETTE, NEUTRAL_COLOR];
   const textures = await Promise.all(
     colours.map((c) => rasterise(make(`#${c.toString(16).padStart(6, '0')}`))),
   );
@@ -81,7 +84,7 @@ let loading: Promise<MapArt> | null = null;
 export function loadMapArt(): Promise<MapArt> {
   loading ??= (async () => {
     const all = <T>(items: Art[]) => Promise.all(items.map(rasterise)) as Promise<T>;
-    const [broadleaves, autumn, conifers, mountains, snowyMountains, flowerArt, spots] =
+    const [broadleaves, autumn, conifers, mountains, snowyMountains, flowerArt, spots, icons] =
       await Promise.all([
         all<ArtTexture[]>(FOLIAGE.slice(0, 3).map(broadleaf)),
         all<ArtTexture[]>(FOLIAGE.slice(3).map(broadleaf)),
@@ -90,6 +93,14 @@ export function loadMapArt(): Promise<MapArt> {
         all<ArtTexture[]>([0, 1, 2].map((v) => mountain(v, true))),
         all<ArtTexture[]>(['#e0534a', '#f2c230', '#ffffff', '#b45bd0'].map(flowers)),
         all<ArtTexture[]>(RESOURCES.map(spotMedallion)),
+        all<ArtTexture[]>(
+          RESOURCES.map((r) => ({
+            svg: resourceIcon(r),
+            width: 64,
+            height: 64,
+            anchor: { x: 32, y: 32 },
+          })),
+        ),
       ]);
     return {
       broadleaves,
@@ -104,6 +115,10 @@ export function loadMapArt(): Promise<MapArt> {
       castles: await byColour(castle),
       banners: await byColour(banner),
       spots: Object.fromEntries(RESOURCES.map((r, i) => [r, spots[i]!])) as Record<
+        ResourceType,
+        ArtTexture
+      >,
+      resources: Object.fromEntries(RESOURCES.map((r, i) => [r, icons[i]!])) as Record<
         ResourceType,
         ArtTexture
       >,

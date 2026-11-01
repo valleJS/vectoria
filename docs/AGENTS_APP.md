@@ -3,7 +3,7 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed Tailwind HUD.
 audience: agent
 category: codemap
-last_verified: 2026-10-31
+last_verified: 2026-11-01
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
 sources_stamp: 63d84a40a61e6dab14eafa95a6291e77a2b054e5
@@ -21,9 +21,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/App.tsx` | Routing: `/?admin` → admin panel; no token → join; registration → lobby; else game |
 | `src/state/store.ts` | zustand store — token, `GameView`, map, selection, toast |
 | `src/net/socket.ts` | `GameSocket`: token connect, reconnect w/ backoff, ping/RTT, writes to the store |
-| `src/net/api.ts` | HTTP client for join, lobby, admin |
+| `src/net/api.ts` | HTTP client for email auth, lobby, admin |
+| `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
-| `src/game/GameRenderer.ts` | Pixi layers (terrain, routes, sites, selection, armies); click → nearest pick |
+| `src/game/GameRenderer.ts` | Pixi layers (terrain, land routes, castles/outposts/spots/chests, selection, armies with cargo markers, raid crosses); click → nearest pick |
 | `src/game/terrain.ts` | Static map: tile fields → flat vector regions (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector army banner and fallback castle; dashed line/circle helpers |
@@ -32,10 +33,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/game/palette.ts` | Pixi colours (ink, parchment, sea, resources) and heraldic player palette |
 | `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets |
 | `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target labels |
-| `src/ui/Hud.tsx` | Game overlay: top bar stats, realm/shop, card hand, tabbed sidebar (selection, armies, ranking, chronicle) |
+| `src/ui/Hud.tsx` | Game overlay: slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box (resources, troops, VP, outposts, activity, shop, cards, logout) bottom-right |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, small glyph twins (castle, chest, banner, cards) |
-| `src/ui/SelectionPanel.tsx` | Sidebar content: details + send/recall for the selected castle/spot/chest/army |
-| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx`, `Panel.tsx` | Join + lobby, admin panel, shared parchment panel/button |
+| `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land) / recall / raid (redirect or send, meeting point) for the selected object |
+| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx`, `Panel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails), shared parchment panel/button |
 | `src/index.css` | Tailwind theme tokens (`parchment`, `ink`, `seal`, `sea`, …) and serif font |
 | `vite.config.ts` | Dev proxy `/ws` and `/api` → `localhost:3001` |
 
