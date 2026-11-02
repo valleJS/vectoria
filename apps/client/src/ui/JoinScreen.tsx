@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../net/api';
 import type { LoginLink } from '../net/loginLink';
 import { useGameStore } from '../state/store';
+import { HandbookInvite } from './Handbook';
 import { Button, Panel } from './Panel';
 
 const LOBBY_POLL_MS = 3_000;
@@ -190,6 +191,7 @@ export function JoinScreen({ link, onDone }: { link?: LoginLink | null; onDone?:
           </form>
         )}
       </Panel>
+      {lobby && <HandbookInvite victoryPointsToWin={lobby.victoryPointsToWin} />}
       {lobby && lobby.players.length > 0 && (
         <Panel title={`Angemeldet (${lobby.players.length})`}>
           <PlayerList names={lobby.players} />
@@ -221,6 +223,7 @@ export function Lobby() {
           Spielzeit: Montag–Freitag, 10–18 Uhr. Ziel: {view.victoryPointsToWin} Siegpunkte.
         </p>
       </Panel>
+      <HandbookInvite victoryPointsToWin={view.victoryPointsToWin} />
       <Panel title={`Angemeldet (${view.players.length})`}>
         <PlayerList names={view.players.map((p) => p.name)} />
       </Panel>
