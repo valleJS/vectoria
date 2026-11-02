@@ -3,7 +3,7 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-01
+last_verified: 2026-11-02
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
 sources_stamp: fd9732a7f89f9a8ac4d828e11431f2cfb133914f
@@ -49,6 +49,9 @@ packages/
 tsconfig.json      base compiler options; workspaces extend it
 eslint.config.js   flat config for all workspaces
 docker-compose.yml local Postgres 17 + Redis 7
+Dockerfile         production image (server + client)     → DEPLOYMENT.md
+deploy/            server-side compose, deploy.sh, env template
+.github/workflows/ ci.yml (PRs), deploy.yml (main → GHCR → VPS)
 ```
 
 ## Shared package

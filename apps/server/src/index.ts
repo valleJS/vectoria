@@ -27,6 +27,7 @@ async function main(): Promise<void> {
         connectionCount: () => gameServer.connectionCount,
         onChange: () => gameServer.broadcastState(),
         newSeed,
+        clientDir: config.clientDir,
       },
       req,
       res,

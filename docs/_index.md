@@ -16,6 +16,12 @@ Layout: `.cursor/skills/_shared/reference/agent-doc-layout.md`.
 
 Entry: [`AGENTS.md`](../AGENTS.md).
 
+## Runbooks
+
+| Doc | SSOT for |
+| --- | -------- |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Contabo VPS setup, Docker + Nginx Proxy Manager, CI/CD on `main`, rollback, backups |
+
 ## Decision records
 
 | Doc | Topic |

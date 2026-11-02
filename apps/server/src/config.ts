@@ -61,6 +61,8 @@ export const config = {
     victoryPointsToWin: positiveInt('VICTORY_POINTS_TO_WIN', 25),
   },
   dataFile: optional('DATA_FILE') ?? 'data/game.json',
+  /** Built client to serve on non-API paths (production container); unset = API only. */
+  clientDir: optional('CLIENT_DIR'),
   allowedOrigins: (optional('ALLOWED_ORIGINS') ?? '')
     .split(',')
     .map((origin) => origin.trim())

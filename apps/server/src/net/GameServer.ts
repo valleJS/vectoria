@@ -50,6 +50,8 @@ export class GameServer {
       server,
       path: '/ws',
       maxPayload: MAX_PAYLOAD_BYTES,
+      // State views are repetitive JSON; deflate cuts the traffic by ~90 %.
+      perMessageDeflate: true,
       verifyClient: ({ origin }: { origin: string }) =>
         options.allowedOrigins.length === 0 || options.allowedOrigins.includes(origin),
     });

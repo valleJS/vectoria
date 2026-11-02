@@ -4,6 +4,7 @@ import { parseAdminAction, type AdminAction, type ApiError } from '@vectoria/sha
 import { RuleError, type GameState } from '../game/GameState';
 import { log } from '../logger';
 import type { EmailAuth } from './auth';
+import { serveStatic } from './static';
 
 const MAX_BODY_BYTES = 4 * 1024;
 
@@ -15,6 +16,8 @@ export interface HttpContext {
   /** Called after any admin action so clients get the new state (and map) right away. */
   onChange: () => void;
   newSeed: () => number;
+  /** Built client directory; when set, other GET paths serve the page. */
+  clientDir?: string;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -72,7 +75,7 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
   }
 }
 
-/** Routes for `/healthz` and `/api/*`; anything else is a 404. */
+/** Routes for `/healthz` and `/api/*`; anything else is the client (if `clientDir`) or a 404. */
 export async function handleHttp(
   ctx: HttpContext,
   req: IncomingMessage,
@@ -113,6 +116,13 @@ export async function handleHttp(
         return json(res, 200, ctx.state.adminState());
       }
       default:
+        if (
+          ctx.clientDir &&
+          (req.method === 'GET' || req.method === 'HEAD') &&
+          !route.includes(' /api/')
+        ) {
+          return await serveStatic(ctx.clientDir, req, res);
+        }
         return json(res, 404, { error: 'Not found' } satisfies ApiError);
     }
   } catch (error) {

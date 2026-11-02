@@ -27,6 +27,7 @@ Layout: `.cursor/skills/_shared/reference/agent-doc-layout.md`. Navigation (what
 | Change server / game loop / WebSocket / DB / Redis | [AGENTS_SERVER.md](./AGENTS_SERVER.md) (+ ARCHITECTURE if cross-cutting) |
 | Change rendering / camera / HUD / client state | [AGENTS_APP.md](./AGENTS_APP.md) |
 | Change game rules / balance / cards / clock | [AGENTS_GAME.md](./AGENTS_GAME.md) (+ SERVER) |
+| Deploy, CI/CD, production server, Docker image, backups | [DEPLOYMENT.md](./DEPLOYMENT.md) (+ SERVER for env config) |
 | Understand a past decision | the relevant `adr/*.md` |
 
 ## Overrides

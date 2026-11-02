@@ -101,6 +101,8 @@ export class GameSocket {
           console.warn(
             `Protocol mismatch: client ${PROTOCOL_VERSION}, server ${message.protocolVersion}`,
           );
+          // A deploy changed the protocol: load the new client, but only once per version.
+          if (reloadOnceFor(message.protocolVersion)) return;
         }
         store.applyWelcome(message);
         break;
@@ -119,6 +121,20 @@ export class GameSocket {
         break;
     }
   }
+}
+
+const RELOAD_KEY = 'vectoria.reloadedFor';
+
+/** Reloads the page unless it already did for `version`; true if a reload was started. */
+function reloadOnceFor(version: number): boolean {
+  try {
+    if (sessionStorage.getItem(RELOAD_KEY) === String(version)) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(version));
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
 }
 
 function defaultUrl(): string {

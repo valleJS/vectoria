@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+data
+.git
+.github
+.cursor
+.claude
+docs
+deploy
