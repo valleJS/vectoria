@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-02
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
-sources_stamp: 7f08470324d6801eafd1ba4b95a519b12a41a8e3
+sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
 ---
 
 # Client codemap (`apps/client`)
@@ -20,7 +20,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | ---- | ---- |
 | `src/App.tsx` | Routing: `/?admin` → admin panel; no token → join; registration → lobby; else game |
 | `src/state/store.ts` | zustand store — token, `GameView`, map, selection, toast |
-| `src/net/socket.ts` | `GameSocket`: token connect, reconnect w/ backoff, ping/RTT, writes to the store |
+| `src/net/socket.ts` | `GameSocket`: token connect, reconnect w/ backoff, ping/RTT, writes to the store; reloads the page once when the server protocol version differs (after a deploy) |
 | `src/net/api.ts` | HTTP client for email auth, lobby, admin |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |

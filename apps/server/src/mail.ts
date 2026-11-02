@@ -28,6 +28,8 @@ export function createMailer(config: Pick<Config, 'smtp' | 'mailFrom'>): Mailer 
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
+    // Without implicit TLS (465), insist on STARTTLS (587): never send login codes in plain text.
+    requireTLS: !smtp.secure,
     auth: smtp.user ? { user: smtp.user, pass: smtp.pass ?? '' } : undefined,
   });
   return {

@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-02
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 7f08470324d6801eafd1ba4b95a519b12a41a8e3
+sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
 ---
 
 # Server codemap (`apps/server`)
@@ -26,11 +26,12 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
-| `src/mail.ts` | nodemailer SMTP transport; logs mails instead when `SMTP_HOST` is unset |
+| `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
 | `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation |
-| `src/net/GameServer.ts` | `ws` on `/ws`: token auth, message dispatch, rate limit, heartbeat, per-player `state` |
-| `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*` |
+| `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` |
+| `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
+| `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`) for the production container |
 | `src/db/schema.ts`, `client.ts` | Drizzle schema + `pg` pool |
 | `drizzle/` | Generated migrations (`npm run db:generate`) |
 
@@ -54,6 +55,7 @@ new gameday on rollover) →
 | `TIME_SCALE` | `1` | clock multiplier for testing |
 | `VICTORY_POINTS_TO_WIN` | `25` | |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
+| `CLIENT_DIR` | unset = API only | built client to serve; set in the Docker image |
 | `ALLOWED_ORIGINS` | empty = any | comma list; **set in production** |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | unset / `587` / `false` | **host required in production**; unset = codes in the log |
 | `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | unset / unset / `Vectoria <vectoria@localhost>` | |
