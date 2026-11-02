@@ -6,7 +6,7 @@ category: runbook
 last_verified: 2026-11-02
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
+sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)

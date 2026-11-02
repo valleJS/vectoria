@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-02
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 7f08470324d6801eafd1ba4b95a519b12a41a8e3
+sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
 ---
 
 # Game rules (prototype)
