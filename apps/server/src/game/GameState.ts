@@ -42,6 +42,7 @@ import {
   type FeedEntry,
   type GamePhase,
   type GameView,
+  type LobbyInfo,
   type LogEntry,
   type MapData,
   type Outpost,
@@ -252,8 +253,12 @@ export class GameState {
     else this.online.delete(playerId);
   }
 
-  lobby(): { phase: GamePhase; players: string[] } {
-    return { phase: this.data.phase, players: this.data.players.map((p) => p.name) };
+  lobby(): LobbyInfo {
+    return {
+      phase: this.data.phase,
+      players: this.data.players.map((p) => p.name),
+      victoryPointsToWin: this.options.victoryPointsToWin,
+    };
   }
 
   // ---- Player commands ----

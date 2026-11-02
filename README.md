@@ -33,7 +33,8 @@ Live: <https://vectoria.vgies.de>
 - **Karte:** wird beim Start passend zur Spielerzahl erzeugt und ist immer eine zusammenhängende
   Landmasse.
 - **Handbuch:** Im Spiel (Kompass unten links, am Handy das Buch oben rechts) stehen alle
-  Mechaniken und ein Kartenkatalog.
+  Mechaniken und ein Kartenkatalog. Schon auf dem Anmeldescreen und in der Lobby lässt es sich
+  öffnen, damit sich alle vor dem Start einlesen können.
 
 Alle Regeln stehen in [`docs/AGENTS_GAME.md`](docs/AGENTS_GAME.md), die Zahlen in
 [`packages/shared/src/rules.ts`](packages/shared/src/rules.ts).

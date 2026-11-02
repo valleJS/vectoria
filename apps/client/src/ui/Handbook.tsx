@@ -368,8 +368,13 @@ const CHAPTERS: Chapter[] = [
 ];
 
 /** Two-page handbook: contents on the left, the chosen chapter on the right. */
-function Book({ onClose }: { onClose: () => void }) {
-  const victoryPointsToWin = useGameStore((s) => s.view?.victoryPointsToWin ?? 0);
+function Book({
+  victoryPointsToWin,
+  onClose,
+}: {
+  victoryPointsToWin: number;
+  onClose: () => void;
+}) {
   const [index, setIndex] = useState(0);
   // Phones show one page at a time: the contents page only while `toc` is open.
   const [toc, setToc] = useState(false);
@@ -531,7 +536,34 @@ function toRoman(n: number): string {
 export function Handbook() {
   const open = useGameStore((s) => s.handbook);
   const setHandbook = useGameStore((s) => s.setHandbook);
-  return open ? <Book onClose={() => setHandbook(false)} /> : null;
+  const victoryPointsToWin = useGameStore((s) => s.view?.victoryPointsToWin ?? 0);
+  return open ? (
+    <Book victoryPointsToWin={victoryPointsToWin} onClose={() => setHandbook(false)} />
+  ) : null;
+}
+
+/**
+ * Handbook entry on the join screen, before there is a game view: lets people read the rules
+ * while registration is still open.
+ */
+export function HandbookInvite({ victoryPointsToWin }: { victoryPointsToWin: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-3 border-2 border-ink bg-parchment px-4 py-2 text-left shadow-[3px_4px_0_rgba(59,42,24,0.35)] transition-transform hover:-translate-y-0.5"
+      >
+        <BookGlyph size={40} />
+        <span className="leading-tight">
+          <b className="block italic">Handbuch lesen</b>
+          <span className="text-sm text-ink-soft">Regeln, Kampf, Truhen & Karten</span>
+        </span>
+      </button>
+      {open && <Book victoryPointsToWin={victoryPointsToWin} onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 /** Small book button for the phone top bar. */

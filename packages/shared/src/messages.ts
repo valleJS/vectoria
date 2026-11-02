@@ -157,6 +157,7 @@ export interface ApiError {
 export interface LobbyInfo {
   phase: GamePhase;
   players: string[];
+  victoryPointsToWin: number;
 }
 
 export interface AdminPlayer {
