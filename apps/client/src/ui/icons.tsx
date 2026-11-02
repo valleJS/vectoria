@@ -1,5 +1,5 @@
 import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
-import { castle, dataUrl, resourceIcon } from '../art/svg';
+import { alarm, castle, chest, dataUrl, resourceIcon, soldiers } from '../art/svg';
 import type { ReactNode } from 'react';
 
 // HUD icons. Resources come from the shared art (src/art/svg.ts); the small glyphs here mirror
@@ -79,23 +79,12 @@ export function SunIcon({ size = 18, lit = true }: { size?: number; lit?: boolea
   );
 }
 
-/** Helmet: troops. */
-export function TroopIcon({ size = 20 }: { size?: number }) {
-  return (
-    <Glyph size={size}>
-      <path d="M-8 4a8 8 0 0 1 16 0z" fill="#9aa0aa" stroke={INK} strokeWidth={1} />
-      <rect x={-9} y={4} width={18} height={3} fill="#7d838d" stroke={INK} strokeWidth={1} />
-      <path d="M0-4v-5" stroke="#d4472f" strokeWidth={2.4} strokeLinecap="round" />
-    </Glyph>
-  );
-}
+const artUrls = new Map<string, string>();
 
-const castleUrls = new Map<string, string>();
-
-/** The map's castle art in the owner's colour. */
-export function CastleIcon({ size = 26, color }: { size?: number; color: string }) {
-  let url = castleUrls.get(color);
-  if (!url) castleUrls.set(color, (url = dataUrl(castle(color).svg)));
+/** Map art from `art/svg.ts` as an <img>; data URLs are cached by `key`. */
+function ArtIcon({ id, size, make }: { id: string; size: number; make: () => string }) {
+  let url = artUrls.get(id);
+  if (!url) artUrls.set(id, (url = dataUrl(make())));
   return (
     <img
       src={url}
@@ -108,26 +97,24 @@ export function CastleIcon({ size = 26, color }: { size?: number; color: string 
   );
 }
 
-export function ChestIcon({ size = 22 }: { size?: number }) {
-  return (
-    <Glyph size={size}>
-      <g stroke={INK}>
-        <path d="M-9-2q9-8 18 0z" fill="#9a5b22" />
-        <rect x={-9} y={-2} width={18} height={10} fill="#b8702c" />
-      </g>
-      <rect x={-9} y={1} width={18} height={2} fill="#f2c230" />
-      <rect x={-2} y={0} width={4} height={5} fill="#f2c230" stroke={INK} strokeWidth={0.5} />
-    </Glyph>
-  );
+/** The map's castle art in the owner's colour. */
+export function CastleIcon({ size = 26, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`castle${color}`} size={size} make={() => castle(color).svg} />;
 }
 
-export function BannerIcon({ size = 22, color }: { size?: number; color: string }) {
-  return (
-    <Glyph size={size}>
-      <path d="M-8 11V-11" stroke={INK} strokeWidth={1.4} />
-      <path d="M-8-11h16v12l-8 5l-8-5z" fill={color} stroke={INK} strokeWidth={1.2} />
-    </Glyph>
-  );
+/** The map's soldier group (an army, or troops) in the owner's colour. */
+export function SoldiersIcon({ size = 22, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`soldiers${color}`} size={size} make={() => soldiers(color).svg} />;
+}
+
+/** The map's treasure chest. */
+export function ChestIcon({ size = 22 }: { size?: number }) {
+  return <ArtIcon id="chest" size={size} make={() => chest().svg} />;
+}
+
+/** The map's crossed-swords alarm badge: attacks. */
+export function AlarmIcon({ size = 18 }: { size?: number }) {
+  return <ArtIcon id="alarm" size={size} make={() => alarm().svg} />;
 }
 
 export function ShieldIcon({ size = 16, color }: { size?: number; color: string }) {

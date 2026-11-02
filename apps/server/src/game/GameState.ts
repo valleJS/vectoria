@@ -73,6 +73,8 @@ interface PlayerRecord {
   pendingActivity: ResourceType | null;
   cards: CardType[];
   fortifiedUntil: number | null;
+  /** Game clock of the last assault on the home castle; absent in older saves. */
+  attackedAt?: number;
   log: LogEntry[];
 }
 
@@ -533,6 +535,7 @@ export class GameState {
       this.startReturn(army, last(army.path));
       return;
     }
+    defender.attackedAt = this.data.clock;
     const fortified = (defender.fortifiedUntil ?? 0) > this.data.clock;
     const multiplier = fortified ? FORTIFY_MULTIPLIER : 1;
     const attackerWins = army.troops > defender.homeTroops * multiplier;
@@ -575,6 +578,7 @@ export class GameState {
 
   private assaultOutpost(army: ArmyRecord, attacker: PlayerRecord, outpost: Outpost): void {
     const defender = outpost.ownerId ? this.player(outpost.ownerId) : undefined;
+    outpost.attackedAt = this.data.clock;
     const attackerWins = army.troops > outpost.troops;
     const losses = battleLosses(army.troops, outpost.troops, attackerWins);
     outpost.troops -= losses.defender;
@@ -837,6 +841,7 @@ export class GameState {
         victoryPoints: p.victoryPoints,
         homeTroops: p.homeTroops,
         fortified: (p.fortifiedUntil ?? 0) > clock,
+        attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
       })),
       spots: this.data.spots,

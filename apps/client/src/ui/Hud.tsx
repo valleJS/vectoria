@@ -26,7 +26,8 @@ import {
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
 import {
-  BannerIcon,
+  AlarmIcon,
+  SoldiersIcon,
   CardArt,
   CastleIcon,
   ChestIcon,
@@ -34,7 +35,6 @@ import {
   ShieldIcon,
   StarIcon,
   SunIcon,
-  TroopIcon,
 } from './icons';
 import { Button, SectionLabel } from './Panel';
 import { SelectionContent } from './SelectionPanel';
@@ -214,7 +214,10 @@ function RealmBox({ view }: { view: GameView }) {
               {self.resources[r]}
             </Stat>
           ))}
-          <Stat title="Truppen in der Burg" icon={<TroopIcon size={18} />}>
+          <Stat
+            title="Truppen in der Burg"
+            icon={<SoldiersIcon color={cssColor(playerColor(view, self.id))} size={20} />}
+          >
             {me?.homeTroops ?? 0}
           </Stat>
         </div>
@@ -286,7 +289,8 @@ function RealmBox({ view }: { view: GameView }) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1">
-                  <TroopIcon size={16} /> {TROOP_BATCH_SIZE} Truppen
+                  <SoldiersIcon color={cssColor(playerColor(view, self.id))} size={18} />{' '}
+                  {TROOP_BATCH_SIZE} Truppen
                   <span className="ml-1 text-xs text-ink-soft">
                     <Cost cost={TROOP_BATCH_COST} />
                   </span>
@@ -534,7 +538,7 @@ function Ticker({ view }: { view: GameView }) {
   ).length;
   const convoys = moving.filter((a) => a.status === 'returning' && hasResources(a.cargo)).length;
   const summary: { label: string; count: number; icon: ReactNode }[] = [
-    { label: 'Angriffe', count: attacks, icon: <BannerIcon color="#a3311f" size={16} /> },
+    { label: 'Angriffe', count: attacks, icon: <AlarmIcon size={16} /> },
     { label: 'Überfälle', count: raids, icon: <span className="font-bold text-seal">✕</span> },
     { label: 'Sammelzüge', count: gatherers, icon: <ResourceIcon resource="wood" size={16} /> },
     { label: 'Beladene Züge', count: convoys, icon: <ChestIcon size={16} /> },

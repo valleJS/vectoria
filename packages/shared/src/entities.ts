@@ -35,6 +35,8 @@ export interface PlayerPublic {
   /** Troops at home — the castle's defence. Public, as everything on the map is visible. */
   homeTroops: number;
   fortified: boolean;
+  /** Game clock of the last assault on the home castle, won or lost; null if never attacked. */
+  attackedAt: number | null;
   online: boolean;
 }
 
@@ -55,6 +57,8 @@ export interface Outpost {
   ownerId: string | null;
   troops: number;
   resources: Resources;
+  /** Game clock of the last assault, won or lost; absent if never attacked. */
+  attackedAt?: number;
 }
 
 export interface Chest {

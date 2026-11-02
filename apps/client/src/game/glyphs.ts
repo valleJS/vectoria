@@ -61,15 +61,19 @@ export function drawBanner(g: Graphics, color: number, u: number): Graphics {
   return g;
 }
 
-/** Dashed line through `points`; the dash pattern runs on across corners. */
+/**
+ * Dashed line through `points`; the dash pattern runs on across corners. Raising `phase` (world
+ * px) moves the dashes forward along the line, for marching routes.
+ */
 export function dashedPolyline(
   g: Graphics,
   points: readonly { x: number; y: number }[],
   dash: number,
   gap: number,
+  phase = 0,
 ): Graphics {
   const period = dash + gap;
-  let offset = 0;
+  let offset = ((-phase % period) + period) % period;
   for (let i = 1; i < points.length; i++) {
     const from = points[i - 1]!;
     const to = points[i]!;
