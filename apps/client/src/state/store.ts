@@ -51,6 +51,8 @@ interface GameStore {
   chestOverlay: boolean;
   /** Card the server revealed from the chest being opened; null until it arrives. */
   revealedCard: CardType | null;
+  /** The handbook is open. */
+  handbook: boolean;
 
   setStatus(status: ConnectionStatus): void;
   setLatency(latencyMs: number): void;
@@ -64,6 +66,7 @@ interface GameStore {
   showCard(card: CardType | null): void;
   setChestOverlay(open: boolean): void;
   revealCard(card: CardType | null): void;
+  setHandbook(open: boolean): void;
 }
 
 export const useGameStore = create<GameStore>()((set) => ({
@@ -81,6 +84,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   cardProfile: null,
   chestOverlay: false,
   revealedCard: null,
+  handbook: false,
 
   setStatus: (status) => set({ status }),
   setLatency: (latencyMs) => set({ latencyMs }),
@@ -103,4 +107,5 @@ export const useGameStore = create<GameStore>()((set) => ({
   showCard: (cardProfile) => set({ cardProfile }),
   setChestOverlay: (chestOverlay) => set({ chestOverlay, revealedCard: null }),
   revealCard: (revealedCard) => set({ revealedCard }),
+  setHandbook: (handbook) => set({ handbook }),
 }));

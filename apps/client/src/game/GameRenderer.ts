@@ -18,6 +18,7 @@ import {
 } from 'pixi.js';
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import { useGameStore, type Selection } from '../state/store';
+import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
 import { formatResources, outpostLabel, playerColor } from './format';
 import { dashedCircle, dashedPolyline, drawBanner, drawCastle } from './glyphs';
@@ -43,8 +44,6 @@ const CASTLE_CENTRE_Y = 66;
  */
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
-/** Screen space the HUD covers (Hud.tsx: top bar, w-80 ticker, w-80 right column + gaps). */
-const HUD_INSETS = { top: 52, left: 336, right: 336 };
 
 /**
  * Sprite of map art whose drawing is `width` world px wide (outline padding not counted),
@@ -257,14 +256,16 @@ export class GameRenderer {
     if (!map) return;
     this.buildGround(this.view);
     const { width, height } = this.app.screen;
-    // Fit the map into the area the HUD leaves free (top bar, side panels) when there is room.
-    const wide = width >= 900;
-    this.camera.fit(map.width * map.tileSize, map.height * map.tileSize, width, height, 24, {
-      top: HUD_INSETS.top,
-      left: wide ? HUD_INSETS.left : 0,
-      right: wide ? HUD_INSETS.right : 0,
-      bottom: 0,
-    });
+    // Fit the map into the area the HUD leaves free (side panels, or the phone's tab bar).
+    const wide = width >= COMPACT_BELOW;
+    this.camera.fit(
+      map.width * map.tileSize,
+      map.height * map.tileSize,
+      width,
+      height,
+      wide ? 24 : 8,
+      wide ? HUD_INSETS.wide : HUD_INSETS.compact,
+    );
   }
 
   /** (Re)draws the terrain; castles and spots get open ground, so it waits for their positions. */

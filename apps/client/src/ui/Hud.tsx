@@ -14,7 +14,7 @@ import {
   type GameView,
   type Resources,
 } from '@vectoria/shared';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   cssColor,
   describeTarget,
@@ -39,7 +39,8 @@ import {
 } from './icons';
 import { CardProfile } from './CardFace';
 import { ChestOpening } from './ChestOpening';
-import { HandbookCorner } from './Handbook';
+import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
+import { compactQuery } from './layout';
 import { Button, SectionLabel } from './Panel';
 import { SelectionContent } from './SelectionPanel';
 
@@ -68,7 +69,7 @@ function Cost({ cost }: { cost: Resources }) {
 }
 
 /** Game-wide status only: title, gameday clock, connection. Personal stats live in RealmBox. */
-function TopBar({ view }: { view: GameView }) {
+function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
   const status = useGameStore((s) => s.status);
   const latencyMs = useGameStore((s) => s.latencyMs);
   const { label, dot } = STATUS_STYLES[status];
@@ -80,13 +81,19 @@ function TopBar({ view }: { view: GameView }) {
       : 'Ruhezeit (Mo–Fr 10–18 Uhr)';
 
   return (
-    <header className="pointer-events-auto flex items-center gap-x-4 border-b-[3px] border-double border-ink bg-parchment-dark px-4 py-1.5 shadow-[0_2px_0_rgba(59,42,24,0.25)]">
-      <span className="text-xl font-bold italic">Vectoria</span>
-      <span className="flex items-center gap-2 leading-tight">
-        <SunIcon size={22} lit={clock.running} />
-        <span>
-          <b>Spieltag {clock.gameday}</b>
-          <span className="ml-2 text-xs text-ink-soft">
+    <header
+      className={`pointer-events-auto flex items-center border-b-[3px] border-double border-ink bg-parchment-dark shadow-[0_2px_0_rgba(59,42,24,0.25)] ${
+        compact
+          ? 'gap-x-2.5 px-3 pt-[max(0.25rem,env(safe-area-inset-top))] pb-1'
+          : 'gap-x-4 px-4 py-1.5'
+      }`}
+    >
+      <span className={`font-bold italic ${compact ? 'text-lg' : 'text-xl'}`}>Vectoria</span>
+      <span className="flex min-w-0 items-center gap-2 leading-tight">
+        <SunIcon size={compact ? 20 : 22} lit={clock.running} />
+        <span className="min-w-0">
+          <b className="whitespace-nowrap">Spieltag {clock.gameday}</b>
+          <span className={`text-xs text-ink-soft ${compact ? 'block truncate' : 'ml-2'}`}>
             {clockLabel}
             {clock.timeScale !== 1 && <span className="text-seal"> · {clock.timeScale}×</span>}
           </span>
@@ -94,9 +101,29 @@ function TopBar({ view }: { view: GameView }) {
       </span>
       <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-soft" title={label}>
         <span className={`h-2.5 w-2.5 rounded-full border border-ink/60 ${dot}`} />
-        {status === 'open' && latencyMs !== null ? `${Math.round(latencyMs)} ms` : label}
+        {compact
+          ? null
+          : status === 'open' && latencyMs !== null
+            ? `${Math.round(latencyMs)} ms`
+            : label}
       </span>
+      {compact && <HandbookButton />}
     </header>
+  );
+}
+
+/** ▾/▸ button that folds a box open or shut. */
+function FoldToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className="px-1 text-ink-soft hover:text-seal"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={open ? 'Einklappen' : 'Ausklappen'}
+    >
+      {open ? '▾' : '▸'}
+    </button>
   );
 }
 
@@ -320,7 +347,7 @@ function BaseFold({
  * player and sit on top; troops and resources belong to a base ("Basis", then each outpost),
  * each in its own fold once there is more than one.
  */
-function RealmBox({ view }: { view: GameView }) {
+function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: boolean }) {
   const setToken = useGameStore((s) => s.setToken);
   const setChestOverlay = useGameStore((s) => s.setChestOverlay);
   const [open, setOpen] = useState(true);
@@ -339,15 +366,7 @@ function RealmBox({ view }: { view: GameView }) {
           <b>{vp}</b>
           <span className="text-xs text-ink-soft">/ {view.victoryPointsToWin}</span>
         </span>
-        <button
-          type="button"
-          className="px-1 text-ink-soft hover:text-seal"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          aria-label={open ? 'Einklappen' : 'Ausklappen'}
-        >
-          {open ? '▾' : '▸'}
-        </button>
+        {collapsible && <FoldToggle open={open} onToggle={() => setOpen(!open)} />}
       </header>
       {open && (
         <div className="min-h-0 overflow-y-auto px-3 pt-2 pb-2.5">
@@ -605,7 +624,8 @@ const FEED_MARKS: Record<FeedEntry['kind'], string> = {
 };
 
 /** Live ticker for everyone: what is on the move right now, and the latest public events. */
-function Ticker({ view }: { view: GameView }) {
+/** `collapsible` false: always open (inside the phone's bottom sheet). */
+function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: boolean }) {
   const select = useGameStore((s) => s.select);
   const [open, setOpen] = useState(true);
   const moving = view.armies;
@@ -633,15 +653,7 @@ function Ticker({ view }: { view: GameView }) {
         <span className="h-2 w-2 animate-pulse rounded-full bg-seal" aria-hidden />
         <b className="flex-1 italic">Liveticker</b>
         <span className="text-xs text-ink-soft">{moving.length} Züge unterwegs</span>
-        <button
-          type="button"
-          className="px-1 text-ink-soft hover:text-seal"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          aria-label={open ? 'Einklappen' : 'Ausklappen'}
-        >
-          {open ? '▾' : '▸'}
-        </button>
+        {collapsible && <FoldToggle open={open} onToggle={() => setOpen(!open)} />}
       </header>
       <div className="grid grid-cols-4 gap-1 border-b border-ink/30 px-2 py-1.5">
         {summary.map(({ label, count, icon }) => (
@@ -688,7 +700,7 @@ function Ticker({ view }: { view: GameView }) {
   );
 }
 
-function Notice() {
+function Notice({ className = 'top-4' }: { className?: string }) {
   const notice = useGameStore((s) => s.notice);
   useEffect(() => {
     if (!notice) return;
@@ -697,7 +709,9 @@ function Notice() {
   }, [notice]);
   if (!notice) return null;
   return (
-    <div className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 border border-ink bg-seal px-4 py-2 text-sm text-parchment shadow-[2px_3px_0_rgba(59,42,24,0.35)]">
+    <div
+      className={`pointer-events-auto absolute left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 border border-ink bg-seal px-4 py-2 text-sm text-parchment shadow-[2px_3px_0_rgba(59,42,24,0.35)] ${className}`}
+    >
       {notice.text}
     </div>
   );
@@ -714,39 +728,170 @@ function EndBanner({ view }: { view: GameView }) {
   );
 }
 
+/** True below the compact breakpoint (phones, narrow windows); follows window resizes. */
+function useCompact(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(compactQuery);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(compactQuery).matches,
+  );
+}
+
+type SheetTab = 'ticker' | 'selection' | 'armies' | 'ranking' | 'realm';
+
+/** Content of one phone sheet; boxes with their own header come as they are. */
+function SheetContent({ view, tab }: { view: GameView; tab: SheetTab }) {
+  const titled = (title: string, body: ReactNode) => (
+    <section className={`${BOX} flex min-h-0 flex-col`}>
+      <header className="border-b border-ink bg-parchment-dark px-3 py-1.5">
+        <b className="italic">{title}</b>
+      </header>
+      <div className="min-h-0 overflow-y-auto px-3 py-2">{body}</div>
+    </section>
+  );
+  switch (tab) {
+    case 'ticker':
+      return <Ticker view={view} collapsible={false} />;
+    case 'selection':
+      return titled('Auswahl', <SelectionContent view={view} />);
+    case 'armies':
+      return titled('Heerzüge', <ArmiesList view={view} />);
+    case 'ranking':
+      return titled(
+        'Rangliste & Chronik',
+        <>
+          <Leaderboard view={view} />
+          <SectionLabel>Deine Chronik</SectionLabel>
+          <Chronicle view={view} />
+        </>,
+      );
+    case 'realm':
+      return <RealmBox view={view} collapsible={false} />;
+  }
+}
+
+/**
+ * Phone layout: the map fills the screen; a tab bar at the bottom opens one panel at a time as
+ * a sheet over the lower part of the map. Selecting something on the map opens "Auswahl".
+ */
+function CompactHud({ view }: { view: GameView }) {
+  const selection = useGameStore((s) => s.selection);
+  const [tab, setTab] = useState<SheetTab | null>(null);
+  const [seenSelection, setSeenSelection] = useState(selection);
+  if (selection !== seenSelection) {
+    setSeenSelection(selection);
+    if (selection) setTab('selection');
+  }
+  const color = cssColor(playerColor(view, view.self.id));
+  const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
+  const tabs: { id: SheetTab; label: string; icon: ReactNode; badge?: number }[] = [
+    { id: 'ticker', label: 'Ticker', icon: <AlarmIcon size={20} /> },
+    { id: 'selection', label: 'Auswahl', icon: <CastleIcon color={color} size={22} /> },
+    { id: 'armies', label: 'Züge', icon: <SoldiersIcon color={color} size={22} />, badge: armies },
+    { id: 'ranking', label: 'Rang', icon: <StarIcon size={20} /> },
+    {
+      id: 'realm',
+      label: 'Reich',
+      icon: <ShieldIcon color={color} size={20} />,
+      badge: view.self.chests,
+    },
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 flex flex-col">
+      <TopBar view={view} compact />
+      <div className="relative min-h-0 flex-1">
+        <Notice className="top-2" />
+        <div className="absolute inset-x-2 bottom-2 flex flex-col items-center">
+          {!tab && <EndBanner view={view} />}
+        </div>
+        {tab && (
+          <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex max-h-[62dvh] flex-col px-1.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setTab(null)}
+              aria-label="Panel schließen"
+              className="mx-auto mb-1 flex items-center gap-1 rounded-full border border-ink/60 bg-parchment px-3 py-0.5 text-xs text-ink-soft shadow-[1px_2px_0_rgba(59,42,24,0.3)]"
+            >
+              ▾ Karte zeigen
+            </button>
+            <SheetContent view={view} tab={tab} />
+          </div>
+        )}
+      </div>
+      <nav
+        className="pointer-events-auto flex shrink-0 border-t-[3px] border-double border-ink bg-parchment-dark pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_0_rgba(59,42,24,0.2)]"
+        role="tablist"
+      >
+        {tabs.map(({ id, label, icon, badge }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(tab === id ? null : id)}
+            className={`relative flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
+              tab === id ? 'bg-parchment font-bold text-seal' : 'text-ink-soft'
+            }`}
+          >
+            {icon}
+            {label}
+            {badge ? (
+              <span className="absolute top-1 right-[calc(50%-1.4rem)] rounded-full bg-seal px-1.5 text-[10px] leading-4 text-parchment">
+                {badge}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 /**
  * HTML overlay above the canvas. The root ignores pointer events so map input passes through;
- * panels opt back in with `pointer-events-auto`. Left: live ticker; right: selection tabs above
- * the player's own realm box.
+ * panels opt back in with `pointer-events-auto`. Wide: live ticker left, selection tabs above
+ * the player's realm box right. Compact (phones): see `CompactHud`.
  */
 export function Hud() {
   const view = useGameStore((s) => s.view);
+  const compact = useCompact();
   if (!view) return null;
   return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col">
-      <TopBar view={view} />
-      <div className="relative flex min-h-0 flex-1 justify-between gap-4 p-3">
-        <div className="flex w-80 min-h-0 flex-col gap-3">
-          <div className="flex max-h-[55%] min-h-0 flex-col">
-            <Ticker view={view} />
-          </div>
-          <div className="mt-auto">
-            <HandbookCorner />
+    <>
+      {compact ? (
+        <CompactHud view={view} />
+      ) : (
+        <div className="pointer-events-none absolute inset-0 flex flex-col">
+          <TopBar view={view} compact={false} />
+          <div className="relative flex min-h-0 flex-1 justify-between gap-4 p-3">
+            <div className="flex w-80 min-h-0 flex-col gap-3">
+              <div className="flex max-h-[55%] min-h-0 flex-col">
+                <Ticker view={view} />
+              </div>
+              <div className="mt-auto">
+                <HandbookCorner />
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col items-center justify-end">
+              <EndBanner view={view} />
+            </div>
+            <div className="flex w-80 min-h-0 flex-col gap-3">
+              <Sidebar view={view} />
+              <div className="mt-auto flex max-h-[65%] min-h-0 shrink-0 flex-col">
+                <RealmBox view={view} />
+              </div>
+            </div>
+            <Notice />
           </div>
         </div>
-        <div className="flex flex-1 flex-col items-center justify-end">
-          <EndBanner view={view} />
-        </div>
-        <div className="flex w-80 min-h-0 flex-col gap-3">
-          <Sidebar view={view} />
-          <div className="mt-auto flex max-h-[65%] min-h-0 shrink-0 flex-col">
-            <RealmBox view={view} />
-          </div>
-        </div>
-        <Notice />
-      </div>
+      )}
       <ChestOpening />
       <CardProfile />
-    </div>
+      <Handbook />
+    </>
   );
 }

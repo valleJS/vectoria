@@ -69,7 +69,8 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - Movement follows land: A* over the tile grid (8 directions, no corner cutting past water),
   then straightened where a direct line keeps clearance from water (`shared/pathfinding.ts`).
   Travel time is path length; crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
-  All sites sit on the largest connected landmass (`world.mainlandTiles`).
+  Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
+  12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
 - Redirect (`redirectArmy`): an outbound or gathering army without cargo can get a new target.
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads

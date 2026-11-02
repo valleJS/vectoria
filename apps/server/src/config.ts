@@ -58,7 +58,7 @@ export const config = {
     timezone: optional('GAME_TIMEZONE') ?? 'Europe/Berlin',
     /** Game-clock speed multiplier for testing; 1 in production. */
     timeScale: positiveNumber('TIME_SCALE', 1),
-    victoryPointsToWin: positiveInt('VICTORY_POINTS_TO_WIN', 25),
+    victoryPointsToWin: positiveInt('VICTORY_POINTS_TO_WIN', 10),
   },
   dataFile: optional('DATA_FILE') ?? 'data/game.json',
   /** Built client to serve on non-API paths (production container); unset = API only. */

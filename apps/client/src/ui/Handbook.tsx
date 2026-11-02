@@ -371,7 +371,13 @@ const CHAPTERS: Chapter[] = [
 function Book({ onClose }: { onClose: () => void }) {
   const victoryPointsToWin = useGameStore((s) => s.view?.victoryPointsToWin ?? 0);
   const [index, setIndex] = useState(0);
+  // Phones show one page at a time: the contents page only while `toc` is open.
+  const [toc, setToc] = useState(false);
   const chapter = CHAPTERS[index]!;
+  const go = (i: number) => {
+    setIndex(i);
+    setToc(false);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -388,14 +394,14 @@ function Book({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-20 flex items-center justify-center bg-ink/55 p-4"
+      className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-ink/55 p-4 max-md:p-3"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-label="Handbuch"
         onClick={(e) => e.stopPropagation()}
-        className="relative flex h-[min(44rem,90vh)] w-full max-w-5xl rounded-md border-2 border-ink bg-[#6e2618] p-2.5 text-ink shadow-[6px_8px_0_rgba(59,42,24,0.45)] max-md:flex-col"
+        className="relative flex h-[min(44rem,90vh)] w-full max-w-5xl rounded-md border-2 border-ink bg-[#6e2618] p-2.5 text-ink shadow-[6px_8px_0_rgba(59,42,24,0.45)] max-md:h-[calc(100dvh-1.5rem)] max-md:flex-col max-md:p-1.5"
       >
         <button
           type="button"
@@ -408,7 +414,7 @@ function Book({ onClose }: { onClose: () => void }) {
 
         {/* Left page: contents */}
         <nav
-          className={`${page} flex min-h-0 w-[38%] flex-col border border-ink/60 px-6 py-5 shadow-[inset_-18px_0_24px_-14px_rgba(59,42,24,0.45)] max-md:w-full max-md:max-h-[35%]`}
+          className={`${page} flex min-h-0 w-[38%] flex-col border border-ink/60 px-6 py-5 shadow-[inset_-18px_0_24px_-14px_rgba(59,42,24,0.45)] max-md:w-full max-md:px-4 ${toc ? 'max-md:flex-1' : 'max-md:hidden'}`}
         >
           <div className="text-center text-xs tracking-[0.3em] text-ink-soft uppercase">
             Vectoria
@@ -421,8 +427,8 @@ function Book({ onClose }: { onClose: () => void }) {
               <li key={c.id}>
                 <button
                   type="button"
-                  onClick={() => setIndex(i)}
-                  className={`flex w-full items-baseline gap-1.5 px-1 py-0.5 text-left ${
+                  onClick={() => go(i)}
+                  className={`flex w-full items-baseline gap-1.5 px-1 py-0.5 text-left max-md:py-1.5 ${
                     i === index ? 'bg-parchment-deep/70 font-bold text-seal' : 'hover:text-seal'
                   }`}
                 >
@@ -442,7 +448,7 @@ function Book({ onClose }: { onClose: () => void }) {
                 key={card}
                 type="button"
                 title={CARDS[card].name}
-                onClick={() => setIndex(CHAPTERS.findIndex((c) => c.id === 'catalog'))}
+                onClick={() => go(CHAPTERS.findIndex((c) => c.id === 'catalog'))}
                 className="w-10 border border-ink/60 bg-parchment p-[1px] hover:-translate-y-0.5"
               >
                 <CardArt card={card} className="h-6 w-full" />
@@ -456,11 +462,18 @@ function Book({ onClose }: { onClose: () => void }) {
 
         {/* Right page: chapter */}
         <article
-          className={`${page} flex min-h-0 flex-1 flex-col border border-ink/60 px-7 py-5 shadow-[inset_18px_0_24px_-14px_rgba(59,42,24,0.45)]`}
+          className={`${page} flex min-h-0 flex-1 flex-col border border-ink/60 px-7 py-5 shadow-[inset_18px_0_24px_-14px_rgba(59,42,24,0.45)] max-md:px-4 max-md:py-3 ${toc ? 'max-md:hidden' : ''}`}
         >
-          <div className="flex justify-between text-xs text-ink-soft italic">
+          <div className="flex items-center justify-between text-xs text-ink-soft italic">
             <span>Kapitel {toRoman(index + 1)}</span>
-            <span>Handbuch von Vectoria</span>
+            <span className="max-md:hidden">Handbuch von Vectoria</span>
+            <button
+              type="button"
+              onClick={() => setToc(true)}
+              className="border border-ink/50 bg-parchment-deep/60 px-2 py-1 not-italic text-ink md:hidden"
+            >
+              ☰ Inhalt
+            </button>
           </div>
           <h2 className="mt-1 mb-3 border-b border-ink/40 pb-1 text-2xl italic">{chapter.title}</h2>
           <div
@@ -476,7 +489,8 @@ function Book({ onClose }: { onClose: () => void }) {
               onClick={() => setIndex(index - 1)}
               className="italic hover:text-seal disabled:opacity-30"
             >
-              ← {CHAPTERS[index - 1]?.title ?? ''}
+              ← <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
+              <span className="md:hidden">Zurück</span>
             </button>
             <span className="text-xs text-ink-soft tabular-nums">— {index * 2 + 3} —</span>
             <button
@@ -485,7 +499,8 @@ function Book({ onClose }: { onClose: () => void }) {
               onClick={() => setIndex(index + 1)}
               className="italic hover:text-seal disabled:opacity-30"
             >
-              {CHAPTERS[index + 1]?.title ?? ''} →
+              <span className="max-md:hidden">{CHAPTERS[index + 1]?.title ?? ''}</span>
+              <span className="md:hidden">Weiter</span> →
             </button>
           </footer>
         </article>
@@ -512,34 +527,55 @@ function toRoman(n: number): string {
   return out;
 }
 
+/** The open handbook, wherever it was opened from (compass corner or the phone top bar). */
+export function Handbook() {
+  const open = useGameStore((s) => s.handbook);
+  const setHandbook = useGameStore((s) => s.setHandbook);
+  return open ? <Book onClose={() => setHandbook(false)} /> : null;
+}
+
+/** Small book button for the phone top bar. */
+export function HandbookButton() {
+  const setHandbook = useGameStore((s) => s.setHandbook);
+  return (
+    <button
+      type="button"
+      onClick={() => setHandbook(true)}
+      title="Handbuch öffnen"
+      aria-label="Handbuch öffnen"
+      className="-my-1 shrink-0"
+    >
+      <BookGlyph size={32} />
+    </button>
+  );
+}
+
 /** Bottom-left corner: the compass rose with the handbook beside it; either opens the book. */
 export function HandbookCorner() {
-  const [open, setOpen] = useState(false);
+  const setHandbook = useGameStore((s) => s.setHandbook);
+  const open = () => setHandbook(true);
   return (
-    <>
-      <div className="pointer-events-auto flex items-end gap-1">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          title="Handbuch öffnen"
-          aria-label="Handbuch öffnen"
-          className="transition-transform hover:-rotate-6"
-        >
-          <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          title="Handbuch öffnen"
-          className="mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
-        >
-          <BookGlyph />
-          <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
-            Handbuch
-          </span>
-        </button>
-      </div>
-      {open && <Book onClose={() => setOpen(false)} />}
-    </>
+    <div className="pointer-events-auto flex items-end gap-1">
+      <button
+        type="button"
+        onClick={open}
+        title="Handbuch öffnen"
+        aria-label="Handbuch öffnen"
+        className="transition-transform hover:-rotate-6"
+      >
+        <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />
+      </button>
+      <button
+        type="button"
+        onClick={open}
+        title="Handbuch öffnen"
+        className="mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
+      >
+        <BookGlyph />
+        <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
+          Handbuch
+        </span>
+      </button>
+    </div>
   );
 }
