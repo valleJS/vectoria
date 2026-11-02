@@ -113,6 +113,9 @@ export class GameSocket {
       case 'state':
         store.applyState(message);
         break;
+      case 'chestOpened':
+        store.revealCard(message.card);
+        break;
       case 'error':
         if (message.code === 'rejected') store.showNotice(message.message);
         else console.warn(`Server error (${message.code}): ${message.message}`);

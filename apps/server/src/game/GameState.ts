@@ -5,6 +5,7 @@ import {
   CARD_TYPES,
   CARDS,
   CASTLE_PLUNDER_SHARE,
+  CHESTS_PER_GAMEDAY,
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
@@ -18,12 +19,14 @@ import {
   hasResources,
   HOUR_MS,
   OUTPOST_PLUNDER_SHARE,
+  outpostName,
   pathLength,
   planIntercept,
   pointAlong,
   remainingPath,
   RESOURCE_NAMES,
   RESOURCES,
+  rollChestTroops,
   STARTING_RESOURCES,
   STARTING_TROOPS,
   TROOP_BATCH_COST,
@@ -72,6 +75,10 @@ interface PlayerRecord {
   activity: ResourceType | null;
   pendingActivity: ResourceType | null;
   cards: CardType[];
+  /** March card armed for the next army; absent in older saves. */
+  activeCard?: CardType | null;
+  /** Chests brought home, not yet opened; absent in older saves. */
+  chests?: number;
   fortifiedUntil: number | null;
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
@@ -96,6 +103,8 @@ interface ArmyRecord {
   forcedMarch: boolean;
   /** Gathered resources, plunder, or goods moved between bases. */
   cargo: Resources;
+  /** Carrying an opened chest home (cannot be raided); absent in older saves. */
+  chest?: boolean;
 }
 
 /** Everything needed to restore a game; written to disk by `Persistence`. */
@@ -277,19 +286,16 @@ export class GameState {
     from: string | null,
     troops: number,
     target: ArmyTarget,
-    cards: CardType[],
+    useActiveCard: boolean,
     cargo: Resources,
   ): void {
     const player = this.requirePlaying(playerId);
     const base = this.base(player, from);
     if (!base) throw new RuleError('Dieser Stützpunkt gehört dir nicht.');
     if (troops > base.troops) throw new RuleError('So viele Truppen stehen dort nicht.');
-    for (const card of cards) {
-      if (CARDS[card].use !== 'march')
-        throw new RuleError(`${CARDS[card].name} ist keine Marschkarte.`);
-      if (!player.cards.includes(card))
-        throw new RuleError(`Du hast keine ${CARDS[card].name}-Karte.`);
-    }
+    const card = useActiveCard ? (player.activeCard ?? null) : null;
+    if (useActiveCard && !card) throw new RuleError('Du hast keine Karte aktiviert.');
+    const cards = card ? [card] : [];
     if (
       target.kind === (from === null ? 'castle' : 'outpost') &&
       target.id === (from ?? playerId)
@@ -298,6 +304,7 @@ export class GameState {
     }
     const forcedMarch = cards.includes('forcedMarch');
     const destination = this.destination(player, base.position, target, forcedMarch);
+    this.checkChestTroops(target, troops);
     if (hasResources(cargo)) {
       if (!destination.ownBase) {
         throw new RuleError('Ressourcen lassen sich nur zu eigenen Burgen bringen.');
@@ -306,7 +313,10 @@ export class GameState {
         throw new RuleError('So viele Ressourcen lagern dort nicht.');
     }
 
-    for (const card of cards) player.cards.splice(player.cards.indexOf(card), 1);
+    if (card) {
+      player.cards.splice(player.cards.indexOf(card), 1);
+      player.activeCard = null;
+    }
     base.setTroops(base.troops - troops);
     for (const r of RESOURCES) base.resources[r] -= cargo[r];
     const army: ArmyRecord = {
@@ -323,6 +333,7 @@ export class GameState {
       stealth: cards.includes('stealth'),
       forcedMarch,
       cargo: { ...cargo },
+      chest: false,
     };
     this.data.armies.push(army);
     this.addFeed(
@@ -345,6 +356,7 @@ export class GameState {
     }
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
     const destination = this.destination(player, this.armyPosition(army), target, army.forcedMarch);
+    this.checkChestTroops(target, army.troops);
     army.status = 'outbound';
     army.path = destination.path;
     army.target = target;
@@ -368,20 +380,41 @@ export class GameState {
     this.dirty = true;
   }
 
-  playCard(playerId: string, card: CardType): void {
+  /** Instant cards take effect now; march cards are armed for the next army. Null disarms. */
+  activateCard(playerId: string, card: CardType | null): void {
     const player = this.requirePlaying(playerId);
-    if (CARDS[card].use !== 'instant') {
-      throw new RuleError(`${CARDS[card].name} wird beim Losschicken eines Zuges gespielt.`);
+    if (card === null) {
+      player.activeCard = null;
+      this.dirty = true;
+      return;
     }
     const index = player.cards.indexOf(card);
     if (index < 0) throw new RuleError(`Du hast keine ${CARDS[card].name}-Karte.`);
+    if (CARDS[card].use === 'march') {
+      player.activeCard = card;
+      this.dirty = true;
+      return;
+    }
     player.cards.splice(index, 1);
+    if (player.activeCard && !player.cards.includes(player.activeCard)) player.activeCard = null;
     // card === 'fortify' is the only instant card.
     player.fortifiedUntil =
       Math.max(player.fortifiedUntil ?? 0, this.data.clock) + FORTIFY_DURATION_MS;
     this.addLog(player, 'Bollwerk aktiv: deine Burg verteidigt mit +50 %.');
     this.addFeed('battle', `${player.name} verstärkt die Burg mit einem Bollwerk.`);
     this.dirty = true;
+  }
+
+  /** Opens a chest the player brought home and returns the card inside. */
+  openChest(playerId: string): CardType {
+    const player = this.requirePlaying(playerId);
+    if (!player.chests) throw new RuleError('Du hast keine ungeöffnete Truhe.');
+    player.chests--;
+    const card = CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)]!;
+    player.cards.push(card);
+    this.addLog(player, `Truhe geöffnet: Karte „${CARDS[card].name}“ erhalten.`);
+    this.dirty = true;
+    return card;
   }
 
   // ---- Simulation ----
@@ -463,14 +496,19 @@ export class GameState {
       }
       case 'chest': {
         const index = this.data.chests.findIndex((c) => c.id === army.target.id);
-        if (index >= 0) {
-          this.data.chests.splice(index, 1);
-          const card = CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)]!;
-          owner.cards.push(card);
-          this.addLog(owner, `Truhe geöffnet: Karte „${CARDS[card].name}“ erhalten.`);
-          this.addFeed('chest', `${owner.name} öffnet eine Truhe.`, army.id);
+        const chest = this.data.chests[index];
+        if (!chest) {
+          this.addLog(owner, 'Die Truhe war schon weg.');
+        } else if (army.troops < chest.troopsNeeded) {
+          this.addLog(
+            owner,
+            `Deine ${army.troops} Truppen bekommen die Truhe nicht auf (${chest.troopsNeeded} nötig).`,
+          );
         } else {
-          this.addLog(owner, 'Die Truhe war schon leer.');
+          this.data.chests.splice(index, 1);
+          army.chest = true;
+          this.addLog(owner, 'Truhe geborgen — deine Truppen bringen sie heim.');
+          this.addFeed('chest', `${this.armyLabel(army)} birgt eine Truhe.`, army.id);
         }
         this.startReturn(army, last(army.path));
         return;
@@ -523,8 +561,12 @@ export class GameState {
     base.setTroops(base.troops + army.troops);
     for (const r of RESOURCES) base.resources[r] += army.cargo[r];
     if (hasResources(army.cargo)) {
-      const where = base.id === null ? 'deine Burg' : `Stützpunkt ${this.outpostName(base.id)}`;
+      const where = base.id === null ? 'deine Burg' : 'deinen Stützpunkt';
       this.addLog(owner, `${formatResources(army.cargo)} in ${where} eingelagert.`);
+    }
+    if (army.chest) {
+      owner.chests = (owner.chests ?? 0) + 1;
+      this.addLog(owner, 'Eine Truhe ist daheim angekommen und wartet darauf, geöffnet zu werden.');
     }
     this.removeArmy(army);
   }
@@ -578,23 +620,21 @@ export class GameState {
 
   private assaultOutpost(army: ArmyRecord, attacker: PlayerRecord, outpost: Outpost): void {
     const defender = outpost.ownerId ? this.player(outpost.ownerId) : undefined;
+    const name = this.outpostName(outpost.id);
     outpost.attackedAt = this.data.clock;
     const attackerWins = army.troops > outpost.troops;
     const losses = battleLosses(army.troops, outpost.troops, attackerWins);
     outpost.troops -= losses.defender;
 
     if (!attackerWins) {
-      this.addLog(
-        attacker,
-        `Angriff auf ${outpost.name} gescheitert: ${army.troops} Truppen verloren.`,
-      );
+      this.addLog(attacker, `Angriff auf ${name} gescheitert: ${army.troops} Truppen verloren.`);
       if (defender) {
         this.addLog(
           defender,
-          `${outpost.name} hält gegen ${attacker.name} stand. ${losses.defender} Verluste.`,
+          `${name} hält gegen ${attacker.name} stand. ${losses.defender} Verluste.`,
         );
       }
-      this.addFeed('outpost', `${outpost.name} hält einem Angriff von ${attacker.name} stand.`);
+      this.addFeed('outpost', `${name} hält einem Angriff von ${attacker.name} stand.`);
       this.removeArmy(army);
       return;
     }
@@ -609,21 +649,21 @@ export class GameState {
     addResources(outpost.resources, army.cargo);
     this.addLog(
       attacker,
-      `${outpost.name} eingenommen` +
+      (defender ? `${name} erobert` : 'Ruine eingenommen und wiederaufgebaut') +
         (hasResources(outpost.resources) ? `, samt ${formatResources(outpost.resources)}` : '') +
         `. ${losses.attacker} Verluste.`,
     );
     if (defender) {
       this.addLog(
         defender,
-        `${attacker.name} hat ${outpost.name} erobert. ${losses.defender} Verteidiger gefallen.`,
+        `${attacker.name} hat deinen Stützpunkt erobert. ${losses.defender} Verteidiger gefallen.`,
       );
     }
     this.addFeed(
       'outpost',
       defender
-        ? `${attacker.name} erobert ${outpost.name} von ${defender.name}.`
-        : `${attacker.name} nimmt ${outpost.name} ein.`,
+        ? `${attacker.name} erobert den ${name}.`
+        : `${attacker.name} baut eine Ruine wieder auf.`,
     );
     this.removeArmy(army);
   }
@@ -648,6 +688,7 @@ export class GameState {
       stealth: false,
       forcedMarch: false,
       cargo,
+      chest: false,
     };
     this.startReturn(army, from);
     return army;
@@ -661,6 +702,7 @@ export class GameState {
       !convoy ||
       !victim ||
       convoy.status !== 'returning' ||
+      !hasResources(convoy.cargo) ||
       distance(this.armyPosition(convoy), last(army.path)) > RAID_REACH_TILES
     ) {
       this.addLog(raider, 'Der Überfall ging ins Leere — der Zug ist entwischt.');
@@ -717,8 +759,9 @@ export class GameState {
     }
     this.addFeed('day', `Spieltag ${this.data.gameday} beginnt.`);
     const chestCap = this.data.players.length;
-    const toSpawn = Math.ceil(this.data.players.length / 3);
-    for (let i = 0; i < toSpawn && this.data.chests.length < chestCap; i++) this.spawnChest();
+    for (let i = 0; i < CHESTS_PER_GAMEDAY && this.data.chests.length < chestCap; i++) {
+      this.spawnChest();
+    }
     this.dirty = true;
   }
 
@@ -748,8 +791,8 @@ export class GameState {
       player.homeTroops = STARTING_TROOPS;
       player.resources = { ...STARTING_RESOURCES };
     });
+    // The first gameday start (next tick) spawns the first chest.
     this.data.phase = 'running';
-    for (let i = 0; i < Math.ceil(players.length / 2); i++) this.spawnChest();
     this.addFeed('day', 'Das Spiel beginnt.');
     this.dirty = true;
   }
@@ -792,6 +835,7 @@ export class GameState {
     this.data.chests.push({
       id: this.nextId('chest'),
       position: farthestFrom(mainlandTiles(this.map), this.takenPositions(), Math.random),
+      troopsNeeded: rollChestTroops(),
     });
     this.dirty = true;
   }
@@ -856,6 +900,8 @@ export class GameState {
         activity: self.activity,
         pendingActivity: self.pendingActivity,
         cards: self.cards,
+        activeCard: self.activeCard ?? null,
+        chests: self.chests ?? 0,
         fortifiedUntil: self.fortifiedUntil,
         log: self.log,
       },
@@ -920,6 +966,7 @@ export class GameState {
       fog: army.fog,
       stealth: army.stealth,
       forcedMarch: army.forcedMarch,
+      chest: army.chest ?? false,
     };
   }
 
@@ -949,7 +996,7 @@ export class GameState {
 
   /** Upgrades older saves: players get an email slot, armies land routes, the map outposts. */
   private migrate(saved: AnySavedGame): SavedGame {
-    if (saved.version === 2) return saved;
+    if (saved.version === 2) return this.normalize(saved);
     const data: SavedGame = {
       ...saved,
       version: 2,
@@ -981,6 +1028,16 @@ export class GameState {
       );
     }
     this.dirty = true;
+    return this.normalize(data);
+  }
+
+  /** Fills fields added within save version 2: chest requirements; drops old outpost names. */
+  private normalize(data: SavedGame): SavedGame {
+    data.chests = data.chests.map((c) => ({
+      ...c,
+      troopsNeeded: c.troopsNeeded ?? rollChestTroops(),
+    }));
+    data.outposts = data.outposts.map(({ name: _name, ...o }: Outpost & { name?: string }) => o);
     return data;
   }
 
@@ -1006,6 +1063,8 @@ export class GameState {
       activity: null,
       pendingActivity: null,
       cards: [],
+      activeCard: null,
+      chests: 0,
       fortifiedUntil: null,
       log: [],
     };
@@ -1111,6 +1170,15 @@ export class GameState {
     };
   }
 
+  /** Rejects a march on a chest with too few troops to open it. */
+  private checkChestTroops(target: ArmyTarget, troops: number): void {
+    if (target.kind !== 'chest') return;
+    const chest = this.data.chests.find((c) => c.id === target.id);
+    if (chest && troops < chest.troopsNeeded) {
+      throw new RuleError(`Diese Truhe braucht mindestens ${chest.troopsNeeded} Truppen.`);
+    }
+  }
+
   private legFraction(army: ArmyRecord): number {
     const span = army.arriveClock - army.departClock;
     if (army.status === 'gathering' || span <= 0) return army.status === 'gathering' ? 0 : 1;
@@ -1177,9 +1245,10 @@ export class GameState {
           : `greift die Burg von ${name(id)} an`;
       case 'outpost': {
         const outpost = this.data.outposts.find((o) => o.id === id);
-        return outpost?.ownerId === army.ownerId
-          ? `verlegt nach ${this.outpostName(id)}`
-          : `zieht gegen ${this.outpostName(id)}`;
+        if (outpost?.ownerId === army.ownerId) return 'verlegt in den eigenen Stützpunkt';
+        return outpost?.ownerId
+          ? `zieht gegen den ${this.outpostName(id)}`
+          : 'zieht zu einer Ruine';
       }
       case 'spot': {
         const spot = this.data.spots.find((s) => s.id === id);
@@ -1193,7 +1262,8 @@ export class GameState {
   }
 
   private outpostName(id: string): string {
-    return this.data.outposts.find((o) => o.id === id)?.name ?? 'Stützpunkt';
+    const ownerId = this.data.outposts.find((o) => o.id === id)?.ownerId;
+    return outpostName(ownerId ? (this.player(ownerId)?.name ?? 'Unbekannt') : null);
   }
 }
 

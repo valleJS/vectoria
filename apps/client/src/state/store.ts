@@ -1,4 +1,11 @@
-import type { ArmyTarget, GameView, MapData, StateMessage, WelcomeMessage } from '@vectoria/shared';
+import type {
+  ArmyTarget,
+  CardType,
+  GameView,
+  MapData,
+  StateMessage,
+  WelcomeMessage,
+} from '@vectoria/shared';
 import { create } from 'zustand';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'closed';
@@ -38,6 +45,12 @@ interface GameStore {
   zoom: number;
   /** Last rejected command, shown as a toast. */
   notice: { text: string; at: number } | null;
+  /** Card whose profile is open, if any. */
+  cardProfile: CardType | null;
+  /** The chest-opening overlay is showing. */
+  chestOverlay: boolean;
+  /** Card the server revealed from the chest being opened; null until it arrives. */
+  revealedCard: CardType | null;
 
   setStatus(status: ConnectionStatus): void;
   setLatency(latencyMs: number): void;
@@ -48,6 +61,9 @@ interface GameStore {
   select(selection: Selection | null): void;
   setZoom(zoom: number): void;
   showNotice(text: string): void;
+  showCard(card: CardType | null): void;
+  setChestOverlay(open: boolean): void;
+  revealCard(card: CardType | null): void;
 }
 
 export const useGameStore = create<GameStore>()((set) => ({
@@ -62,6 +78,9 @@ export const useGameStore = create<GameStore>()((set) => ({
   selection: null,
   zoom: 1,
   notice: null,
+  cardProfile: null,
+  chestOverlay: false,
+  revealedCard: null,
 
   setStatus: (status) => set({ status }),
   setLatency: (latencyMs) => set({ latencyMs }),
@@ -71,8 +90,17 @@ export const useGameStore = create<GameStore>()((set) => ({
   },
   applyWelcome: ({ playerId, tickRate, map }) => set({ playerId, tickRate, map, selection: null }),
   setMap: (map) => set({ map, selection: null }),
-  applyState: ({ tick, view }) => set({ tick, view }),
+  // Chests waiting at home (on login, or a new one arriving) bring up the opening overlay.
+  applyState: ({ tick, view }) =>
+    set((s) => ({
+      tick,
+      view,
+      chestOverlay: s.chestOverlay || view.self.chests > (s.view?.self.chests ?? 0),
+    })),
   select: (selection) => set({ selection }),
   setZoom: (zoom) => set({ zoom }),
   showNotice: (text) => set({ notice: { text, at: Date.now() } }),
+  showCard: (cardProfile) => set({ cardProfile }),
+  setChestOverlay: (chestOverlay) => set({ chestOverlay, revealedCard: null }),
+  revealCard: (revealedCard) => set({ revealedCard }),
 }));

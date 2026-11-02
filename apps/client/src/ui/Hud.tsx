@@ -15,13 +15,14 @@ import {
   type Resources,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
-import { compassRose, dataUrl } from '../art/svg';
 import {
   cssColor,
   describeTarget,
   formatGameDuration,
   formatResources,
+  ownBases,
   playerColor,
+  type BaseInfo,
 } from '../game/format';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
@@ -36,6 +37,9 @@ import {
   StarIcon,
   SunIcon,
 } from './icons';
+import { CardProfile } from './CardFace';
+import { ChestOpening } from './ChestOpening';
+import { HandbookCorner } from './Handbook';
 import { Button, SectionLabel } from './Panel';
 import { SelectionContent } from './SelectionPanel';
 
@@ -121,67 +125,209 @@ function Stat({
   );
 }
 
-/** The player's special cards as a compact hand. */
+/** The player's special cards as a compact hand; a card opens its profile. */
 function CardHand({ view }: { view: GameView }) {
+  const showCard = useGameStore((s) => s.showCard);
   const counts = new Map<CardType, number>();
   for (const card of view.self.cards) counts.set(card, (counts.get(card) ?? 0) + 1);
   if (counts.size === 0) {
-    return <p className="text-xs text-ink-soft italic">Keine Karten — öffne Truhen.</p>;
+    return <p className="text-xs text-ink-soft italic">Keine Karten — erobere Truhen.</p>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
       {[...counts].map(([card, count]) => {
         const info = CARDS[card];
+        const active = view.self.activeCard === card;
         return (
-          <div
+          <button
             key={card}
+            type="button"
             title={info.description}
-            className="relative w-[4.6rem] border border-ink bg-parchment p-[2px]"
+            onClick={() => showCard(card)}
+            className={`relative w-[4.6rem] border bg-parchment p-[2px] hover:-translate-y-0.5 hover:shadow-[1px_2px_0_rgba(59,42,24,0.35)] ${
+              active ? 'border-seal outline-2 outline-seal' : 'border-ink'
+            }`}
           >
             <CardArt card={card} className="h-8 w-full" />
             <div className="text-center text-[11px] italic">{info.name}</div>
-            {info.use === 'instant' ? (
-              <Button
-                variant="primary"
-                className="w-full px-1 py-0 text-[11px]"
-                onClick={() => gameSocket.send({ type: 'playCard', card })}
-              >
-                Ausspielen
-              </Button>
-            ) : (
-              <div className="text-center text-[10px] leading-tight text-ink-soft">
-                beim Entsenden
-              </div>
-            )}
+            <div className="text-center text-[10px] leading-tight text-ink-soft">
+              {active ? (
+                <b className="text-seal">aktiv</b>
+              ) : info.use === 'instant' ? (
+                'sofort'
+              ) : (
+                'Marsch'
+              )}
+            </div>
             {count > 1 && (
               <span className="absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full border border-ink bg-seal px-1 text-[10px] text-parchment">
                 {count}
               </span>
             )}
-          </div>
+          </button>
         );
       })}
     </div>
   );
 }
 
-/**
- * Everything about the player in one box: home resources and troops, victory points, outposts,
- * base activity, shop and cards. The stats stay visible; the rest folds away.
- */
-function RealmBox({ view }: { view: GameView }) {
-  const setToken = useGameStore((s) => s.setToken);
-  const [open, setOpen] = useState(true);
+/** Resources and troops stored at one base. */
+function BaseStats({ view, base }: { view: GameView; base: BaseInfo }) {
+  const where = base.id === null ? 'in der Basis' : 'im Stützpunkt';
+  return (
+    <div className="grid grid-cols-4 gap-1">
+      {RESOURCES.map((r) => (
+        <Stat
+          key={r}
+          title={`${RESOURCE_NAMES[r]} ${where}`}
+          icon={<ResourceIcon resource={r} size={20} />}
+        >
+          {base.resources[r]}
+        </Stat>
+      ))}
+      <Stat
+        title={`Truppen ${where}`}
+        icon={<SoldiersIcon color={cssColor(playerColor(view, view.self.id))} size={20} />}
+      >
+        {base.troops}
+      </Stat>
+    </div>
+  );
+}
+
+/** The home castle: stock, troops in the field, and the shop (spending happens only here). */
+function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
   const { self } = view;
-  const me = view.players.find((p) => p.id === self.id);
-  const outposts = view.outposts.filter((o) => o.ownerId === self.id);
   const field = view.armies
     .filter((a) => a.ownerId === self.id)
     .reduce((sum, a) => sum + (a.troops ?? 0), 0);
-  const stationed = outposts.reduce((sum, o) => sum + o.troops, 0);
-  const vp = me?.victoryPoints ?? 0;
   const buy = (item: 'troops' | 'victoryPoint', count: number) =>
     gameSocket.send({ type: 'buy', item, count });
+  return (
+    <>
+      <BaseStats view={view} base={base} />
+      <div className="mt-1 text-xs text-ink-soft">Unterwegs: {field} Truppen</div>
+      <div className="mt-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1">
+            <SoldiersIcon color={cssColor(playerColor(view, self.id))} size={18} />{' '}
+            {TROOP_BATCH_SIZE} Truppen
+            <span className="ml-1 text-xs text-ink-soft">
+              <Cost cost={TROOP_BATCH_COST} />
+            </span>
+          </span>
+          <div className="flex gap-1">
+            {[1, 5].map((n) => (
+              <Button
+                key={n}
+                className="px-2 py-0.5"
+                onClick={() => buy('troops', n)}
+                disabled={!canAfford(self.resources, TROOP_BATCH_COST, n)}
+              >
+                {n}×
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1">
+            <StarIcon size={16} /> 1 Siegpunkt
+            <span className="ml-1 text-xs text-ink-soft">
+              <Cost cost={VICTORY_POINT_COST} />
+            </span>
+          </span>
+          <Button
+            variant="primary"
+            className="px-2 py-0.5"
+            onClick={() => buy('victoryPoint', 1)}
+            disabled={!canAfford(self.resources, VICTORY_POINT_COST)}
+          >
+            1×
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** An own outpost: stock and troops, with shortcuts to act from or bring goods home. */
+function OutpostBase({ view, base }: { view: GameView; base: BaseInfo }) {
+  const select = useGameStore((s) => s.select);
+  return (
+    <>
+      <BaseStats view={view} base={base} />
+      <p className="mt-1 text-xs text-ink-soft">
+        Ausgeben lässt sich nur, was in der Basis lagert.
+      </p>
+      <div className="mt-1.5 flex gap-1.5">
+        <Button className="flex-1 px-1" onClick={() => select({ kind: 'outpost', id: base.id! })}>
+          Auf der Karte
+        </Button>
+        <Button
+          className="flex-1 px-1"
+          disabled={base.troops === 0}
+          onClick={() => select({ kind: 'castle', id: view.self.id })}
+        >
+          Heimholen
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/** A base section that folds open; used once the player holds more than one base. */
+function BaseFold({
+  view,
+  base,
+  defaultOpen,
+}: {
+  view: GameView;
+  base: BaseInfo;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const color = cssColor(playerColor(view, view.self.id));
+  return (
+    <div className="mt-2 border border-ink/40">
+      <button
+        type="button"
+        className="flex w-full items-center gap-1.5 bg-parchment-dark/60 px-2 py-1 text-left hover:text-seal"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        <CastleIcon color={color} size={18} />
+        <b className="min-w-0 flex-1 truncate italic">{base.name}</b>
+        <span className="text-xs text-ink-soft tabular-nums">
+          {base.troops} Tr. · {formatResources(base.resources, 'leer')}
+        </span>
+        <span className="text-ink-soft">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="px-2 pt-1.5 pb-2">
+          {base.id === null ? (
+            <HomeBase view={view} base={base} />
+          ) : (
+            <OutpostBase view={view} base={base} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Everything about the player in one box. Victory points, base activity and cards belong to the
+ * player and sit on top; troops and resources belong to a base ("Basis", then each outpost),
+ * each in its own fold once there is more than one.
+ */
+function RealmBox({ view }: { view: GameView }) {
+  const setToken = useGameStore((s) => s.setToken);
+  const setChestOverlay = useGameStore((s) => s.setChestOverlay);
+  const [open, setOpen] = useState(true);
+  const { self } = view;
+  const me = view.players.find((p) => p.id === self.id);
+  const bases = ownBases(view);
+  const vp = me?.victoryPoints ?? 0;
 
   return (
     <section className={`${BOX} flex min-h-0 flex-col`}>
@@ -203,150 +349,87 @@ function RealmBox({ view }: { view: GameView }) {
           {open ? '▾' : '▸'}
         </button>
       </header>
-      <div className="min-h-0 overflow-y-auto px-3 pt-2 pb-2.5">
-        <div className="grid grid-cols-4 gap-1">
-          {RESOURCES.map((r) => (
-            <Stat
-              key={r}
-              title={`${RESOURCE_NAMES[r]} in der Burg`}
-              icon={<ResourceIcon resource={r} size={20} />}
+      {open && (
+        <div className="min-h-0 overflow-y-auto px-3 pt-2 pb-2.5">
+          <div className="flex items-center justify-between text-xs text-ink-soft">
+            <span>Fortschritt zum Sieg</span>
+            <span className="inline-block h-1.5 w-28 border border-ink/50 bg-parchment-deep">
+              <span
+                className="block h-full bg-seal"
+                style={{ width: `${Math.min(100, (vp / view.victoryPointsToWin) * 100)}%` }}
+              />
+            </span>
+          </div>
+
+          {self.chests > 0 && (
+            <Button
+              variant="primary"
+              className="mt-2 flex w-full items-center justify-center gap-1.5"
+              onClick={() => setChestOverlay(true)}
             >
-              {self.resources[r]}
-            </Stat>
-          ))}
-          <Stat
-            title="Truppen in der Burg"
-            icon={<SoldiersIcon color={cssColor(playerColor(view, self.id))} size={20} />}
-          >
-            {me?.homeTroops ?? 0}
-          </Stat>
-        </div>
-        <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
-          <span>
-            Unterwegs {field} · in Stützpunkten {stationed}
-          </span>
-          <span
-            className="inline-block h-1.5 w-20 border border-ink/50 bg-parchment-deep"
-            title="Fortschritt zum Sieg"
-          >
-            <span
-              className="block h-full bg-seal"
-              style={{ width: `${Math.min(100, (vp / view.victoryPointsToWin) * 100)}%` }}
-            />
-          </span>
-        </div>
+              <ChestIcon size={18} />
+              {self.chests === 1 ? 'Truhe öffnen' : `${self.chests} Truhen öffnen`}
+            </Button>
+          )}
 
-        {open && (
-          <>
-            {outposts.length > 0 && (
-              <>
-                <SectionLabel>Stützpunkte</SectionLabel>
-                <ul className="space-y-0.5">
-                  {outposts.map((o) => (
-                    <li key={o.id}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-1.5 text-left hover:text-seal"
-                        onClick={() =>
-                          useGameStore.getState().select({ kind: 'outpost', id: o.id })
-                        }
-                      >
-                        <CastleIcon color={cssColor(playerColor(view, self.id))} size={18} />
-                        <span className="min-w-0 flex-1 truncate">{o.name}</span>
-                        <span className="text-xs text-ink-soft tabular-nums">
-                          {o.troops} Tr. · {formatResources(o.resources, 'leer')}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            <SectionLabel>Basisaktivität</SectionLabel>
-            <div className="grid grid-cols-3 gap-1.5">
-              {RESOURCES.map((r) => (
-                <Button
-                  key={r}
-                  variant={self.pendingActivity === r ? 'selected' : 'default'}
-                  className="flex items-center justify-center gap-1 px-1"
-                  onClick={() => gameSocket.send({ type: 'setActivity', resource: r })}
-                >
-                  <ResourceIcon resource={r} size={16} />
-                  {RESOURCE_NAMES[r]}
-                </Button>
-              ))}
-            </div>
-            <div className="mt-1 text-xs text-ink-soft">
-              Heute:{' '}
-              {self.activity ? `${RESOURCE_NAMES[self.activity]} (+${DAILY_ACTIVITY_INCOME})` : '—'}
-              {self.pendingActivity && self.pendingActivity !== self.activity && (
-                <> · ab nächstem Spieltag: {RESOURCE_NAMES[self.pendingActivity]}</>
-              )}
-            </div>
-
-            <SectionLabel>Kaufen (aus der Burg)</SectionLabel>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1">
-                  <SoldiersIcon color={cssColor(playerColor(view, self.id))} size={18} />{' '}
-                  {TROOP_BATCH_SIZE} Truppen
-                  <span className="ml-1 text-xs text-ink-soft">
-                    <Cost cost={TROOP_BATCH_COST} />
-                  </span>
-                </span>
-                <div className="flex gap-1">
-                  {[1, 5].map((n) => (
-                    <Button
-                      key={n}
-                      className="px-2 py-0.5"
-                      onClick={() => buy('troops', n)}
-                      disabled={!canAfford(self.resources, TROOP_BATCH_COST, n)}
-                    >
-                      {n}×
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1">
-                  <StarIcon size={16} /> 1 Siegpunkt
-                  <span className="ml-1 text-xs text-ink-soft">
-                    <Cost cost={VICTORY_POINT_COST} />
-                  </span>
-                </span>
-                <Button
-                  variant="primary"
-                  className="px-2 py-0.5"
-                  onClick={() => buy('victoryPoint', 1)}
-                  disabled={!canAfford(self.resources, VICTORY_POINT_COST)}
-                >
-                  1×
-                </Button>
-              </div>
-            </div>
-
-            <SectionLabel>Karten</SectionLabel>
-            <CardHand view={view} />
-
-            <div className="mt-2 text-right">
-              <button
-                type="button"
-                className="text-xs text-ink-soft underline hover:text-seal"
-                onClick={() => {
-                  if (
-                    window.confirm('Abmelden? Du kannst dich jederzeit per E-Mail wieder anmelden.')
-                  ) {
-                    setToken(null);
-                  }
-                }}
+          <SectionLabel>Basisaktivität</SectionLabel>
+          <div className="grid grid-cols-3 gap-1.5">
+            {RESOURCES.map((r) => (
+              <Button
+                key={r}
+                variant={self.pendingActivity === r ? 'selected' : 'default'}
+                className="flex items-center justify-center gap-1 px-1"
+                onClick={() => gameSocket.send({ type: 'setActivity', resource: r })}
               >
-                Abmelden
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+                <ResourceIcon resource={r} size={16} />
+                {RESOURCE_NAMES[r]}
+              </Button>
+            ))}
+          </div>
+          <div className="mt-1 text-xs text-ink-soft">
+            Heute:{' '}
+            {self.activity ? `${RESOURCE_NAMES[self.activity]} (+${DAILY_ACTIVITY_INCOME})` : '—'}
+            {self.pendingActivity && self.pendingActivity !== self.activity && (
+              <> · ab nächstem Spieltag: {RESOURCE_NAMES[self.pendingActivity]}</>
+            )}
+          </div>
+
+          <SectionLabel>Karten</SectionLabel>
+          <CardHand view={view} />
+
+          {bases.length === 1 ? (
+            <>
+              <SectionLabel>Basis</SectionLabel>
+              <HomeBase view={view} base={bases[0]!} />
+            </>
+          ) : (
+            bases.map((base) => (
+              <BaseFold
+                key={base.id ?? 'home'}
+                view={view}
+                base={base}
+                defaultOpen={base.id === null}
+              />
+            ))
+          )}
+
+          <div className="mt-2 text-right">
+            <button
+              type="button"
+              className="text-xs text-ink-soft underline hover:text-seal"
+              onClick={() => {
+                if (
+                  window.confirm('Abmelden? Du kannst dich jederzeit per E-Mail wieder anmelden.')
+                ) {
+                  setToken(null);
+                }
+              }}
+            >
+              Abmelden
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -631,12 +714,6 @@ function EndBanner({ view }: { view: GameView }) {
   );
 }
 
-const COMPASS_URL = dataUrl(compassRose());
-
-function CompassRose() {
-  return <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />;
-}
-
 /**
  * HTML overlay above the canvas. The root ignores pointer events so map input passes through;
  * panels opt back in with `pointer-events-auto`. Left: live ticker; right: selection tabs above
@@ -654,7 +731,7 @@ export function Hud() {
             <Ticker view={view} />
           </div>
           <div className="mt-auto">
-            <CompassRose />
+            <HandbookCorner />
           </div>
         </div>
         <div className="flex flex-1 flex-col items-center justify-end">
@@ -668,6 +745,8 @@ export function Hud() {
         </div>
         <Notice />
       </div>
+      <ChestOpening />
+      <CardProfile />
     </div>
   );
 }

@@ -19,7 +19,7 @@ import {
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import { useGameStore, type Selection } from '../state/store';
 import { Camera } from './Camera';
-import { formatResources, playerColor } from './format';
+import { formatResources, outpostLabel, playerColor } from './format';
 import { dashedCircle, dashedPolyline, drawBanner, drawCastle } from './glyphs';
 import { CARGO_GOLD, INK, NEUTRAL_COLOR, PARCHMENT, SEA, SEAL, SERIF } from './palette';
 import { buildTerrain, type Clearing, type Terrain } from './terrain';
@@ -65,7 +65,10 @@ interface ArmySprite {
   /** Troop count nameplate, rebuilt when `text` changes. */
   plate: Container;
   text: string;
-  /** Gold halo + tag with resource icon and amount, shown while the army carries resources. */
+  /**
+   * Gold halo + tag with resource icon and amount while the army carries resources; a small chest
+   * while it brings a chest home.
+   */
   cargo: Container;
   target: PointData;
   /** Colour + status the soldiers were last drawn with, so they are only redrawn on change. */
@@ -345,6 +348,9 @@ export class GameRenderer {
         .fill({ color: CARGO_GOLD, alpha: 0.3 })
         .stroke({ width: 1.4 * u, color: CARGO_GOLD });
       piece.addChild(halo, artSprite(this.art.chest, 34 * u));
+      piece.addChild(
+        this.nameplate(`ab ${chest.troopsNeeded} Truppen`, null, u, { top: 16 * u, size: 10 * u }),
+      );
       for (const [x, y, size] of [
         [-15, -14, 9],
         [16, -9, 7],
@@ -369,8 +375,9 @@ export class GameRenderer {
       } else {
         building = drawCastle(new Graphics(), color, u * 0.7);
       }
-      if (!outpost.ownerId) building.alpha = 0.85;
-      const plate = this.nameplate(`${outpost.name} · ${outpost.troops}`, color, u, {
+      // Unowned outposts are ruins: faded until someone rebuilds them.
+      if (!outpost.ownerId) building.alpha = 0.5;
+      const plate = this.nameplate(`${outpostLabel(view, outpost)} · ${outpost.troops}`, color, u, {
         top: 17 * u,
       });
       site.addChild(building, plate);
@@ -474,11 +481,13 @@ export class GameRenderer {
       seen.add(army.id);
       const color = playerColor(view, army.ownerId);
       const carrying = hasResources(army.cargo);
+      // Empty-handed armies heading home fade; convoys and chest bearers stay bold.
+      const faded = army.status === 'returning' && !carrying && !army.chest;
       const target = this.px(army.position);
       if (army.route && army.status !== 'gathering') {
         const route = army.route.map((p) => this.px(p));
         const to = route[route.length - 1]!;
-        const alpha = army.status === 'returning' && !carrying ? 0.5 : 1;
+        const alpha = faded ? 0.5 : 1;
         this.routeLines.push({ points: route, color: carrying ? CARGO_GOLD : color, alpha });
         if (army.target?.kind === 'army') {
           // Raid: crossed strokes where the ambush is planned.
@@ -530,13 +539,13 @@ export class GameRenderer {
         for (const child of sprite.figure.removeChildren()) child.destroy();
         const art = this.art.soldiers.get(color);
         sprite.figure.addChild(art ? artSprite(art, 38 * u) : drawBanner(new Graphics(), color, u));
-        sprite.container.alpha = army.status === 'returning' && !carrying ? 0.75 : 1;
+        sprite.container.alpha = faded ? 0.75 : 1;
       }
-      const cargoKey = JSON.stringify(army.cargo);
+      const cargoKey = JSON.stringify([army.cargo, army.chest]);
       if (cargoKey !== sprite.cargoKey) {
         sprite.cargoKey = cargoKey;
         this.drawCargo(sprite, army, u);
-        sprite.container.alpha = army.status === 'returning' && !carrying ? 0.75 : 1;
+        sprite.container.alpha = faded ? 0.75 : 1;
       }
       const text =
         (army.troops === null ? '?' : String(army.troops)) +
@@ -705,6 +714,11 @@ export class GameRenderer {
   /** Gold halo and a parchment tag with the main resource's icon and the total load. */
   private drawCargo(sprite: ArmySprite, army: ArmyView, u: number): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
+    if (army.chest) {
+      const chest = artSprite(this.art.chest, 20 * u);
+      chest.position.set(16 * u, -24 * u);
+      sprite.cargo.addChild(chest);
+    }
     if (!hasResources(army.cargo)) return;
     const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
     const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);

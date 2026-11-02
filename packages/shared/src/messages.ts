@@ -2,7 +2,7 @@ import { ARMY_TARGET_KINDS, type ArmyTarget, type GamePhase, type GameView } fro
 import type { MapData } from './map';
 import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** WebSocket close code for an unknown or revoked session token. */
 export const CLOSE_UNKNOWN_TOKEN = 4001;
@@ -34,7 +34,8 @@ export interface SendArmyMessage {
   from: string | null;
   troops: number;
   target: ArmyTarget;
-  cards: CardType[];
+  /** Send the armed `activeCard` along with this army. */
+  useActiveCard: boolean;
   /** Resources to carry along; only allowed when the target is one of the sender's own bases. */
   cargo: Resources;
 }
@@ -51,9 +52,18 @@ export interface RedirectArmyMessage {
   target: ArmyTarget;
 }
 
-export interface PlayCardMessage {
-  type: 'playCard';
-  card: CardType;
+/**
+ * Activates a card: an instant card takes effect at once, a march card is armed for the next
+ * army. `null` disarms the active card.
+ */
+export interface ActivateCardMessage {
+  type: 'activateCard';
+  card: CardType | null;
+}
+
+/** Opens one chest waiting at home; the server answers with `chestOpened`. */
+export interface OpenChestMessage {
+  type: 'openChest';
 }
 
 export type ClientMessage =
@@ -63,7 +73,8 @@ export type ClientMessage =
   | SendArmyMessage
   | RecallArmyMessage
   | RedirectArmyMessage
-  | PlayCardMessage;
+  | ActivateCardMessage
+  | OpenChestMessage;
 
 // ---- Server → Client ----
 
@@ -95,6 +106,12 @@ export interface StateMessage {
   view: GameView;
 }
 
+/** The card that was inside a chest the player just opened. */
+export interface ChestOpenedMessage {
+  type: 'chestOpened';
+  card: CardType;
+}
+
 export type ErrorCode = 'bad_message' | 'rate_limited' | 'rejected';
 
 export interface ErrorMessage {
@@ -103,7 +120,8 @@ export interface ErrorMessage {
   message: string;
 }
 
-export type ServerMessage = WelcomeMessage | MapMessage | PongMessage | StateMessage | ErrorMessage;
+export type ServerMessage =
+  WelcomeMessage | MapMessage | PongMessage | StateMessage | ChestOpenedMessage | ErrorMessage;
 
 // ---- HTTP API ----
 
@@ -260,22 +278,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         : null;
     case 'sendArmy': {
       const target = parseTarget(msg.target);
-      const cards = Array.isArray(msg.cards) ? msg.cards : null;
       const cargo = parseResources(msg.cargo ?? {});
       const from = msg.from ?? null;
-      return isPositiveInt(msg.troops) &&
-        target &&
-        cards &&
-        cargo &&
-        (from === null || isId(from)) &&
-        cards.length <= 4 &&
-        cards.every(isCard)
+      return isPositiveInt(msg.troops) && target && cargo && (from === null || isId(from))
         ? {
             type: 'sendArmy',
             from,
             troops: msg.troops,
             target,
-            cards: [...new Set(cards)],
+            useActiveCard: msg.useActiveCard === true,
             cargo,
           }
         : null;
@@ -288,8 +299,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         ? { type: 'redirectArmy', armyId: msg.armyId, target }
         : null;
     }
-    case 'playCard':
-      return isCard(msg.card) ? { type: 'playCard', card: msg.card } : null;
+    case 'activateCard':
+      return msg.card === null || isCard(msg.card)
+        ? { type: 'activateCard', card: msg.card }
+        : null;
+    case 'openChest':
+      return { type: 'openChest' };
     default:
       return null;
   }
@@ -300,6 +315,7 @@ const SERVER_MESSAGE_TYPES = new Set<ServerMessage['type']>([
   'map',
   'pong',
   'state',
+  'chestOpened',
   'error',
 ]);
 
