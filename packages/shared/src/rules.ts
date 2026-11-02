@@ -62,13 +62,31 @@ export const CASTLE_PLUNDER_SHARE = 0.5;
 export const OUTPOST_PLUNDER_SHARE = 1;
 export const CONVOY_PLUNDER_SHARE = 1;
 
+/** One chest spawns per gameday, up to one per player on the map. */
+export const CHESTS_PER_GAMEDAY = 1;
+/** Troops needed to open a chest: random in this range, in steps of `CHEST_TROOPS_STEP`. */
+export const CHEST_TROOPS_MIN = 20;
+export const CHEST_TROOPS_MAX = 100;
+export const CHEST_TROOPS_STEP = 10;
+
+/** Random troop requirement for a new chest. */
+export function rollChestTroops(random: () => number = Math.random): number {
+  const steps = (CHEST_TROOPS_MAX - CHEST_TROOPS_MIN) / CHEST_TROOPS_STEP;
+  return CHEST_TROOPS_MIN + Math.floor(random() * (steps + 1)) * CHEST_TROOPS_STEP;
+}
+
 export const CARD_TYPES = ['fog', 'stealth', 'forcedMarch', 'fortify'] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 
 export interface CardInfo {
   name: string;
   description: string;
-  /** `march` cards are attached when sending an army; `instant` cards are played on their own. */
+  /** Short lore line for the card profile. */
+  flavor: string;
+  /**
+   * `march` cards, once activated, ride along with the next army sent; `instant` cards take
+   * effect as soon as they are activated.
+   */
   use: 'march' | 'instant';
 }
 
@@ -76,21 +94,25 @@ export const CARDS: Record<CardType, CardInfo> = {
   fog: {
     name: 'Nebel',
     description: 'Andere sehen die Truppenstärke dieses Zuges nicht.',
+    flavor: 'Wer zählt, was er nicht sieht?',
     use: 'march',
   },
   stealth: {
     name: 'Tarnung',
     description: 'Andere sehen das Ziel dieses Zuges nicht.',
+    flavor: 'Kein Späher weiß, wohin der Weg führt.',
     use: 'march',
   },
   forcedMarch: {
     name: 'Eilmarsch',
     description: 'Der Hinweg dauert nur halb so lang.',
+    flavor: 'Schlaf ist für die Daheimgebliebenen.',
     use: 'march',
   },
   fortify: {
     name: 'Bollwerk',
     description: 'Deine Burg verteidigt einen Gameday lang mit +50 % Stärke.',
+    flavor: 'Stein auf Stein, und kein Tor gibt nach.',
     use: 'instant',
   },
 };

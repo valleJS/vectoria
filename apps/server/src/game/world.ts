@@ -21,24 +21,6 @@ const SPOT_TERRAIN: Record<ResourceType, TileType> = {
   gold: TileType.Mountain,
 };
 const SPOTS_PER_PLAYER = 1.5;
-const OUTPOST_NAMES = [
-  'Falkenstein',
-  'Rabenfels',
-  'Eichwacht',
-  'Steinhag',
-  'Adlerhorst',
-  'Nebelturm',
-  'Grauwall',
-  'Birkenfeste',
-  'Dornburg',
-  'Hohenwart',
-  'Silbertann',
-  'Wolkenstein',
-  'Kranichwacht',
-  'Eisenfels',
-  'Moosburg',
-  'Lindenhag',
-];
 
 export interface World {
   map: MapData;
@@ -99,7 +81,7 @@ export function createWorld(players: number, seed: number): World {
 }
 
 /**
- * Neutral, empty outposts on contested ground: roughly as far from the nearest castle as from
+ * Neutral, empty outposts (ruins) on contested ground: roughly as far from the nearest castle as from
  * the second nearest, and away from other `taken` sites (which this extends).
  */
 export function placeOutposts(
@@ -126,7 +108,6 @@ export function placeOutposts(
     taken.push(position);
     outposts.push({
       id: `outpost-${i}`,
-      name: OUTPOST_NAMES[i % OUTPOST_NAMES.length]! + (i >= OUTPOST_NAMES.length ? ' II' : ''),
       position,
       ownerId: null,
       troops: 0,

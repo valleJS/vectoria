@@ -71,12 +71,15 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
 | C→S | `buy` | Troop batches or victory points |
-| C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), march cards, `cargo` |
+| C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` |
 | C→S | `redirectArmy` | New target for an army in the field |
-| C→S | `recallArmy` / `playCard` | Recall an army / play an instant card |
+| C→S | `recallArmy` | Recall an army |
+| C→S | `activateCard` | Instant card: takes effect; march card: armed for the next army; `null` disarms |
+| C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
 | S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
 | S→C | `map` | Map changed (game start / reset) |
 | S→C | `state` | Every tick: this player's filtered `GameView` |
+| S→C | `chestOpened` | The card from the chest just opened (drives the reveal animation) |
 | S→C | `error` | `bad_message` / `rate_limited` / `rejected` (rule violation, shown as toast) |
 
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),

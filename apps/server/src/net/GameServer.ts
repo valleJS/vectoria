@@ -162,15 +162,18 @@ export class GameServer {
             message.from,
             message.troops,
             message.target,
-            message.cards,
+            message.useActiveCard,
             message.cargo,
           );
         case 'recallArmy':
           return this.state.recallArmy(playerId, message.armyId);
         case 'redirectArmy':
           return this.state.redirectArmy(playerId, message.armyId, message.target);
-        case 'playCard':
-          return this.state.playCard(playerId, message.card);
+        case 'activateCard':
+          return this.state.activateCard(playerId, message.card);
+        case 'openChest':
+          this.send(ws, { type: 'chestOpened', card: this.state.openChest(playerId) });
+          return;
       }
     } catch (error) {
       if (!(error instanceof RuleError)) throw error;
