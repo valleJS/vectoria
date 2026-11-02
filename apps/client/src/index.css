@@ -126,3 +126,12 @@ body {
     animation: none;
   }
 }
+
+/* Phones: iOS zooms into inputs under 16px on focus, which breaks the fixed layout. */
+@media (max-width: 899px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

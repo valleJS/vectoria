@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-02
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
+sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
 ---
 
 # Server codemap (`apps/server`)
@@ -28,7 +28,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
-| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation |
+| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation; `joinLand` sinks islets and bridges larger islands so all land is one mass |
 | `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` |
 | `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
 | `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`) for the production container |
@@ -53,7 +53,7 @@ new gameday on rollover) →
 | `ADMIN_TOKEN` | `admin` (dev) | **required in production** |
 | `GAME_HOURS` / `GAME_TIMEZONE` | `weekdays` / `Europe/Berlin` | `always` for dev |
 | `TIME_SCALE` | `1` | clock multiplier for testing |
-| `VICTORY_POINTS_TO_WIN` | `25` | |
+| `VICTORY_POINTS_TO_WIN` | `10` | |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
 | `CLIENT_DIR` | unset = API only | built client to serve; set in the Docker image |
 | `ALLOWED_ORIGINS` | empty = any | comma list; **set in production** |

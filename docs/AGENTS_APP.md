@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-02
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
-sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
+sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
 ---
 
 # Client codemap (`apps/client`)
@@ -33,9 +33,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/game/palette.ts` | Pixi colours (ink, parchment, seal, sea, resources), heraldic player palette, `sepia()` backdrop toning |
 | `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets |
 | `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target and outpost labels, own bases (`ownBases`), card colours |
-| `src/ui/Hud.tsx` | Game overlay: slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box bottom-right: player-wide part (VP, chests to open, activity, cards) above one section per base ("Basis" with shop, then outposts; folds once there are 2+) |
+| `src/ui/Hud.tsx` | Game overlay. Wide (≥ 900 px): slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box bottom-right: player-wide part (VP, chests to open, activity, cards) above one section per base ("Basis" with shop, then outposts; folds once there are 2+). Compact (phones, `CompactHud`): top bar with handbook button, full-screen map, bottom tab bar (Ticker, Auswahl, Züge, Rang + Chronik, Reich) opening one panel as a sheet; a map selection opens Auswahl |
+| `src/ui/layout.ts` | Compact breakpoint (`COMPACT_BELOW` = 900) and per-layout HUD insets, shared by the HUD and the map fit |
 | `src/ui/ChestOpening.tsx` | Chest-opening overlay: wobbling chest, shake, lid pops, card flips in; opens itself when the store sees new chests at home |
-| `src/ui/Handbook.tsx` | Compass + book bottom-left; opens a two-page handbook (contents left, chapter right, ←/→ keys) on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
+| `src/ui/Handbook.tsx` | Compass + book bottom-left (phones: book button in the top bar); open state in the store (`handbook`). Two-page handbook (contents left, chapter right, ←/→ keys; phones show one page, contents via "☰ Inhalt") on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land) / recall / raid (redirect or send, meeting point) for the selected object |

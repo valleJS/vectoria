@@ -6,7 +6,7 @@ category: runbook
 last_verified: 2026-11-02
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: 2ed5ab16b337b6f957ab19242237246e44160117
+sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)
@@ -295,13 +295,23 @@ Offsite-Kopie: `/opt/vectoria/backups` in ein bestehendes Backup aufnehmen oder 
 | Neustart | `docker compose restart vectoria` |
 | Laufende Version | `grep IMAGE_TAG .env` |
 | Bestimmte Version ausrollen / zurückrollen | `su - deploy -c "/opt/vectoria/deploy.sh <git-sha>"` |
-| Konfiguration ändern | `nano vectoria.env && docker compose up -d` |
+| Konfiguration ändern | `nano vectoria.env && docker compose up -d --force-recreate` |
 | Spielstand wiederherstellen | `docker compose stop vectoria && cp backups/<datei>.json data/game.json && chown 1000:1000 data/game.json && docker compose start vectoria` |
 | Speicherverbrauch | `docker stats --no-stream vectoria` |
 
 Für einen Rollback den SHA nehmen, z. B. aus `git log --oneline` oder der Actions-Übersicht.
 **Achtung:** Hat die neue Version das Speicherformat migriert, kann die alte den Stand eventuell
 nicht lesen. Dann zusätzlich das `…-before-<sha>.json`-Backup dieses Deploys zurückspielen.
+
+### Neue Runde starten
+
+1. Siegpunkt-Ziel prüfen (Standard 10, wird nur beim Start gelesen):
+   `grep VICTORY vectoria.env`; nach einer Änderung `docker compose up -d --force-recreate`.
+2. Admin-Panel `https://vectoria.DEINEDOMAIN.de/?admin` → **Zurücksetzen**. Der Spielstand wird
+   gelöscht, Anmeldungen bleiben. Vorher wird nichts automatisch gesichert; bei Bedarf
+   `cp data/game.json backups/vor-reset-$(date +%F).json`.
+3. Mitspielende anmelden lassen, dann **Anmeldung schließen & starten**. Die Karte wird jetzt
+   neu und passend zur Spielerzahl erzeugt.
 
 ## 13. Fehlersuche
 
