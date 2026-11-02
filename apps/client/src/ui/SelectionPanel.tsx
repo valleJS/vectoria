@@ -13,7 +13,6 @@ import {
   travelMs,
   type ArmyTarget,
   type ArmyView,
-  type CardType,
   type GameView,
   type MapData,
   type Resources,
@@ -25,8 +24,11 @@ import {
   describeTarget,
   formatGameDuration,
   formatResources,
+  outpostLabel,
+  ownBases,
   playerColor,
   playerName,
+  type BaseInfo,
 } from '../game/format';
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
@@ -41,41 +43,6 @@ const STATUS_NAMES: Record<ArmyView['status'], string> = {
   gathering: 'sammelt',
   returning: 'auf dem Heimweg',
 };
-
-/** A place the player's troops can leave from: the home castle (`id` null) or an own outpost. */
-interface BaseInfo {
-  id: string | null;
-  name: string;
-  position: Vec2;
-  troops: number;
-  resources: Resources;
-}
-
-function ownBases(view: GameView): BaseInfo[] {
-  const me = view.players.find((p) => p.id === view.self.id);
-  const bases: BaseInfo[] = me?.castle
-    ? [
-        {
-          id: null,
-          name: 'Burg',
-          position: me.castle,
-          troops: me.homeTroops,
-          resources: view.self.resources,
-        },
-      ]
-    : [];
-  for (const o of view.outposts) {
-    if (o.ownerId !== view.self.id) continue;
-    bases.push({
-      id: o.id,
-      name: o.name,
-      position: o.position,
-      troops: o.troops,
-      resources: o.resources,
-    });
-  }
-  return bases;
-}
 
 /** Convoy movement as seen now: the remaining route, walked until its arrival clock. */
 function trackOf(view: GameView, army: ArmyView) {
@@ -111,6 +78,7 @@ function SendForm({
   bases,
   allowCargo = false,
   defaultTroops = 50,
+  minTroops = 1,
   preview,
 }: {
   view: GameView;
@@ -122,15 +90,19 @@ function SendForm({
   /** Target is an own base: offer to carry resources along. */
   allowCargo?: boolean;
   defaultTroops?: number;
+  /** Fewer troops than this cannot be sent (e.g. a chest's requirement). */
+  minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
   const [chosen, setTroops] = useState(defaultTroops);
-  const [cards, setCards] = useState<CardType[]>([]);
+  const [useCard, setUseCard] = useState(true);
   const [cargo, setCargo] = useState<Resources>(emptyResources);
-  const forced = cards.includes('forcedMarch');
+  const activeCard = view.self.activeCard;
+  const withCard = useCard && activeCard !== null;
+  const forced = withCard && activeCard === 'forcedMarch';
   const nearest = [...bases].sort(
     (a, b) =>
       Number(b.troops > 0) - Number(a.troops > 0) ||
@@ -151,8 +123,7 @@ function SendForm({
   const load = Object.fromEntries(
     RESOURCES.map((r) => [r, Math.min(cargo[r], base.resources[r])]),
   ) as Resources;
-  const marchCards = [...new Set(view.self.cards)].filter((c) => CARDS[c].use === 'march');
-  const valid = Number.isInteger(troops) && troops > 0 && travel !== null;
+  const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
 
   const send = () => {
     gameSocket.send({
@@ -160,10 +131,9 @@ function SendForm({
       from: base.id,
       troops,
       target,
-      cards,
+      useActiveCard: withCard,
       cargo: allowCargo ? load : emptyResources(),
     });
-    setCards([]);
     setCargo(emptyResources());
   };
 
@@ -238,23 +208,18 @@ function SendForm({
           </div>
         </div>
       )}
-      {marchCards.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {marchCards.map((card) => (
-            <label key={card} className="flex items-center gap-1" title={CARDS[card].description}>
-              <input
-                type="checkbox"
-                checked={cards.includes(card)}
-                className="accent-seal"
-                onChange={(e) =>
-                  setCards(e.target.checked ? [...cards, card] : cards.filter((c) => c !== card))
-                }
-              />
-              {CARDS[card].name}
-            </label>
-          ))}
-        </div>
+      {activeCard && (
+        <label className="flex items-center gap-1" title={CARDS[activeCard].description}>
+          <input
+            type="checkbox"
+            checked={useCard}
+            className="accent-seal"
+            onChange={(e) => setUseCard(e.target.checked)}
+          />
+          Aktive Karte mitschicken: <b>{CARDS[activeCard].name}</b>
+        </label>
       )}
+      {troops < minTroops && <div className="text-seal">Mindestens {minTroops} Truppen nötig.</div>}
       {preview && <div className="text-ink-soft">{preview(troops)}</div>}
       <div className="flex items-center justify-between gap-2">
         <span className={travel === null ? 'text-seal' : 'text-ink-soft'}>
@@ -375,6 +340,11 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
           Ladung: {formatResources(army.cargo)}
         </div>
       )}
+      {army.chest && (
+        <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">
+          <ChestIcon size={18} /> Bringt eine Truhe heim — kann nicht überfallen werden.
+        </div>
+      )}
       {(army.fog || army.stealth || army.forcedMarch) && (
         <div className="text-xs text-sea-dark italic">
           {[army.fog && 'Nebel', army.stealth && 'Tarnung', army.forcedMarch && 'Eilmarsch']
@@ -460,21 +430,19 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       return (
         <>
           <Title icon={<CastleIcon color={cssColor(color)} size={22} />}>
-            Stützpunkt {outpost.name}
+            {own ? 'Dein Stützpunkt' : outpostLabel(view, outpost)}
           </Title>
           <div>
-            {outpost.ownerId
-              ? own
-                ? 'Dein Stützpunkt'
-                : `gehört ${playerName(view, outpost.ownerId)}`
-              : 'unbewohnt'}{' '}
-            · {outpost.troops} Truppen
+            {outpost.ownerId ? '' : 'Verfallen und unbesetzt · '}
+            {outpost.troops} Truppen
           </div>
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
           <p className="mt-1 text-xs text-ink-soft">
             {own
               ? 'Truppen und Ressourcen lassen sich hier sammeln. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.'
-              : 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'}
+              : outpost.ownerId
+                ? 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'
+                : 'Wer die Ruine einnimmt, baut sie als eigenen Stützpunkt wieder auf.'}
           </p>
           <SendForm
             key={selection.id}
@@ -527,9 +495,12 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       return (
         <>
           <Title icon={<ChestIcon size={26} />}>Truhe</Title>
+          <div>
+            Zum Öffnen braucht es <b>{chest.troopsNeeded} Truppen</b>.
+          </div>
           <div className="text-ink-soft">
-            Enthält eine Spezialkarte. Wer zuerst ankommt, bekommt sie; danach kehren die Truppen
-            heim.
+            Enthält eine Spezialkarte. Wer zuerst mit genug Truppen ankommt, birgt sie; die Truppen
+            bringen sie direkt heim und können dabei nicht überfallen werden. Daheim öffnest du sie.
           </div>
           <SendForm
             key={selection.id}
@@ -538,6 +509,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             position={chest.position}
             verb="Hinschicken"
             bases={bases}
+            defaultTroops={chest.troopsNeeded}
+            minTroops={chest.troopsNeeded}
           />
         </>
       );

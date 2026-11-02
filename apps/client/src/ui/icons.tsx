@@ -1,6 +1,7 @@
 import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
 import { alarm, castle, chest, dataUrl, resourceIcon, soldiers } from '../art/svg';
 import type { ReactNode } from 'react';
+import { cardColor } from '../game/format';
 
 // HUD icons. Resources come from the shared art (src/art/svg.ts); the small glyphs here mirror
 // the Pixi map glyphs (src/game/glyphs.ts) on the same 24-unit grid.
@@ -125,60 +126,48 @@ export function ShieldIcon({ size = 16, color }: { size?: number; color: string 
   );
 }
 
-const CARD_ART: Record<CardType, { color: string; art: ReactNode }> = {
-  fog: {
-    color: '#8fa3bf',
-    art: (
-      <path
-        d="M-12 0q4-6 8 0q4-6 8 0q4-6 8 0M-10 7q4-6 8 0q4-6 8 0"
-        fill="none"
-        stroke="#fff"
-        strokeWidth={2}
-      />
-    ),
-  },
-  stealth: {
-    color: '#6b5a8e',
-    art: (
-      <g fill="none" stroke="#fff" strokeWidth={2}>
-        <path d="M-11 2q11-11 22 0q-11 11-22 0z" />
-        <circle cy={2} r={3} />
-        <path d="M-10-8l20 20" />
-      </g>
-    ),
-  },
-  forcedMarch: {
-    color: '#e08a3c',
-    art: (
-      <path
-        d="M-12-3h14l-5-5M2-3l-5 5M-4 6h14l-5-5M10 6l-5 5"
-        fill="none"
-        stroke="#fff"
-        strokeWidth={2}
-      />
-    ),
-  },
-  fortify: {
-    color: '#5f9a55',
-    art: (
-      <path
-        d="M-9-8h18v8q0 8-9 11q-9-3-9-11z"
-        fill="#fff"
-        fillOpacity={0.85}
-        stroke={INK}
-        strokeWidth={0.8}
-      />
-    ),
-  },
+const CARD_ART: Record<CardType, ReactNode> = {
+  fog: (
+    <path
+      d="M-12 0q4-6 8 0q4-6 8 0q4-6 8 0M-10 7q4-6 8 0q4-6 8 0"
+      fill="none"
+      stroke="#fff"
+      strokeWidth={2}
+    />
+  ),
+  stealth: (
+    <g fill="none" stroke="#fff" strokeWidth={2}>
+      <path d="M-11 2q11-11 22 0q-11 11-22 0z" />
+      <circle cy={2} r={3} />
+      <path d="M-10-8l20 20" />
+    </g>
+  ),
+  forcedMarch: (
+    <path
+      d="M-12-3h14l-5-5M2-3l-5 5M-4 6h14l-5-5M10 6l-5 5"
+      fill="none"
+      stroke="#fff"
+      strokeWidth={2}
+    />
+  ),
+  fortify: (
+    <path
+      d="M-9-8h18v8q0 8-9 11q-9-3-9-11z"
+      fill="#fff"
+      fillOpacity={0.85}
+      stroke={INK}
+      strokeWidth={0.8}
+    />
+  ),
 };
 
 export function CardArt({ card, className = '' }: { card: CardType; className?: string }) {
-  const { color, art } = CARD_ART[card];
+  const art = CARD_ART[card];
   return (
     <svg
       viewBox="-20 -12 40 24"
       className={`block border border-ink/70 ${className}`}
-      style={{ background: color }}
+      style={{ background: cardColor(card) }}
       aria-hidden
     >
       {art}

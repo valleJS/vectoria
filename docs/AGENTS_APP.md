@@ -3,7 +3,7 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed Tailwind HUD.
 audience: agent
 category: codemap
-last_verified: 2026-11-01
+last_verified: 2026-11-02
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
 sources_stamp: fd9732a7f89f9a8ac4d828e11431f2cfb133914f
@@ -24,7 +24,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/net/api.ts` | HTTP client for email auth, lobby, admin |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
-| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests, attack alerts, selection, walking armies with cargo markers, raid crosses); click → nearest pick |
+| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests with troop requirement, faded ruins, attack alerts, selection, walking armies with cargo/chest markers, raid crosses); click → nearest pick |
 | `src/game/terrain.ts` | Static map: tile fields → flat vector regions in old-map tones (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector fallbacks (army banner, castle) for colours without art; dashed line/circle helpers |
@@ -32,8 +32,11 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/art/textures.ts` | Rasterises the SVG art once into Pixi textures (`loadMapArt`): decoration sepia-toned, pieces with a parchment cut-out edge |
 | `src/game/palette.ts` | Pixi colours (ink, parchment, seal, sea, resources), heraldic player palette, `sepia()` backdrop toning |
 | `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets |
-| `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target labels |
-| `src/ui/Hud.tsx` | Game overlay: slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box (resources, troops, VP, outposts, activity, shop, cards, logout) bottom-right |
+| `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target and outpost labels, own bases (`ownBases`), card colours |
+| `src/ui/Hud.tsx` | Game overlay: slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box bottom-right: player-wide part (VP, chests to open, activity, cards) above one section per base ("Basis" with shop, then outposts; folds once there are 2+) |
+| `src/ui/ChestOpening.tsx` | Chest-opening overlay: wobbling chest, shake, lid pops, card flips in; opens itself when the store sees new chests at home |
+| `src/ui/Handbook.tsx` | Compass + book bottom-left; opens a two-page handbook (contents left, chapter right, ←/→ keys) on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
+| `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land) / recall / raid (redirect or send, meeting point) for the selected object |
 | `src/ui/JoinScreen.tsx`, `AdminPanel.tsx`, `Panel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails), shared parchment panel/button |
@@ -62,6 +65,10 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
   cut-out edge (`rasterise(…, { outline: true })`). Keep new art on the right side.
 - **Pieces stay readable:** zoomed out, sites and armies grow up to `PIECE_MAX_SCALE` so they
   never shrink below their size at `PIECE_ZOOM`. Every site is its own container in `siteLayer`.
+- **Map size scales with players:** never a fixed image — tiles are 32 world px and all art is
+  sized per tile, so a bigger map is simply more world. `Camera.fit` zooms out to show it all
+  (min zoom 0.25); past ~20 players the piece scale cap is reached and sites get small and
+  crowded on screen.
 - **One label style:** `nameplate()` — italic ink on parchment with ribbon tails in the owner's
   colour (none for neutral info such as outpost stock); proportions follow the font size.
   Gold ground halos mean treasure: chests and convoys carrying resources.

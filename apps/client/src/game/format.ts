@@ -1,9 +1,13 @@
 import {
+  outpostName,
   RESOURCE_NAMES,
   RESOURCES,
   type ArmyTarget,
+  type CardType,
   type GameView,
+  type Outpost,
   type Resources,
+  type Vec2,
 } from '@vectoria/shared';
 import { PLAYER_PALETTE, SELF_COLOR } from './palette';
 
@@ -45,6 +49,11 @@ export function playerName(view: GameView, id: string): string {
   return view.players.find((p) => p.id === id)?.name ?? 'Unbekannt';
 }
 
+/** "Ruine" or "Stützpunkt <owner>". */
+export function outpostLabel(view: GameView, outpost: Outpost): string {
+  return outpostName(outpost.ownerId ? playerName(view, outpost.ownerId) : null);
+}
+
 /** Where an army is headed, as text; `null` target means hidden by a stealth card. */
 export function describeTarget(view: GameView, target: ArmyTarget | null): string {
   if (!target) return 'unbekanntes Ziel';
@@ -57,7 +66,8 @@ export function describeTarget(view: GameView, target: ArmyTarget | null): strin
     }
     case 'outpost': {
       const outpost = view.outposts.find((o) => o.id === target.id);
-      return outpost ? `Stützpunkt ${outpost.name}` : 'Stützpunkt';
+      if (!outpost) return 'Stützpunkt';
+      return outpost.ownerId === view.self.id ? 'deinen Stützpunkt' : outpostLabel(view, outpost);
     }
     case 'chest':
       return 'Truhe';
@@ -74,4 +84,52 @@ export function formatResources(resources: Resources, fallback = 'nichts'): stri
     (r) => `${resources[r]} ${RESOURCE_NAMES[r]}`,
   );
   return parts.length > 0 ? parts.join(', ') : fallback;
+}
+
+/** A place the player's troops can leave from: the home castle (`id` null) or an own outpost. */
+export interface BaseInfo {
+  id: string | null;
+  name: string;
+  position: Vec2;
+  troops: number;
+  resources: Resources;
+}
+
+/** Home castle first ("Basis"), then own outposts, numbered when there are several. */
+export function ownBases(view: GameView): BaseInfo[] {
+  const me = view.players.find((p) => p.id === view.self.id);
+  const outposts = view.outposts.filter((o) => o.ownerId === view.self.id);
+  const bases: BaseInfo[] = me?.castle
+    ? [
+        {
+          id: null,
+          name: 'Basis',
+          position: me.castle,
+          troops: me.homeTroops,
+          resources: view.self.resources,
+        },
+      ]
+    : [];
+  outposts.forEach((o, i) => {
+    bases.push({
+      id: o.id,
+      name: outposts.length > 1 ? `Stützpunkt ${i + 1}` : 'Stützpunkt',
+      position: o.position,
+      troops: o.troops,
+      resources: o.resources,
+    });
+  });
+  return bases;
+}
+
+const CARD_COLORS: Record<CardType, string> = {
+  fog: '#8fa3bf',
+  stealth: '#6b5a8e',
+  forcedMarch: '#e08a3c',
+  fortify: '#5f9a55',
+};
+
+/** Frame colour of a card, shared by the card art, the hand and the card profile. */
+export function cardColor(card: CardType): string {
+  return CARD_COLORS[card];
 }

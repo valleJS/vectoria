@@ -47,12 +47,11 @@ export interface ResourceSpot {
 }
 
 /**
- * A castle that starts empty and can be taken. Its owner can station troops and store resources
- * there; whoever takes it gets everything inside. Everything is public.
+ * A castle that starts as an empty ruin and can be taken (rebuilt). Its owner can station troops
+ * and store resources there; whoever takes it gets everything inside. Everything is public.
  */
 export interface Outpost {
   id: string;
-  name: string;
   position: Vec2;
   ownerId: string | null;
   troops: number;
@@ -61,9 +60,16 @@ export interface Outpost {
   attackedAt?: number;
 }
 
+/** Display name of an outpost: a ruin while unowned, "Stützpunkt <owner>" once rebuilt. */
+export function outpostName(ownerName: string | null): string {
+  return ownerName === null ? 'Ruine' : `Stützpunkt ${ownerName}`;
+}
+
 export interface Chest {
   id: string;
   position: Vec2;
+  /** Only an army of at least this many troops can open it. */
+  troopsNeeded: number;
 }
 
 /** `gathering`: loading at a resource spot; the army heads home with its yield afterwards. */
@@ -88,6 +94,8 @@ export interface ArmyView {
   arriveClock: number;
   /** Resources carried (gathered, plundered, or moved between bases). Always visible. */
   cargo: Resources;
+  /** Carrying an opened chest home. Such an army cannot be raided. */
+  chest: boolean;
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
@@ -116,7 +124,12 @@ export interface SelfState {
   activity: ResourceType | null;
   /** Applies at the next gameday start (10:00). */
   pendingActivity: ResourceType | null;
+  /** Cards in hand; owned by the player, not by a base. */
   cards: CardType[];
+  /** March card armed for the next army sent (still in `cards` until used). */
+  activeCard: CardType | null;
+  /** Chests brought home but not yet opened; opened by the player via `openChest`. */
+  chests: number;
   fortifiedUntil: number | null;
   log: LogEntry[];
 }
