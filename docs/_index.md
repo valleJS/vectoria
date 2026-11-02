@@ -22,3 +22,4 @@ Entry: [`AGENTS.md`](../AGENTS.md).
 | --- | ----- |
 | [adr/0001-monorepo-and-authoritative-server.md](./adr/0001-monorepo-and-authoritative-server.md) | Monorepo layout, authoritative server, shared-source package, imperative Pixi |
 | [adr/0002-prototype-game-rules.md](./adr/0002-prototype-game-rules.md) | Prototype rules, clock model, auth, admin, JSON persistence |
+| [adr/0003-land-routes-outposts-raids-email-login.md](./adr/0003-land-routes-outposts-raids-email-login.md) | Land pathfinding, round-trip gathering, outposts, raids, combat percentages, email login |

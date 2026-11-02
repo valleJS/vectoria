@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { log } from '../logger';
-import type { GameState, SavedGame } from './GameState';
+import type { AnySavedGame, GameState } from './GameState';
 
 const SAVE_INTERVAL_MS = 5_000;
 
@@ -18,10 +18,15 @@ export class Persistence {
     this.file = file;
   }
 
-  async load(): Promise<SavedGame | undefined> {
+  /** Older save versions are upgraded by `GameState`. */
+  async load(): Promise<AnySavedGame | undefined> {
     try {
-      const saved = JSON.parse(await readFile(this.file, 'utf8')) as SavedGame;
-      if (saved.version !== 1) throw new Error(`Unsupported save version ${String(saved.version)}`);
+      const saved = JSON.parse(await readFile(this.file, 'utf8')) as AnySavedGame;
+      if (saved.version !== 1 && saved.version !== 2) {
+        throw new Error(
+          `Unsupported save version ${String((saved as { version: unknown }).version)}`,
+        );
+      }
       log.info(
         `Loaded game from ${this.file} (phase ${saved.phase}, ${saved.players.length} players)`,
       );

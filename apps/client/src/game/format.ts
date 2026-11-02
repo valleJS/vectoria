@@ -1,4 +1,10 @@
-import { RESOURCE_NAMES, type ArmyTarget, type GameView } from '@vectoria/shared';
+import {
+  RESOURCE_NAMES,
+  RESOURCES,
+  type ArmyTarget,
+  type GameView,
+  type Resources,
+} from '@vectoria/shared';
 import { PLAYER_PALETTE, SELF_COLOR } from './palette';
 
 /** Game-clock duration as "3h 20m". */
@@ -49,7 +55,23 @@ export function describeTarget(view: GameView, target: ArmyTarget | null): strin
       const spot = view.spots.find((s) => s.id === target.id);
       return spot ? `${RESOURCE_NAMES[spot.resource]}-Vorkommen` : 'Vorkommen';
     }
+    case 'outpost': {
+      const outpost = view.outposts.find((o) => o.id === target.id);
+      return outpost ? `Stützpunkt ${outpost.name}` : 'Stützpunkt';
+    }
     case 'chest':
       return 'Truhe';
+    case 'army': {
+      const army = view.armies.find((a) => a.id === target.id);
+      return army ? `Zug von ${playerName(view, army.ownerId)}` : 'Truppenzug';
+    }
   }
+}
+
+/** "4 Holz, 2 Gold"; `fallback` when empty. */
+export function formatResources(resources: Resources, fallback = 'nichts'): string {
+  const parts = RESOURCES.filter((r) => resources[r] > 0).map(
+    (r) => `${resources[r]} ${RESOURCE_NAMES[r]}`,
+  );
+  return parts.length > 0 ? parts.join(', ') : fallback;
 }

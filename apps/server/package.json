@@ -15,10 +15,12 @@
     "@vectoria/shared": "^0.1.0",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^6.0.0",
+    "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",

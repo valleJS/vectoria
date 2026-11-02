@@ -3,8 +3,8 @@ import { create } from 'zustand';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'closed';
 
-/** Something selectable on the map: a castle, resource spot, chest, or army. */
-export type Selection = ArmyTarget | { kind: 'army'; id: string };
+/** Something selectable on the map: a castle, outpost, resource spot, chest, or army. */
+export type Selection = ArmyTarget;
 
 const TOKEN_KEY = 'vectoria.token';
 

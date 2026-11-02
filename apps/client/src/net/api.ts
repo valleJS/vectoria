@@ -1,4 +1,13 @@
-import type { AdminAction, AdminState, ApiError, JoinResponse, LobbyInfo } from '@vectoria/shared';
+import type {
+  AdminAction,
+  AdminState,
+  ApiError,
+  AuthStartRequest,
+  AuthStartResponse,
+  AuthVerifyRequest,
+  AuthVerifyResponse,
+  LobbyInfo,
+} from '@vectoria/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
@@ -14,8 +23,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   lobby: () => request<LobbyInfo>('/api/lobby'),
-  join: (name: string) =>
-    request<JoinResponse>('/api/join', { method: 'POST', body: JSON.stringify({ name }) }),
+  authStart: (body: AuthStartRequest) =>
+    request<AuthStartResponse>('/api/auth/start', { method: 'POST', body: JSON.stringify(body) }),
+  authVerify: (body: AuthVerifyRequest) =>
+    request<AuthVerifyResponse>('/api/auth/verify', { method: 'POST', body: JSON.stringify(body) }),
   adminState: (token: string) =>
     request<AdminState>('/api/admin/state', { headers: { authorization: `Bearer ${token}` } }),
   adminAction: (token: string, action: AdminAction) =>

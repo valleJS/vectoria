@@ -1,12 +1,12 @@
 ---
 type: Codemap
-description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, WebSocket + HTTP API, Postgres/Redis wiring.
+description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, email login, WebSocket + HTTP API, Postgres/Redis wiring.
 audience: agent
 category: codemap
-last_verified: 2026-10-30
+last_verified: 2026-11-01
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 63d84a40a61e6dab14eafa95a6291e77a2b054e5
+sources_stamp: fd9732a7f89f9a8ac4d828e11431f2cfb133914f
 ---
 
 # Server codemap (`apps/server`)
@@ -21,21 +21,24 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/index.ts` | Startup order, load save, loop → broadcast wiring, graceful shutdown (saves) |
 | `src/config.ts` | Env parsing + defaults (loads `.env` via `process.loadEnvFile`) |
 | `src/services.ts` | Optional Postgres + Redis connect/close |
-| `src/game/GameState.ts` | Authoritative game: phases, commands, clock advance, arrivals, combat, views |
+| `src/game/GameState.ts` | Authoritative game: phases, commands, bases, clock advance, arrivals, combat, raids, feed, views, save migration |
 | `src/game/calendar.ts` | Mon–Fri 10–18 schedule in a time zone; downtime catch-up |
-| `src/game/world.ts` | Map sizing + castle/spot/chest placement |
-| `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s |
+| `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
+| `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
+| `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
+| `src/mail.ts` | nodemailer SMTP transport; logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
 | `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation |
 | `src/net/GameServer.ts` | `ws` on `/ws`: token auth, message dispatch, rate limit, heartbeat, per-player `state` |
-| `src/net/http.ts` | `/healthz`, `/api/join`, `/api/lobby`, `/api/admin/*` |
+| `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*` |
 | `src/db/schema.ts`, `client.ts` | Drizzle schema + `pg` pool |
 | `drizzle/` | Generated migrations (`npm run db:generate`) |
 
 ## Tick flow
 
 `GameLoop` fires every `1000 / TICK_RATE` ms → `GameState.update(dt)` (advance the gameday clock
-if inside game hours, resolve arrivals in clock order, start a new gameday on rollover) →
+if inside game hours, resolve army events — arrivals, end of loading — in clock order, start a
+new gameday on rollover) →
 `GameServer.broadcastState` (one filtered view per client). Commands mutate state only through
 `GameState` methods, which throw `RuleError` for disallowed moves (sent back as `rejected`).
 
@@ -52,4 +55,7 @@ if inside game hours, resolve arrivals in clock order, start a new gameday on ro
 | `VICTORY_POINTS_TO_WIN` | `25` | |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
 | `ALLOWED_ORIGINS` | empty = any | comma list; **set in production** |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | unset / `587` / `false` | **host required in production**; unset = codes in the log |
+| `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | unset / unset / `Vectoria <vectoria@localhost>` | |
+| `PUBLIC_URL` | request `Origin` | base for login links in emails |
 | `DATABASE_URL` / `REDIS_URL` | unset = disabled | if set, connection failure is fatal |

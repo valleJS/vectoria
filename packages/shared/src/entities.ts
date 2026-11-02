@@ -9,11 +9,22 @@ export interface Vec2 {
 /** `registration` → admin starts → `running` → admin ends or a player reaches the VP goal → `ended`. */
 export type GamePhase = 'registration' | 'running' | 'ended';
 
-/** What an army is marching to. Castles are keyed by their owner's player id. */
+/**
+ * What an army is marching to. Castles are keyed by their owner's player id, armies by army id
+ * (an `army` target is a raid on a convoy heading home).
+ */
 export interface ArmyTarget {
-  kind: 'castle' | 'spot' | 'chest';
+  kind: 'castle' | 'outpost' | 'spot' | 'chest' | 'army';
   id: string;
 }
+
+export const ARMY_TARGET_KINDS: readonly ArmyTarget['kind'][] = [
+  'castle',
+  'outpost',
+  'spot',
+  'chest',
+  'army',
+];
 
 export interface PlayerPublic {
   id: string;
@@ -33,12 +44,26 @@ export interface ResourceSpot {
   position: Vec2;
 }
 
+/**
+ * A castle that starts empty and can be taken. Its owner can station troops and store resources
+ * there; whoever takes it gets everything inside. Everything is public.
+ */
+export interface Outpost {
+  id: string;
+  name: string;
+  position: Vec2;
+  ownerId: string | null;
+  troops: number;
+  resources: Resources;
+}
+
 export interface Chest {
   id: string;
   position: Vec2;
 }
 
-export type ArmyStatus = 'outbound' | 'stationed' | 'returning';
+/** `gathering`: loading at a resource spot; the army heads home with its yield afterwards. */
+export type ArmyStatus = 'outbound' | 'gathering' | 'returning';
 
 /** An army as one player sees it; card effects null out details for everyone but the owner. */
 export interface ArmyView {
@@ -51,10 +76,14 @@ export interface ArmyView {
   from: Vec2;
   /** Null when hidden by a stealth card. */
   to: Vec2 | null;
+  /** Route still ahead, starting at `position`, along land. Null when hidden by stealth. */
+  route: Vec2[] | null;
   target: ArmyTarget | null;
-  /** Game clock at departure / arrival; null while stationed. */
-  departClock: number | null;
-  arriveClock: number | null;
+  /** Game clock when the current leg started / ends (for `gathering`: loading done). */
+  departClock: number;
+  arriveClock: number;
+  /** Resources carried (gathered, plundered, or moved between bases). Always visible. */
+  cargo: Resources;
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
@@ -65,10 +94,19 @@ export interface LogEntry {
   text: string;
 }
 
+/** A public event in the live ticker. `armyId` links to the army it is about, if any. */
+export interface FeedEntry {
+  at: number;
+  kind: 'march' | 'battle' | 'gather' | 'chest' | 'outpost' | 'day';
+  text: string;
+  armyId?: string;
+}
+
 /** The player's own private state. */
 export interface SelfState {
   id: string;
   name: string;
+  /** Resources stored in the home castle — the only ones that can be spent. */
   resources: Resources;
   /** Activity that paid out today. */
   activity: ResourceType | null;
@@ -98,7 +136,10 @@ export interface GameView {
   winnerId: string | null;
   players: PlayerPublic[];
   spots: ResourceSpot[];
+  outposts: Outpost[];
   chests: Chest[];
   armies: ArmyView[];
+  /** Live ticker, newest first. */
+  feed: FeedEntry[];
   self: SelfState;
 }

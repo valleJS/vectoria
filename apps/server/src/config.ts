@@ -42,6 +42,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const adminToken = optional('ADMIN_TOKEN') ?? (isProduction ? undefined : 'admin');
 if (!adminToken) throw new Error('ADMIN_TOKEN must be set in production');
 
+const smtpHost = optional('SMTP_HOST');
+if (isProduction && !smtpHost) throw new Error('SMTP_HOST must be set in production (email login)');
+
 export const config = {
   isProduction,
   host: optional('HOST') ?? '0.0.0.0',
@@ -62,6 +65,20 @@ export const config = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  /** Unset = login codes are printed to the server log instead of emailed (dev only). */
+  smtp: smtpHost
+    ? {
+        host: smtpHost,
+        port: positiveInt('SMTP_PORT', 587),
+        /** true = TLS from the start (port 465); false = STARTTLS upgrade. */
+        secure: oneOf('SMTP_SECURE', ['true', 'false'] as const, 'false') === 'true',
+        user: optional('SMTP_USER'),
+        pass: optional('SMTP_PASS'),
+      }
+    : null,
+  mailFrom: optional('MAIL_FROM') ?? 'Vectoria <vectoria@localhost>',
+  /** Base URL for login links in emails; falls back to the request's Origin header. */
+  publicUrl: optional('PUBLIC_URL')?.replace(/\/+$/, ''),
   databaseUrl: optional('DATABASE_URL'),
   redisUrl: optional('REDIS_URL'),
 };

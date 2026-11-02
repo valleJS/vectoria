@@ -1,12 +1,12 @@
 ---
 type: Codemap
-description: Game rules of the prototype — phases, gameday clock, economy, armies, combat, chests and cards — and where each rule lives in code.
+description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-10-30
+last_verified: 2026-11-01
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 63d84a40a61e6dab14eafa95a6291e77a2b054e5
+sources_stamp: fd9732a7f89f9a8ac4d828e11431f2cfb133914f
 ---
 
 # Game rules (prototype)
@@ -38,29 +38,57 @@ registration (closed system). The map is generated at start, sized by `mapSizeFo
 | ----- | ---- |
 | Resources | wood, stone, gold (`Holz`, `Stein`, `Gold`) |
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
-| Troops | 10 for 1 wood + 1 gold; one generic troop type |
+| Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
 | Victory point | 1 wood + 2 stone + 1 gold |
+| Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
-| Gathering | troops stationed at a spot yield 10 per 100 troops per gameday, credited continuously |
+| Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from |
+
+## Bases and outposts
+
+- A player's **bases** are the home castle plus owned outposts. Armies leave from a base
+  (`sendArmy.from`, null = home) and return to it; if that outpost was lost meanwhile, they go home.
+- **Outposts** (`OUTPOSTS_PER_PLAYER`, min `MIN_OUTPOSTS`) start neutral and empty, placed on
+  contested ground between castles (`world.placeOutposts`). Arriving at an own outpost deposits
+  troops and cargo; at a foreign one it is an assault.
+- Moving troops between own bases may carry `cargo` (no capacity limit). Cargo is only allowed
+  when the target is an own base.
 
 ## Armies
 
-- Sent from the castle to a castle (attack), resource spot (gather) or chest. Straight line,
-  terrain ignored. Crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
-- Recall anytime: returns from the current interpolated position, duration by distance.
-- Arriving at a chest: first army gets a random card, then auto-returns.
-- Everything is visible to everyone, including home troops. Card effects null out fields in the
-  per-player view (`GameState.armyView`).
+- Movement follows land: A* over the tile grid (8 directions, no corner cutting past water),
+  then straightened where a direct line keeps clearance from water (`shared/pathfinding.ts`).
+  Travel time is path length; crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
+  All sites sit on the largest connected landmass (`world.mainlandTiles`).
+- Recall anytime unless already returning: heads home from the current position.
+- Redirect (`redirectArmy`): an outbound or gathering army without cargo can get a new target.
+- Arriving at a chest: first army gets a random card, then returns.
+- The way home is never hidden (stealth is dropped on return); cargo is always visible.
+- Everything is visible to everyone. Fog/stealth null out fields in `GameState.armyView`.
 
 ## Combat
 
-On arrival at an enemy castle: attacker troops vs. defender's **home** troops × 1.5 if fortified.
-Attacker wins only if strictly greater: defenders all die, attacker loses the defence value and
-returns with 50 % of each defender resource. Otherwise the attacker army dies and the defender
-loses `ceil(attackers / multiplier)` troops. VP are never stolen.
+One rule for castles, outposts and raids (`battleLosses` in `rules.ts`). The attacker wins only
+with strictly more strength (home castles: defenders × 1.5 while fortified). Nobody loses more
+troops than the other side brought (stops 1-troop harassment).
+
+| Outcome | Attacker loses | Defender loses | Spoils |
+| ------- | -------------- | -------------- | ------ |
+| Attacker wins | 25 % | 50 % | castle: 50 % of home resources; outpost: ownership + all stock (defending survivors flee home); convoy: all cargo |
+| Defender wins | 100 % | 25 % | — |
+
+**Raids**: a returning army carrying cargo can be ambushed by an army sent from a base or
+redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
+raider reaches no later than the convoy; if the convoy gets home first, the raid is refused.
+The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
+VP are never stolen.
+
+## Live ticker
+
+`GameState.addFeed` keeps the last 60 public events (marches, battles, gathering returns, chests,
+outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied.
 
 ## Cards
-
 | Card | Use | Effect |
 | ---- | --- | ------ |
 | Nebel (`fog`) | on send | others see `?` for troop count |

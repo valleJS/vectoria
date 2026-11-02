@@ -33,7 +33,7 @@ export interface GameServerOptions {
 }
 
 /**
- * WebSocket endpoint. Connections authenticate with `?token=` from `POST /api/join`; each client
+ * WebSocket endpoint. Connections authenticate with `?token=` from `POST /api/auth/verify`; each client
  * gets its own filtered `state` view, because card effects hide details from other players.
  */
 export class GameServer {
@@ -155,9 +155,18 @@ export class GameServer {
         case 'buy':
           return this.state.buy(playerId, message.item, message.count);
         case 'sendArmy':
-          return this.state.sendArmy(playerId, message.troops, message.target, message.cards);
+          return this.state.sendArmy(
+            playerId,
+            message.from,
+            message.troops,
+            message.target,
+            message.cards,
+            message.cargo,
+          );
         case 'recallArmy':
           return this.state.recallArmy(playerId, message.armyId);
+        case 'redirectArmy':
+          return this.state.redirectArmy(playerId, message.armyId, message.target);
         case 'playCard':
           return this.state.playCard(playerId, message.card);
       }

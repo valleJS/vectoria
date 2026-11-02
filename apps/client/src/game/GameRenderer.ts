@@ -1,4 +1,11 @@
-import type { GameView, MapData, Vec2 } from '@vectoria/shared';
+import {
+  hasResources,
+  RESOURCES,
+  type ArmyView,
+  type GameView,
+  type MapData,
+  type Vec2,
+} from '@vectoria/shared';
 import {
   Application,
   Container,
@@ -11,9 +18,9 @@ import {
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import { useGameStore, type Selection } from '../state/store';
 import { Camera } from './Camera';
-import { playerColor } from './format';
-import { dashedCircle, dashedLine, drawBanner, drawCastle } from './glyphs';
-import { INK, PARCHMENT, SEA, SERIF } from './palette';
+import { formatResources, playerColor } from './format';
+import { dashedCircle, dashedPolyline, drawBanner, drawCastle } from './glyphs';
+import { CARGO_GOLD, INK, NEUTRAL_COLOR, PARCHMENT, SEA, SERIF } from './palette';
 import { buildTerrain, type Clearing, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
@@ -23,8 +30,8 @@ const PICK_RADIUS_TILES = 0.9;
 /** Selection ring rotation, radians per second. */
 const SELECTION_SPIN = 0.6;
 const FORTIFY_BLUE = 0x3b6ea5;
-/** Screen space the HUD covers (Hud.tsx: top bar, w-72 left column, w-80 sidebar + gaps). */
-const HUD_INSETS = { top: 60, left: 300, right: 336 };
+/** Screen space the HUD covers (Hud.tsx: top bar, w-80 ticker, w-80 right column + gaps). */
+const HUD_INSETS = { top: 52, left: 336, right: 336 };
 
 /** Sprite of map art, `width` world px wide, anchored at its ground point. */
 function artSprite(art: ArtTexture, width: number): Sprite {
@@ -40,9 +47,13 @@ interface ArmySprite {
   figure: Container;
   plate: Graphics;
   label: Text;
+  /** Halo + resource icon + amount, shown while the army carries resources. */
+  cargo: Container;
   target: PointData;
   /** Colour + status the banner was last drawn with, so it is only redrawn on change. */
   look: string;
+  /** Cargo the marker was last drawn for. */
+  cargoKey: string;
 }
 
 /** Owns the Pixi application and draws store state. Created and destroyed by <GameCanvas>. */
@@ -143,6 +154,10 @@ export class GameRenderer {
       ...this.view.players.flatMap((p) =>
         p.castle ? [{ selection: { kind: 'castle' as const, id: p.id }, position: p.castle }] : [],
       ),
+      ...this.view.outposts.map((o) => ({
+        selection: { kind: 'outpost' as const, id: o.id },
+        position: o.position,
+      })),
       ...this.view.spots.map((s) => ({
         selection: { kind: 'spot' as const, id: s.id },
         position: s.position,
@@ -191,6 +206,7 @@ export class GameRenderer {
           ...view.players.flatMap((p) =>
             p.castle ? [{ ...p.castle, radius: 1.4, open: true }] : [],
           ),
+          ...view.outposts.map((o) => ({ ...o.position, radius: 1.1, open: true })),
           ...view.spots.map((s) => ({ ...s.position, radius: 0.75, open: false })),
         ]
       : [];
@@ -211,7 +227,14 @@ export class GameRenderer {
   /** Castles, spots and chests change rarely; redraw them wholesale when anything differs. */
   private drawSites(view: GameView | null, selfId: string | null): void {
     const key = view
-      ? JSON.stringify([selfId, view.players, view.spots.length, view.chests, this.map?.width])
+      ? JSON.stringify([
+          selfId,
+          view.players,
+          view.outposts,
+          view.spots.length,
+          view.chests,
+          this.map?.width,
+        ])
       : '';
     if (key === this.sitesKey) return;
     this.sitesKey = key;
@@ -222,6 +245,7 @@ export class GameRenderer {
     // Keep castles, spots and chests readable: no trees or peaks on top of them.
     this.built?.clearAround([
       ...view.players.flatMap((p) => (p.castle ? [{ ...this.px(p.castle), radius: 36 * u }] : [])),
+      ...view.outposts.map((o) => ({ ...this.px(o.position), radius: 28 * u })),
       ...view.spots.map((s) => ({ ...this.px(s.position), radius: 18 * u })),
       ...view.chests.map((c) => ({ ...this.px(c.position), radius: 18 * u })),
     ]);
@@ -236,6 +260,29 @@ export class GameRenderer {
       const sprite = artSprite(this.art.chest, 30 * u);
       sprite.position.copyFrom(this.px(chest.position));
       this.siteLayer.addChild(sprite);
+    }
+
+    for (const outpost of view.outposts) {
+      const color = outpost.ownerId ? playerColor(view, outpost.ownerId) : NEUTRAL_COLOR;
+      const site = new Container();
+      site.position.copyFrom(this.px(outpost.position));
+      const art = this.art.castles.get(color);
+      let building: Container;
+      if (art) {
+        building = artSprite(art, 40 * u);
+        (building as Sprite).anchor.y = 0.6;
+      } else {
+        building = drawCastle(new Graphics(), color, u * 0.7);
+      }
+      if (!outpost.ownerId) building.alpha = 0.8;
+      const plate = this.nameplate(`${outpost.name} · ${outpost.troops}`, color, u, 17 * u);
+      site.addChild(building, plate);
+      if (hasResources(outpost.resources)) {
+        const stock = this.label(`Lager: ${formatResources(outpost.resources)}`, 10 * u, INK, true);
+        stock.position.set(0, 46 * u);
+        site.addChild(stock);
+      }
+      this.siteLayer.addChild(site);
     }
 
     for (const player of view.players) {
@@ -271,10 +318,9 @@ export class GameRenderer {
   }
 
   /** Parchment label with ribbon tails in the owner's colour, below a castle. */
-  private nameplate(text: string, color: number, u: number): Container {
+  private nameplate(text: string, color: number, u: number, top = 23 * u): Container {
     const label = this.label(text, 13 * u, INK, true);
     const w = label.width + 14 * u;
-    const top = 23 * u;
     const h = 17 * u;
     const plate = new Graphics();
     for (const side of [-1, 1]) {
@@ -314,23 +360,39 @@ export class GameRenderer {
     for (const army of view.armies) {
       seen.add(army.id);
       const color = playerColor(view, army.ownerId);
+      const carrying = hasResources(army.cargo);
       const target = this.px(army.position);
-      if (army.to && army.status !== 'stationed') {
-        const to = this.px(army.to);
-        const alpha = army.status === 'returning' ? 0.5 : 1;
-        dashedLine(this.routes, target, to, 7 * u, 5 * u).stroke({
+      if (army.route && army.status !== 'gathering') {
+        const route = army.route.map((p) => this.px(p));
+        const to = route[route.length - 1]!;
+        const alpha = army.status === 'returning' && !carrying ? 0.5 : 1;
+        dashedPolyline(this.routes, route, 7 * u, 5 * u).stroke({
           width: 4 * u,
           color: INK,
           alpha: alpha * 0.8,
           cap: 'round',
         });
-        dashedLine(this.routes, target, to, 7 * u, 5 * u).stroke({
+        dashedPolyline(this.routes, route, 7 * u, 5 * u).stroke({
           width: 2.4 * u,
-          color,
+          color: carrying ? CARGO_GOLD : color,
           alpha,
           cap: 'round',
         });
-        if (army.status === 'outbound') {
+        if (army.target?.kind === 'army') {
+          // Raid: crossed strokes where the ambush is planned.
+          const r = 8 * u;
+          this.routes
+            .moveTo(to.x - r, to.y - r)
+            .lineTo(to.x + r, to.y + r)
+            .moveTo(to.x + r, to.y - r)
+            .lineTo(to.x - r, to.y + r)
+            .stroke({ width: 3.2 * u, color: INK, cap: 'round' })
+            .moveTo(to.x - r, to.y - r)
+            .lineTo(to.x + r, to.y + r)
+            .moveTo(to.x + r, to.y - r)
+            .lineTo(to.x - r, to.y + r)
+            .stroke({ width: 1.8 * u, color, cap: 'round' });
+        } else if (army.status === 'outbound') {
           this.routes.circle(to.x, to.y, 14 * u).stroke({ width: 1.6 * u, color, alpha: 0.9 });
         }
       }
@@ -341,11 +403,12 @@ export class GameRenderer {
         const figure = new Container();
         const plate = new Graphics();
         const label = this.label('', 11 * u, INK);
+        const cargo = new Container();
         label.position.set(0, 9 * u);
-        container.addChild(figure, plate, label);
+        container.addChild(cargo, figure, plate, label);
         container.position.copyFrom(target);
         this.armyLayer.addChild(container);
-        sprite = { container, figure, plate, label, target, look: '' };
+        sprite = { container, figure, plate, label, cargo, target, look: '', cargoKey: '' };
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
@@ -355,9 +418,17 @@ export class GameRenderer {
         for (const child of sprite.figure.removeChildren()) child.destroy();
         const art = this.art.banners.get(color);
         sprite.figure.addChild(art ? artSprite(art, 32 * u) : drawBanner(new Graphics(), color, u));
-        sprite.container.alpha = army.status === 'returning' ? 0.75 : 1;
+        sprite.container.alpha = army.status === 'returning' && !carrying ? 0.75 : 1;
       }
-      const text = army.troops === null ? '?' : String(army.troops);
+      const cargoKey = JSON.stringify(army.cargo);
+      if (cargoKey !== sprite.cargoKey) {
+        sprite.cargoKey = cargoKey;
+        this.drawCargo(sprite, army, u);
+        sprite.container.alpha = army.status === 'returning' && !carrying ? 0.75 : 1;
+      }
+      const text =
+        (army.troops === null ? '?' : String(army.troops)) +
+        (army.status === 'gathering' ? ' · sammelt' : '');
       if (text !== sprite.label.text) {
         sprite.label.text = text;
         const w = sprite.label.width + 8 * u;
@@ -376,14 +447,32 @@ export class GameRenderer {
     }
   }
 
+  /** Gold halo, the main resource's icon and the total load, so convoys stand out. */
+  private drawCargo(sprite: ArmySprite, army: ArmyView, u: number): void {
+    for (const child of sprite.cargo.removeChildren()) child.destroy();
+    if (!hasResources(army.cargo)) return;
+    const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
+    const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);
+    const halo = new Graphics()
+      .ellipse(0, 10 * u, 17 * u, 6 * u)
+      .fill({ color: CARGO_GOLD, alpha: 0.35 })
+      .stroke({ width: 1.6 * u, color: CARGO_GOLD });
+    const icon = artSprite(this.art.resources[main], 18 * u);
+    icon.position.set(14 * u, -12 * u);
+    const amount = this.label(`+${total}`, 10 * u, INK);
+    amount.position.set(14 * u, -1 * u);
+    sprite.cargo.addChild(halo, icon, amount);
+  }
+
   private drawSelection(selection: Selection | null): void {
     this.selectionRing.clear();
     if (!selection || !this.view || !this.map) return;
     const position = this.selectionPosition(selection, this.view);
     if (!position) return;
     this.selectionRing.position.copyFrom(this.px(position));
-    const radius = (selection.kind === 'castle' ? 38 : 22) * this.unit;
-    dashedCircle(this.selectionRing, radius, 14).stroke({
+    const radius = selection.kind === 'castle' ? 38 : selection.kind === 'outpost' ? 30 : 22;
+    const scaled = radius * this.unit;
+    dashedCircle(this.selectionRing, scaled, 14).stroke({
       width: 2.5 * this.unit,
       color: INK,
       cap: 'round',
@@ -396,6 +485,8 @@ export class GameRenderer {
         return view.armies.find((a) => a.id === selection.id)?.position ?? null;
       case 'castle':
         return view.players.find((p) => p.id === selection.id)?.castle ?? null;
+      case 'outpost':
+        return view.outposts.find((o) => o.id === selection.id)?.position ?? null;
       case 'spot':
         return view.spots.find((s) => s.id === selection.id)?.position ?? null;
       case 'chest':
