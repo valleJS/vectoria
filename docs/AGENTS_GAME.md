@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 4da8946e2d64a0dfb1a125a3ffcce8949ae02e0f
+sources_stamp: f400dda4a7f43c84163934d8ecda0531559e2be9
 ---
 
 # Game rules (prototype)
@@ -30,7 +30,7 @@ returns to registration, keeping registrations.
 land as the game grows (≈365 tiles each at 2 players, ≈92 at 100). Travel time is relative to the
 map width (`travelMs`: crossing = `CROSS_MAP_HOURS`), so neighbours move closer **in time**,
 roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players ≈8 h, 9 ≈4 h,
-20 ≈2.4 h, 50 ≈1.4 h. Outposts (0.75/player) and spots (1.5/player) scale with players; chests
+20 ≈2.4 h, 50 ≈1.4 h. Outposts (0.75/player) and spots (up to 1.5/player) scale with players; chests
 (3 per gameday), gathering time and costs do not.
 
 ## Game clock
@@ -55,7 +55,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
-| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`; annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left |
+| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`; the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
 
 ## Bases and outposts

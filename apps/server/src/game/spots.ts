@@ -27,6 +27,14 @@ const ATTEMPTS = 4;
 const POLISH_MOVES = 400;
 /** Pull towards short walks overall, weak against balance and the far spot. */
 const MEAN_WEIGHT = 0.3;
+/**
+ * Every spot costs a little, so the layout keeps only spots that help the balance: `count` is an
+ * upper bound, not a quota (otherwise spare spots pile up as duplicates next to one castle).
+ */
+const SPOT_COST = 0.5;
+/** Spots of the same resource closer than this (tiles) are penalised as redundant. */
+const SAME_GAP = 5;
+const SAME_WEIGHT = 2;
 
 export interface SpotPlacement {
   resource: ResourceType;
@@ -48,9 +56,9 @@ export function tilesFor(map: MapData, hours: number): number {
 }
 
 /**
- * Places `count` resource spots so every castle has about the same total walk to its nearest
- * wood, stone and gold (along land, water respected), with one of the three at least
- * `SPOT_FAR_HOURS` away. Simulated annealing on Dijkstra distance fields, then a polish on the
+ * Places up to `count` resource spots (at least one per resource) so every castle has about the
+ * same total walk to its nearest wood, stone and gold (along land, water respected), with one of
+ * the three at least `SPOT_FAR_HOURS` away. Simulated annealing on Dijkstra distance fields, then a polish on the
  * real (straightened) routes armies walk. `land` are the tiles spots may use, `taken` the sites
  * they keep clear of.
  */
@@ -94,7 +102,10 @@ interface Layout {
 
 type Distance = (player: number, tile: number) => number;
 
-/** Lower is better: spread of the totals, missing far distance, crowding, off-terrain, mean. */
+/**
+ * Lower is better: spread of the totals, missing far distance, crowding, off-terrain, mean, spot
+ * count and same-resource clusters.
+ */
 function score(
   map: MapData,
   players: number,
@@ -103,6 +114,8 @@ function score(
 ): { score: number; spread: number; farOk: boolean } {
   // A little margin: the polish may trade a few tenths of a tile away again.
   const far = tilesFor(map, SPOT_FAR_HOURS + 0.1);
+  // Margin the other way: fewer spots are fine only while the spread stays within tolerance.
+  const tolerance = tilesFor(map, SPOT_BALANCE_TOLERANCE_HOURS * 0.8);
   let min = Infinity;
   let max = -Infinity;
   let sum = 0;
@@ -124,22 +137,28 @@ function score(
     farMissing += Math.max(0, far - farthest);
   }
   let crowding = 0;
+  let clustering = 0;
   let offTerrain = 0;
   for (let i = 0; i < spots.length; i++) {
     const a = centre(map, spots[i]!.tile);
     if (map.tiles[spots[i]!.tile] !== SPOT_TERRAIN[spots[i]!.resource]) offTerrain++;
     for (let j = i + 1; j < spots.length; j++) {
-      crowding += Math.max(0, MIN_GAP - distance(a, centre(map, spots[j]!.tile)));
+      const gap = distance(a, centre(map, spots[j]!.tile));
+      crowding += Math.max(0, MIN_GAP - gap);
+      if (spots[i]!.resource === spots[j]!.resource) clustering += Math.max(0, SAME_GAP - gap);
     }
   }
   const spread = max - min;
   return {
     score:
       10 * spread +
+      40 * Math.max(0, spread - tolerance) +
       10 * farMissing +
       5 * crowding +
       0.3 * offTerrain +
-      (MEAN_WEIGHT * sum) / players,
+      (MEAN_WEIGHT * sum) / players +
+      SPOT_COST * spots.length +
+      SAME_WEIGHT * clustering,
     spread,
     farOk: farMissing === 0,
   };
@@ -167,13 +186,20 @@ function anneal(
     const progress = (Date.now() - started) / SEARCH_MS;
     if (progress >= 1) break;
     const temp = startTemp * Math.pow(0.002, progress);
-    const next = spots.map((s) => ({ ...s }));
+    let next = spots.map((s) => ({ ...s }));
     const spot = pick(next);
     const move = random();
-    if (move < 0.15) {
+    const spare = next.filter((s) => s.resource === spot.resource).length > 1;
+    if (move < 0.05) {
+      // Drop a spot, keeping at least one of each resource.
+      if (!spare) continue;
+      next = next.filter((s) => s !== spot);
+    } else if (move < 0.1) {
+      if (next.length >= count) continue;
+      next.push({ tile: pick(candidates), resource: pick(RESOURCES) });
+    } else if (move < 0.2) {
       // Change the resource, keeping at least one spot of each.
-      const resource = pick(RESOURCES);
-      if (next.filter((s) => s.resource === spot.resource).length > 1) spot.resource = resource;
+      if (spare) spot.resource = pick(RESOURCES);
     } else if (move < 0.35) {
       spot.tile = pick(candidates);
     } else {
@@ -219,6 +245,16 @@ function polish(
     const spot = next[Math.floor(random() * next.length)]!;
     spot.tile = nearbyTile(map, spot.tile, 1 + Math.floor(random() * 2), random);
     if (!candidateSet.has(spot.tile)) continue;
+    const value = score(map, players, next, real);
+    if (value.score < current.score) {
+      layout.spots = next;
+      current = value;
+    }
+  }
+  // Last, drop spots that the real routes show to be spare.
+  for (const spot of [...layout.spots]) {
+    if (layout.spots.filter((s) => s.resource === spot.resource).length < 2) continue;
+    const next = layout.spots.filter((s) => s !== spot);
     const value = score(map, players, next, real);
     if (value.score < current.score) {
       layout.spots = next;

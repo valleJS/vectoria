@@ -73,8 +73,11 @@ const MAX_FEED = 60;
 const MAX_NAME_LENGTH = 24;
 /** A raid only lands if the convoy is within this many tiles of the planned meeting point. */
 const RAID_REACH_TILES = 1;
-/** Version of the resource spot layout; older running games are re-laid once on load. */
-const SPOT_LAYOUT = 2;
+/**
+ * Version of the resource spot layout; older running games are re-laid once on load.
+ * 3: spot count is a cap, no same-resource clusters.
+ */
+const SPOT_LAYOUT = 3;
 
 interface PlayerRecord {
   id: string;
