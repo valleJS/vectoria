@@ -42,6 +42,14 @@ export const CROSS_MAP_HOURS = 10;
 export const GATHER_YIELD_PER_100_TROOPS = 10;
 export const GATHER_DURATION_MS = HOUR_MS;
 
+/**
+ * Resource spot balance. For every castle, the walk to its nearest wood + nearest stone + nearest
+ * gold spot adds up to about the same; the totals of all players differ by at most
+ * `SPOT_BALANCE_TOLERANCE_HOURS`. One of the three lies at least `SPOT_FAR_HOURS` away.
+ */
+export const SPOT_BALANCE_TOLERANCE_HOURS = 0.25;
+export const SPOT_FAR_HOURS = 2.5;
+
 /** Neutral outposts on the map: this many per player (at least `MIN_OUTPOSTS`). */
 export const OUTPOSTS_PER_PLAYER = 0.75;
 export const MIN_OUTPOSTS = 2;

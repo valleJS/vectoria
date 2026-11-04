@@ -8,18 +8,12 @@ import {
   type MapData,
   type Outpost,
   type ResourceSpot,
-  type ResourceType,
   type Vec2,
 } from '@vectoria/shared';
 import { generateMap } from './mapgen';
+import { placeBalancedSpots } from './spots';
 import { createRandom } from './random';
 
-/** Preferred terrain for each resource spot; falls back to any land tile. */
-const SPOT_TERRAIN: Record<ResourceType, TileType> = {
-  wood: TileType.Forest,
-  stone: TileType.Mountain,
-  gold: TileType.Mountain,
-};
 const SPOTS_PER_PLAYER = 1.5;
 
 export interface World {
@@ -45,9 +39,7 @@ export function createWorld(players: number, seed: number): World {
   const map = generateMap(size, size, seed);
   const random = createRandom(seed ^ 0x51ed27);
 
-  const mainland = mainlandTiles(map);
-  const inner = (p: Vec2) => p.x > 1 && p.y > 1 && p.x < size - 1 && p.y < size - 1;
-  const land = mainland.filter(inner);
+  const land = innerLand(map);
   if (land.length < players * 4) throw new Error('Generated map has too little land');
 
   // Farthest-point sampling spreads castles evenly across the land.
@@ -64,20 +56,22 @@ export function createWorld(players: number, seed: number): World {
 
   const outposts = placeOutposts(land, castles, taken, outpostCount(players), random);
 
-  const spots: ResourceSpot[] = [];
-  const spotCount = Math.max(RESOURCES.length, Math.round(players * SPOTS_PER_PLAYER));
-  for (let i = 0; i < spotCount; i++) {
-    const resource = RESOURCES[i % RESOURCES.length]!;
-    const preferred = land.filter(
-      (p) => map.tiles[Math.floor(p.y) * size + Math.floor(p.x)] === SPOT_TERRAIN[resource],
-    );
-    const pool = preferred.length >= 4 ? preferred : land;
-    const position = farthestFrom(pool, taken, random);
-    taken.push(position);
-    spots.push({ id: `spot-${i}`, resource, position });
-  }
-
+  const spots = placeBalancedSpots(map, castles, land, taken, spotCount(players), random).map(
+    (s, i): ResourceSpot => ({ id: `spot-${i}`, ...s }),
+  );
   return { map, castles, outposts, spots };
+}
+
+export function spotCount(players: number): number {
+  return Math.max(RESOURCES.length, Math.round(players * SPOTS_PER_PLAYER));
+}
+
+/** Mainland tiles off the map's outer ring: where castles, outposts and spots may stand. */
+export function innerLand(map: MapData): Vec2[] {
+  const { width, height } = map;
+  return mainlandTiles(map).filter(
+    (p) => p.x > 1 && p.y > 1 && p.x < width - 1 && p.y < height - 1,
+  );
 }
 
 /**
