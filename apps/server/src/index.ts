@@ -41,7 +41,7 @@ async function main(): Promise<void> {
 
   const loop = new GameLoop(config.tickRate, (dtMs) => {
     state.update(dtMs);
-    gameServer.broadcastState();
+    gameServer.tick();
   });
 
   await new Promise<void>((resolve) => http.listen(config.port, config.host, resolve));

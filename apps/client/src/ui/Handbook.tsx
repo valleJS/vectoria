@@ -207,7 +207,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Ressourcen im Stützpunkt kannst du nicht ausgeben; bring sie erst heim („Heimholen“).',
             `Zwischen eigenen Burgen lassen sich beliebig viele Ressourcen mitnehmen — beladen aber nur mit ${formatPercent(LOADED_SPEED)} Tempo.`,
-            'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim.',
+            'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort zur Burg um — mit ihrer Ladung.',
             'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
           ]}
         />

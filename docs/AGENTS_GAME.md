@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 945886b400eb16c5ef1abd4ece76d27b2424fd1d
+sources_stamp: 61c76f5ca45f187268b76a9d3bb2899bd57608b7
 ---
 
 # Game rules (prototype)
@@ -57,7 +57,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 ## Bases and outposts
 
 - A player's **bases** are the home castle plus owned outposts. Armies leave from a base
-  (`sendArmy.from`, null = home) and return to it; if that outpost was lost meanwhile, they go home.
+  (`sendArmy.from`, null = home) and return to it. When an outpost falls, `recallFromLostOutpost`
+  turns the former owner's armies heading there (returners and transfers, cargo kept) home on the
+  spot; armies elsewhere that left from it return home later.
 - **Outposts** (`OUTPOSTS_PER_PLAYER`, min `MIN_OUTPOSTS`) start as empty, unowned **ruins**,
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving

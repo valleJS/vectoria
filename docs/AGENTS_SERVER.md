@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 8732dcb61cfe24f74e247d7d90e387d0d1c40670
+sources_stamp: 61c76f5ca45f187268b76a9d3bb2899bd57608b7
 ---
 
 # Server codemap (`apps/server`)
@@ -29,9 +29,9 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
 | `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation; `joinLand` sinks islets and bridges larger islands so all land is one mass |
-| `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` |
+| `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` (1/s + on commands and events) |
 | `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
-| `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`) for the production container |
+| `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`, brotli/gzip for text files, compressed once in memory) for the production container |
 | `src/db/schema.ts`, `client.ts` | Drizzle schema + `pg` pool |
 | `drizzle/` | Generated migrations (`npm run db:generate`) |
 
@@ -40,7 +40,10 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 `GameLoop` fires every `1000 / TICK_RATE` ms → `GameState.update(dt)` (advance the gameday clock
 if inside game hours, resolve army events — arrivals, end of loading — in clock order, start a
 new gameday on rollover) →
-`GameServer.broadcastState` (one filtered view per client). Commands mutate state only through
+`GameServer.tick`, which pushes `broadcastState` (one filtered view per client) once a second
+(`STATE_INTERVAL_MS`), and on the next tick after a player command or a game event
+(`GameState.revision`: arrivals, new gameday). Clients run the clock and army movement on
+themselves in between. Commands mutate state only through
 `GameState` methods, which throw `RuleError` for disallowed moves (sent back as `rejected`).
 
 ## Config (`.env`, see `.env.example`)
