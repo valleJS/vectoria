@@ -82,6 +82,12 @@ const RAID_REACH_TILES = 1;
  * 3: spot count is a cap, no same-resource clusters.
  */
 const SPOT_LAYOUT = 3;
+/**
+ * One-off fixes for running games, applied once on load. 1: gatherers load at the spot of their
+ * resource nearest to their home castle (the re-layout had moved them to the spot nearest the old
+ * one); moved ones carry the load to the home castle.
+ */
+const GATHERER_FIX = 1;
 
 interface PlayerRecord {
   id: string;
@@ -158,6 +164,8 @@ export interface SavedGame {
   feed: FeedEntry[];
   /** Spot layout version (`SPOT_LAYOUT`); absent in saves from before balanced spots. */
   spotLayout?: number;
+  /** Last applied `GATHERER_FIX`; absent in saves from before it. */
+  gathererFix?: number;
 }
 
 /** Save format before email login, outposts and land routes. */
@@ -238,6 +246,7 @@ export class GameState {
     if (saved && this.map && this.data.phase === 'running') {
       this.recallFromLostOutposts();
       if ((this.data.spotLayout ?? 1) < SPOT_LAYOUT) this.relayoutSpots();
+      if ((this.data.gathererFix ?? 0) < GATHERER_FIX) this.moveGatherersToNearestSpot();
     }
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
   }
@@ -874,6 +883,41 @@ export class GameState {
   }
 
   /**
+   * One-off for a running game: every army loading at a spot moves to the spot of the same
+   * resource nearest (over land) to its owner's home castle, and loads there for the time it had
+   * left (`arriveClock` stays). A moved army then carries its load to the home castle, whichever
+   * base it came from, so outposts (lost or not) play no part. Armies already there stay put.
+   */
+  private moveGatherersToNearestSpot(): void {
+    const map = this.map!;
+    for (const army of this.data.armies) {
+      if (army.status !== 'gathering' || army.target.kind !== 'spot') continue;
+      const current = this.data.spots.find((s) => s.id === army.target.id);
+      const owner = this.player(army.ownerId);
+      const home = owner?.castle;
+      if (!current || !owner || !home) continue;
+      const nearest = this.data.spots
+        .filter((s) => s.resource === current.resource)
+        .map((spot) => {
+          const path = findPath(map, home, spot.position);
+          return { spot, length: path ? pathLength(path) : Infinity };
+        })
+        .sort((a, b) => a.length - b.length)[0];
+      if (!nearest || nearest.spot.id === current.id || !Number.isFinite(nearest.length)) continue;
+      army.target = { kind: 'spot', id: nearest.spot.id };
+      army.path = [nearest.spot.position];
+      army.baseId = null;
+      this.addLog(
+        owner,
+        `Dein Zug (${army.troops}) lädt jetzt am nächsten ${RESOURCE_NAMES[current.resource]}-Vorkommen weiter und bringt die Ladung zur Burg.`,
+      );
+    }
+    this.data.gathererFix = GATHERER_FIX;
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /**
    * On load: armies still heading for an outpost their owner has lost meanwhile (saved before
    * `recallFromLostOutpost` existed) turn home now. Only certain cases: returners, and transfers
    * recognisable by their cargo; an empty march on a foreign outpost may be a deliberate attack.
@@ -1108,6 +1152,7 @@ export class GameState {
     this.data.spots = world.spots;
     this.data.outposts = world.outposts;
     this.data.spotLayout = SPOT_LAYOUT;
+    this.data.gathererFix = GATHERER_FIX;
     players.forEach((player, i) => {
       player.castle = world.castles[i]!;
       player.homeTroops = STARTING_TROOPS;
