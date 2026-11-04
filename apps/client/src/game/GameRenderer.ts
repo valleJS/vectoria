@@ -33,7 +33,7 @@ import {
   SEAL,
   SERIF,
 } from './palette';
-import { FIRELIGHT, NightScene, type NightLight } from './night';
+import { FIRELIGHT, NightScene, isNightRest, type NightLight } from './night';
 import { buildTerrain, type Clearing, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
@@ -46,6 +46,8 @@ const REPICK_RADIUS_TILES = 0.5;
 const SELECTION_SPIN = 0.6;
 /** Route dashes march toward the target at this many glyph units per second. */
 const ROUTE_FLOW = 14;
+/** At night the armies rest in camp, so their route dashes creep at this share of ROUTE_FLOW. */
+const ROUTE_FLOW_NIGHT = 0.4;
 /** A castle or outpost smokes for this long (game clock) after an assault. */
 const RECENT_ATTACK_MS = HOUR_MS;
 /**
@@ -65,8 +67,6 @@ const GATHER_FLAG_STEP = 10;
 const STACK_RADIUS_TILES = 0.7;
 /** Horizontal spacing (glyph units) of fanned-out armies. */
 const STACK_STEP = 27;
-/** `?night` shows the night rest regardless of the clock (design review, screenshots). */
-const FORCE_NIGHT = new URLSearchParams(window.location.search).has('night');
 /** Selection ring: ink by day, pale moonlight at night. */
 const RING_DAY = INK;
 const RING_NIGHT = 0xf3e6c4;
@@ -395,14 +395,8 @@ export class GameRenderer {
       const { clock, running, timeScale } = view.clock;
       this.clockSync = { clock, at: performance.now(), rate: running ? timeScale : 0 };
     }
-    // Night rest: the game runs but its clock stands still outside gameday hours (not an admin
-    // pause).
     // Only once a view is there, so a game opened at night starts dark instead of fading in.
-    if (view) {
-      this.night.setNight(
-        FORCE_NIGHT || (view.phase === 'running' && !view.clock.running && !view.clock.paused),
-      );
-    }
+    if (view) this.night.setNight(isNightRest(view));
     this.drawSites(view, selfId);
     this.drawArmies(view);
     this.drawAlerts(view);
@@ -1067,7 +1061,9 @@ export class GameRenderer {
       sprite.scale.set(((0.4 + 0.6 * twinkle) * size) / this.art.sparkle.width);
       sprite.rotation = seconds * 0.8 + phase;
     }
-    this.routePhase += (ROUTE_FLOW * u * ticker.deltaMS) / 1000;
+    // Eases with the dusk/dawn fade instead of jumping.
+    const flow = ROUTE_FLOW * (1 - (1 - ROUTE_FLOW_NIGHT) * this.night.amount);
+    this.routePhase += (flow * u * ticker.deltaMS) / 1000;
     this.drawRoutes();
     this.animateAlerts(seconds);
     this.selectionRing.rotation += (SELECTION_SPIN * ticker.deltaMS) / 1000;

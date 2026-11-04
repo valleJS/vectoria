@@ -1,4 +1,4 @@
-import { TileType, type MapData } from '@vectoria/shared';
+import { TileType, type GameView, type MapData } from '@vectoria/shared';
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { MapArt } from '../art/textures';
 import { hash2 } from './fields';
@@ -19,6 +19,17 @@ const FIREFLY = 0xfff3a6;
 const STARLIGHT = 0xe8eeff;
 /** Time constant of the dusk/dawn fade, ms. */
 const FADE_MS = 900;
+
+/** `?night` shows the night rest regardless of the clock (design review, screenshots). */
+const FORCE_NIGHT = new URLSearchParams(window.location.search).has('night');
+
+/**
+ * Night rest: the game runs but its clock stands still outside gameday hours (not an admin
+ * pause). Shared by the map and the HUD, which dims with it (index.css `data-night`).
+ */
+export function isNightRest(view: GameView): boolean {
+  return FORCE_NIGHT || (view.phase === 'running' && !view.clock.running && !view.clock.paused);
+}
 
 /** A light source standing on the map, in world px at piece scale 1. */
 export interface NightLight {

@@ -25,6 +25,7 @@ import {
   playerHeraldry,
   type BaseInfo,
 } from '../game/format';
+import { isNightRest } from '../game/night';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
 import {
@@ -49,7 +50,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button, SectionLabel, Tip } from './Panel';
-import { ChevronDownIcon, ChevronRightIcon, Undo2Icon } from 'lucide-react';
+import { ChevronDownIcon, ChevronRightIcon, MoonIcon, Undo2Icon, XIcon } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Progress } from '@/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -116,6 +117,7 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
           </span>
         </span>
       </span>
+      {!compact && isNightRest(view) && <NightNote />}
       <Tip label={label}>
         <span
           className="ml-auto flex items-center gap-1.5 text-xs text-ink-soft"
@@ -747,6 +749,37 @@ function Notice({ className = 'top-4' }: { className?: string }) {
   );
 }
 
+const NIGHT_TEXT = "Die Truppen rasten im Lager · weiter geht's werktags um 10 Uhr";
+
+/** Night rest in the wide top bar: why nothing moves, and when it goes on. */
+function NightNote() {
+  return (
+    <span className="mx-auto flex min-w-0 items-center gap-2 leading-tight">
+      <MoonIcon className="size-5 shrink-0 text-gold" aria-hidden />
+      <b className="shrink-0 italic">Nachtruhe</b>
+      <span className="truncate text-xs text-ink-soft">{NIGHT_TEXT}</span>
+    </span>
+  );
+}
+
+/** Night rest on phones: a sheet under the top bar that the player can dismiss. */
+function NightBanner({ onClose }: { onClose: () => void }) {
+  return (
+    <Card className="pointer-events-auto w-max max-w-full">
+      <div className="flex items-center gap-2.5 py-1 pr-1 pl-3">
+        <MoonIcon className="size-5 shrink-0 text-gold" aria-hidden />
+        <div className="leading-tight">
+          <b className="italic">Nachtruhe</b>
+          <div className="text-xs text-ink-soft">{NIGHT_TEXT}</div>
+        </div>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Hinweis schließen">
+          <XIcon />
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function EndBanner({ view }: { view: GameView }) {
   if (view.phase !== 'ended') return null;
   const winner = view.players.find((p) => p.id === view.winnerId);
@@ -815,6 +848,10 @@ function CompactHud({ view }: { view: GameView }) {
     setSeenSelection(selection);
     if (selection) setTab('selection');
   }
+  // Dismissed for this night only: the next night shows the banner again.
+  const night = isNightRest(view);
+  const [nightDismissed, setNightDismissed] = useState(false);
+  if (!night && nightDismissed) setNightDismissed(false);
   const color = cssColor(playerColor(view, view.self.id));
   const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
   const tabs: { id: SheetTab; label: string; icon: ReactNode; badge?: number }[] = [
@@ -838,6 +875,11 @@ function CompactHud({ view }: { view: GameView }) {
     <div className="pointer-events-none absolute inset-0 flex flex-col">
       <TopBar view={view} compact />
       <div className="relative min-h-0 flex-1">
+        {night && !nightDismissed && (
+          <div className="absolute inset-x-2 top-2 flex justify-center">
+            <NightBanner onClose={() => setNightDismissed(true)} />
+          </div>
+        )}
         <Notice className="top-2" />
         <div className="absolute inset-x-2 bottom-2 flex flex-col items-center">
           {!tab && <EndBanner view={view} />}

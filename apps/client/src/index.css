@@ -81,6 +81,70 @@ body {
   overscroll-behavior: none;
 }
 
+/* Night rest (App.tsx sets `data-night` on <html>): the map sinks into moonlight, so the HUD
+   dims with it and its sheets glow in the firelight of the map's castles (night.ts FIRELIGHT)
+   instead of glaring. drop-shadow follows each sheet's outline, like the light pools on the map.
+   The fade matches the map's dusk/dawn (FADE_MS). */
+[data-hud] > *,
+[data-slot='dialog-content'],
+[data-slot='tooltip-content'],
+[data-slot='select-content'] {
+  transition: filter 0.9s ease-out;
+}
+:root[data-night] [data-slot='dialog-content'] {
+  filter: brightness(0.9) saturate(0.92) drop-shadow(0 0 3px rgb(255 154 64 / 0.35))
+    drop-shadow(0 0 14px rgb(255 154 64 / 0.22));
+}
+:root[data-night] :is([data-hud] > *, [data-slot='select-content']) {
+  filter: drop-shadow(0 0 3px rgb(255 154 64 / 0.3)) drop-shadow(0 0 14px rgb(255 154 64 / 0.18));
+}
+:root[data-night] [data-slot='tooltip-content'] {
+  filter: drop-shadow(0 0 6px rgb(255 154 64 / 0.3));
+}
+
+/* Night panels: HUD, tooltips and dropdowns turn to moonlit night-blue sheets with pale ink.
+   The ramps swap (parchment dark, ink light), so inverted pieces (tooltips, selected buttons)
+   stay inverted. Dialogs (handbook, chest, cards) keep their day look, only dimmed above.
+   The shadcn semantics are re-declared because :root resolved them against the day ramp. */
+:root[data-night] :is([data-hud], [data-slot='tooltip-content'], [data-slot='select-content']) {
+  --color-parchment: #2b2f45;
+  --color-parchment-dark: #23273a;
+  --color-parchment-deep: #3a4060;
+  --color-ink: #e4dac0;
+  --color-ink-soft: #b5ad98;
+  --color-ink-faint: #858072;
+  --color-seal: #c9503a;
+  --color-seal-light: #dc644c;
+  --color-moss: #7fae55;
+  --color-fortify: #6f9fd6;
+  --color-gold-deep: #e0ab2a;
+  --background: var(--color-parchment);
+  --foreground: var(--color-ink);
+  --card: var(--color-parchment);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-parchment);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-seal);
+  --primary-foreground: #f6eedb;
+  --secondary: color-mix(in srgb, var(--color-parchment-deep) 70%, var(--color-parchment));
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-parchment-dark);
+  --muted-foreground: var(--color-ink-soft);
+  --accent: var(--color-parchment-deep);
+  --accent-foreground: var(--color-ink);
+  --border: color-mix(in srgb, var(--color-ink) 35%, transparent);
+  --input: color-mix(in srgb, var(--color-ink) 50%, transparent);
+  --ring: var(--color-seal);
+}
+/* body resolved its colour against the day ink; HUD text without its own class inherits it. */
+:root[data-night] [data-hud] {
+  color: var(--color-ink);
+}
+/* Text on seal red stays pale, although `text-parchment` now names the dark sheet. */
+:root[data-night] [data-hud] :is(.bg-seal, .bg-primary, [data-state='checked']) {
+  color: #f6eedb;
+}
+
 /* Chest opening (ChestOpening.tsx): idle wobble, shake while opening, lid pops, card flips in. */
 @keyframes chest-wobble {
   0%,
