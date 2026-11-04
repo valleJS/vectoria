@@ -1,4 +1,4 @@
-import type { CardType, Resources, ResourceType } from './rules';
+import { hasResources, type CardType, type Resources, type ResourceType } from './rules';
 
 /** Position in tile units; (x + 0.5, y + 0.5) is the centre of tile (x, y). */
 export interface Vec2 {
@@ -35,6 +35,11 @@ export interface PlayerPublic {
   /** Troops at home — the castle's defence. Public, as everything on the map is visible. */
   homeTroops: number;
   fortified: boolean;
+  /**
+   * The home castle fell: every army and outpost garrison is retreating home, and the player
+   * cannot act until all of them are back.
+   */
+  routed: boolean;
   /** Game clock of the last assault on the home castle, won or lost; null if never attacked. */
   attackedAt: number | null;
   online: boolean;
@@ -94,11 +99,22 @@ export interface ArmyView {
   arriveClock: number;
   /** Resources carried (gathered, plundered, or moved between bases). Always visible. */
   cargo: Resources;
-  /** Carrying an opened chest home. Such an army cannot be raided. */
+  /** Carrying a chest home. The chest cannot be stolen; resource cargo beside it can. */
   chest: boolean;
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
+}
+
+/**
+ * An army that can be ambushed: carrying resources on the march — home, or between own bases.
+ * While its owner is routed (home castle fell), every army of theirs is immune.
+ */
+export function isRaidable(
+  army: Pick<ArmyView, 'status' | 'cargo'>,
+  ownerRouted: boolean,
+): boolean {
+  return !ownerRouted && army.status !== 'gathering' && hasResources(army.cargo);
 }
 
 export interface LogEntry {

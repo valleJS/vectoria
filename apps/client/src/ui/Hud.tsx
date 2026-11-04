@@ -44,6 +44,7 @@ import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
 import { RuleChanges, RuleChangesButton } from './RuleChanges';
 import { compactQuery } from './layout';
 import { Button, SectionLabel } from './Panel';
+import { Locked } from './Routed';
 import { SelectionContent } from './SelectionPanel';
 
 const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = {
@@ -117,9 +118,28 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
             ? `${Math.round(latencyMs)} ms`
             : label}
       </span>
+      <RoutedBadge view={view} compact={compact} />
       {compact && <RuleChangesButton compact />}
       {compact && <HandbookButton />}
     </header>
+  );
+}
+
+/** Seal-red "Handlungsunfähig" stamp in the top bar while the own troops retreat home. */
+function RoutedBadge({ view, compact }: { view: GameView; compact: boolean }) {
+  if (!view.players.find((p) => p.id === view.self.id)?.routed) return null;
+  const away = view.armies
+    .filter((a) => a.ownerId === view.self.id)
+    .reduce((sum, a) => sum + (a.troops ?? 0), 0);
+  const detail = `Burg gefallen — noch ${away} Truppen auf dem Rückzug`;
+  return (
+    <span
+      title={detail}
+      className="shrink-0 animate-pulse border-2 border-seal bg-parchment px-2 py-0.5 text-xs font-bold tracking-wider text-seal uppercase"
+    >
+      Handlungsunfähig
+      {!compact && <span className="ml-2 font-normal tracking-normal normal-case">{detail}</span>}
+    </span>
   );
 }
 
@@ -393,57 +413,66 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
             </span>
           </div>
 
-          {self.chests > 0 && (
-            <Button
-              variant="primary"
-              className="mt-2 flex w-full items-center justify-center gap-1.5"
-              onClick={() => setChestOverlay(true)}
-            >
-              <ChestIcon size={18} />
-              {self.chests === 1 ? 'Truhe öffnen' : `${self.chests} Truhen öffnen`}
-            </Button>
+          {me?.routed && (
+            <div className="mt-2 border border-seal px-2 py-1.5 text-sm text-seal">
+              <b>Deine Burg ist gefallen.</b> Deine Stützpunkte sind aufgegeben, alle Züge ziehen
+              sich zurück — bis alle Truppen daheim sind, kannst du nichts tun.
+            </div>
           )}
 
-          <SectionLabel>Basisaktivität</SectionLabel>
-          <div className="grid grid-cols-3 gap-1.5">
-            {RESOURCES.map((r) => (
+          <Locked>
+            {self.chests > 0 && (
               <Button
-                key={r}
-                variant={self.pendingActivity === r ? 'selected' : 'default'}
-                className="flex items-center justify-center gap-1 px-1"
-                onClick={() => gameSocket.send({ type: 'setActivity', resource: r })}
+                variant="primary"
+                className="mt-2 flex w-full items-center justify-center gap-1.5"
+                onClick={() => setChestOverlay(true)}
               >
-                <ResourceIcon resource={r} size={16} />
-                {RESOURCE_NAMES[r]}
+                <ChestIcon size={18} />
+                {self.chests === 1 ? 'Truhe öffnen' : `${self.chests} Truhen öffnen`}
               </Button>
-            ))}
-          </div>
-          <div className="mt-1 text-xs text-ink-soft">
-            Heute:{' '}
-            {self.activity ? `${RESOURCE_NAMES[self.activity]} (+${DAILY_ACTIVITY_INCOME})` : '—'}
-            {self.pendingActivity && self.pendingActivity !== self.activity && (
-              <> · ab nächstem Spieltag: {RESOURCE_NAMES[self.pendingActivity]}</>
             )}
-          </div>
 
-          <SectionLabel>Karten</SectionLabel>
-          <CardHand view={view} />
+            <SectionLabel>Basisaktivität</SectionLabel>
+            <div className="grid grid-cols-3 gap-1.5">
+              {RESOURCES.map((r) => (
+                <Button
+                  key={r}
+                  variant={self.pendingActivity === r ? 'selected' : 'default'}
+                  className="flex items-center justify-center gap-1 px-1"
+                  onClick={() => gameSocket.send({ type: 'setActivity', resource: r })}
+                >
+                  <ResourceIcon resource={r} size={16} />
+                  {RESOURCE_NAMES[r]}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-1 text-xs text-ink-soft">
+              Heute:{' '}
+              {self.activity ? `${RESOURCE_NAMES[self.activity]} (+${DAILY_ACTIVITY_INCOME})` : '—'}
+              {self.pendingActivity && self.pendingActivity !== self.activity && (
+                <> · ab nächstem Spieltag: {RESOURCE_NAMES[self.pendingActivity]}</>
+              )}
+            </div>
 
-          {bases.length === 1 ? (
-            <>
-              <SectionLabel>Basis</SectionLabel>
-              <HomeBase view={view} base={bases[0]!} />
-            </>
-          ) : (
-            bases.map((base) => (
-              <BaseFold
-                key={base.id ?? 'home'}
-                view={view}
-                base={base}
-                defaultOpen={base.id === null}
-              />
-            ))
-          )}
+            <SectionLabel>Karten</SectionLabel>
+            <CardHand view={view} />
+
+            {bases.length === 1 ? (
+              <>
+                <SectionLabel>Basis</SectionLabel>
+                <HomeBase view={view} base={bases[0]!} />
+              </>
+            ) : (
+              bases.map((base) => (
+                <BaseFold
+                  key={base.id ?? 'home'}
+                  view={view}
+                  base={base}
+                  defaultOpen={base.id === null}
+                />
+              ))
+            )}
+          </Locked>
 
           <div className="mt-2 text-right">
             <button
@@ -652,7 +681,7 @@ function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: bo
   const gatherers = moving.filter(
     (a) => a.status === 'gathering' || (a.status === 'outbound' && a.target?.kind === 'spot'),
   ).length;
-  const convoys = moving.filter((a) => a.status === 'returning' && hasResources(a.cargo)).length;
+  const convoys = moving.filter((a) => hasResources(a.cargo)).length;
   const summary: { label: string; count: number; icon: ReactNode }[] = [
     { label: 'Angriffe', count: attacks, icon: <AlarmIcon size={16} /> },
     { label: 'Überfälle', count: raids, icon: <span className="font-bold text-seal">✕</span> },

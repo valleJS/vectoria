@@ -20,6 +20,7 @@ import {
   gatherYield,
   hasResources,
   HOUR_MS,
+  isRaidable,
   OUTPOST_PLUNDER_SHARE,
   outpostName,
   pathLength,
@@ -56,13 +57,24 @@ import {
 import { dayKey, gameTimeBetween, isGameTime, WEEKDAY_SCHEDULE, type Schedule } from './calendar';
 import { generateMap } from './mapgen';
 import { createRandom } from './random';
-import { createWorld, farthestFrom, mainlandTiles, outpostCount, placeOutposts } from './world';
+import { placeBalancedSpots } from './spots';
+import {
+  createWorld,
+  farthestFrom,
+  innerLand,
+  mainlandTiles,
+  outpostCount,
+  placeOutposts,
+  spotCount,
+} from './world';
 
 const MAX_LOG = 30;
 const MAX_FEED = 60;
 const MAX_NAME_LENGTH = 24;
 /** A raid only lands if the convoy is within this many tiles of the planned meeting point. */
 const RAID_REACH_TILES = 1;
+/** Version of the resource spot layout; older running games are re-laid once on load. */
+const SPOT_LAYOUT = 2;
 
 interface PlayerRecord {
   id: string;
@@ -85,6 +97,8 @@ interface PlayerRecord {
   fortifiedUntil: number | null;
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
+  /** Home castle fell; locked out until every army is home again. Absent in older saves. */
+  routed?: boolean;
   log: LogEntry[];
 }
 
@@ -129,6 +143,8 @@ export interface SavedGame {
   outposts: Outpost[];
   chests: Chest[];
   feed: FeedEntry[];
+  /** Spot layout version (`SPOT_LAYOUT`); absent in saves from before balanced spots. */
+  spotLayout?: number;
 }
 
 /** Save format before email login, outposts and land routes. */
@@ -206,7 +222,10 @@ export class GameState {
       this.map = generateMap(saved.mapSize, saved.mapSize, saved.seed);
     }
     this.data = saved ? this.migrate(saved) : this.emptyGame(options.seed, []);
-    if (saved && this.map && this.data.phase === 'running') this.recallFromLostOutposts();
+    if (saved && this.map && this.data.phase === 'running') {
+      this.recallFromLostOutposts();
+      if ((this.data.spotLayout ?? 1) < SPOT_LAYOUT) this.relayoutSpots();
+    }
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
   }
 
@@ -607,9 +626,12 @@ export class GameState {
       const plunder = takeShare(defender.resources, CASTLE_PLUNDER_SHARE);
       army.troops = Math.max(1, army.troops - losses.attacker);
       addResources(army.cargo, plunder);
+      // A chest out of nowhere, on top of the plunder; the defender's own chests stay put.
+      army.chest = true;
       this.addLog(
         attacker,
-        `Sieg gegen ${defender.name}! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)}.`,
+        `Sieg gegen ${defender.name}! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)} ` +
+          'und eine Truhe.',
       );
       this.addLog(
         defender,
@@ -618,10 +640,12 @@ export class GameState {
       );
       this.addFeed(
         'battle',
-        `${attacker.name} stürmt die Burg von ${defender.name} und erbeutet ${formatResources(plunder)}.`,
+        `${attacker.name} stürmt die Burg von ${defender.name} und erbeutet ` +
+          `${formatResources(plunder)} und eine Truhe.`,
         army.id,
       );
       this.startReturn(army, last(army.path));
+      this.rout(defender);
     } else {
       this.addLog(
         attacker,
@@ -635,6 +659,109 @@ export class GameState {
       this.addFeed('battle', `${defender.name} wehrt einen Angriff von ${attacker.name} ab.`);
       this.removeArmy(army);
     }
+  }
+
+  /**
+   * The home castle fell: every army of the player turns home to the castle on the spot (cargo
+   * kept), and every outpost is given up — it turns back into a ruin, its garrison marching home
+   * with the stock. The player cannot act until all of these are back (see `removeArmy`).
+   */
+  private rout(player: PlayerRecord): void {
+    for (const army of this.data.armies) {
+      if (army.ownerId !== player.id) continue;
+      if (army.status === 'returning' && army.baseId === null) continue;
+      army.baseId = null;
+      this.startReturn(army, this.armyPosition(army));
+    }
+    let abandoned = 0;
+    for (const outpost of this.data.outposts) {
+      if (outpost.ownerId !== player.id) continue;
+      // Stock only leaves with a garrison to carry it; otherwise it stays in the ruin.
+      if (outpost.troops > 0) {
+        const stock = takeShare(outpost.resources, 1);
+        this.data.armies.push(this.fleeingArmy(player, outpost.position, outpost.troops, stock));
+      }
+      outpost.ownerId = null;
+      outpost.troops = 0;
+      abandoned++;
+    }
+    player.routed = this.data.armies.some((a) => a.ownerId === player.id);
+    if (abandoned > 0) {
+      this.addLog(player, `Deine Burg ist gefallen: ${abandoned} Stützpunkt(e) aufgegeben.`);
+      this.addFeed(
+        'outpost',
+        `${player.name} gibt alle Stützpunkte auf — sie verfallen zu Ruinen.`,
+      );
+    }
+    if (!player.routed) return;
+    this.addLog(
+      player,
+      'Alle deine Züge ziehen sich zurück. Bis alle Truppen daheim sind, kannst du nichts tun.',
+    );
+    this.addFeed('battle', `${player.name} ruft alle Truppen zum Rückzug in die Burg.`);
+  }
+
+  /**
+   * One-off for a running game: replaces every resource spot with a balanced layout
+   * (`placeBalancedSpots`). Armies marching to a spot keep the time they have walked and carry on
+   * from where they set out towards the new spot of the same resource nearest to that start;
+   * gatherers move to the new spot nearest their old one and load there for the time they had
+   * left; armies heading home are untouched.
+   */
+  private relayoutSpots(): void {
+    const map = this.map!;
+    const castles = this.data.players.flatMap((p) => (p.castle ? [p.castle] : []));
+    const taken = [
+      ...castles,
+      ...this.data.outposts.map((o) => o.position),
+      ...this.data.chests.map((c) => c.position),
+    ];
+    const random = createRandom(this.data.seed ^ 0x5b075);
+    const old = new Map(this.data.spots.map((s) => [s.id, s.resource]));
+    this.data.spots = placeBalancedSpots(
+      map,
+      castles,
+      innerLand(map),
+      taken,
+      spotCount(this.data.players.length),
+      random,
+    ).map((s) => ({ id: this.nextId('spot'), ...s }));
+
+    for (const army of this.data.armies) {
+      if (army.target.kind !== 'spot' || army.status === 'returning') continue;
+      const resource = old.get(army.target.id);
+      if (!resource) continue;
+      // Where the march set out (a gatherer stands at its old spot).
+      const from = army.path[0]!;
+      const routes = this.data.spots
+        .filter((s) => s.resource === resource)
+        .flatMap((s) => {
+          const path = findPath(map, from, s.position);
+          return path ? [{ spot: s, path, length: pathLength(path) }] : [];
+        })
+        .sort((a, b) => a.length - b.length);
+      const nearest = routes[0];
+      if (!nearest) {
+        this.startReturn(army, this.armyPosition(army));
+        continue;
+      }
+      army.target = { kind: 'spot', id: nearest.spot.id };
+      if (army.status === 'gathering') {
+        // Loading goes on at the new spot; `arriveClock` (loading done) stays as it was.
+        army.path = [nearest.spot.position];
+        continue;
+      }
+      // Same start and departure, new destination: the hours walked so far count towards it.
+      army.path = nearest.path;
+      army.arriveClock = army.departClock + travelMs(nearest.length, map.width, army.forcedMarch);
+    }
+    this.data.spotLayout = SPOT_LAYOUT;
+    for (const player of this.data.players) {
+      this.addLog(player, 'Die Rohstoff-Vorkommen wurden neu verteilt.');
+    }
+    this.addFeed('day', 'Die Rohstoff-Vorkommen wurden neu verteilt — für alle gleich weite Wege.');
+    this.revision++;
+    this.dirty = true;
   }
 
   /**
@@ -769,18 +896,26 @@ export class GameState {
     if (
       !convoy ||
       !victim ||
-      convoy.status !== 'returning' ||
-      !hasResources(convoy.cargo) ||
+      !isRaidable(convoy, victim.routed ?? false) ||
       distance(this.armyPosition(convoy), last(army.path)) > RAID_REACH_TILES
     ) {
-      this.addLog(raider, 'Der Überfall ging ins Leere — der Zug ist entwischt.');
+      this.addLog(
+        raider,
+        victim?.routed
+          ? 'Der Überfall ging ins Leere — der Zug zieht sich nach dem Fall seiner Burg zurück und ist unantastbar.'
+          : 'Der Überfall ging ins Leere — der Zug ist entwischt.',
+      );
       this.startReturn(army, last(army.path));
       return;
     }
 
     const attackerWins = army.troops > convoy.troops;
     const losses = battleLosses(army.troops, convoy.troops, attackerWins);
-    convoy.troops -= losses.defender;
+    // A chest bearer always keeps one troop, so the chest is never lost in an ambush.
+    const convoyLoss = convoy.chest
+      ? Math.min(losses.defender, convoy.troops - 1)
+      : losses.defender;
+    convoy.troops -= convoyLoss;
     if (attackerWins) {
       const plunder = takeShare(convoy.cargo, CONVOY_PLUNDER_SHARE);
       army.troops = Math.max(1, army.troops - losses.attacker);
@@ -791,7 +926,7 @@ export class GameState {
       );
       this.addLog(
         victim,
-        `${raider.name} hat deinen Zug überfallen: ${losses.defender} Verluste, ${formatResources(plunder)} verloren.`,
+        `${raider.name} hat deinen Zug überfallen: ${convoyLoss} Verluste, ${formatResources(plunder)} verloren.`,
       );
       this.addFeed(
         'battle',
@@ -799,8 +934,12 @@ export class GameState {
         army.id,
       );
       this.startReturn(army, last(army.path));
-      // Robbed of its load, the convoy marches on home at normal speed.
-      if (!hasResources(convoy.cargo)) this.startReturn(convoy, this.armyPosition(convoy));
+      // Robbed of its load, the convoy marches on at normal speed: home, or on to its own base.
+      if (!hasResources(convoy.cargo)) {
+        const position = this.armyPosition(convoy);
+        if (convoy.status === 'returning') this.startReturn(convoy, position);
+        else this.reroute(convoy, position, last(convoy.path));
+      }
     } else {
       this.addLog(
         raider,
@@ -857,6 +996,7 @@ export class GameState {
     this.data.mapSize = world.map.width;
     this.data.spots = world.spots;
     this.data.outposts = world.outposts;
+    this.data.spotLayout = SPOT_LAYOUT;
     players.forEach((player, i) => {
       player.castle = world.castles[i]!;
       player.homeTroops = STARTING_TROOPS;
@@ -999,6 +1139,7 @@ export class GameState {
         victoryPoints: p.victoryPoints,
         homeTroops: p.homeTroops,
         fortified: (p.fortifiedUntil ?? 0) > clock,
+        routed: p.routed ?? false,
         attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
       })),
@@ -1145,8 +1286,16 @@ export class GameState {
     return this.normalize(data);
   }
 
-  /** Fills fields added within save version 2: chest requirements; drops old outpost names. */
+  /**
+   * Fills fields added within save version 2: chest requirements; drops old outpost names and
+   * lifts a rout whose troops are all home.
+   */
   private normalize(data: SavedGame): SavedGame {
+    for (const player of data.players) {
+      if (player.routed && !data.armies.some((a) => a.ownerId === player.id)) {
+        player.routed = false;
+      }
+    }
     data.chests = data.chests.map((c) => ({
       ...c,
       troopsNeeded: c.troopsNeeded ?? rollChestTroops(),
@@ -1203,6 +1352,9 @@ export class GameState {
     if (this.data.phase !== 'running') throw new RuleError('Das Spiel läuft gerade nicht.');
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
+    if (player.routed) {
+      throw new RuleError('Deine Burg ist gefallen — warte, bis alle Truppen heimgekehrt sind.');
+    }
     return player;
   }
 
@@ -1263,8 +1415,13 @@ export class GameState {
         if (!convoy) break;
         if (convoy.ownerId === player.id)
           throw new RuleError('Du kannst dich nicht selbst überfallen.');
-        if (convoy.status !== 'returning' || !hasResources(convoy.cargo)) {
-          throw new RuleError('Überfallen lassen sich nur heimkehrende Züge mit Ladung.');
+        if (this.player(convoy.ownerId)?.routed) {
+          throw new RuleError(
+            'Dieser Zug zieht sich nach dem Fall seiner Burg zurück — unantastbar.',
+          );
+        }
+        if (!isRaidable(convoy, false)) {
+          throw new RuleError('Überfallen lassen sich nur Züge, die Ressourcen tragen.');
         }
         const meeting = planIntercept(map, from, convoy, now, forcedMarch);
         const path = meeting && findPath(map, from, meeting.position);
@@ -1326,8 +1483,14 @@ export class GameState {
     army.forcedMarch = false;
   }
 
+  /** Ends an army; the last one of a routed player home lifts the rout. */
   private removeArmy(army: ArmyRecord): void {
     this.data.armies = this.data.armies.filter((a) => a !== army);
+    const owner = this.player(army.ownerId);
+    if (!owner?.routed || this.data.armies.some((a) => a.ownerId === owner.id)) return;
+    owner.routed = false;
+    this.addLog(owner, 'Alle Truppen sind heimgekehrt — du kannst wieder handeln.');
+    this.addFeed('march', `${owner.name} hat alle Truppen wieder beisammen.`);
   }
 
   private nextId(prefix: string): string {

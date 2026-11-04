@@ -7,6 +7,7 @@ import {
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
+  isRaidable,
   pathLength,
   planIntercept,
   RESOURCE_NAMES,
@@ -37,6 +38,7 @@ import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
 import { SoldiersIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
 import { Button } from './Panel';
+import { Locked } from './Routed';
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -143,7 +145,7 @@ function SendForm({
   };
 
   return (
-    <div className="mt-2 space-y-2 border-t border-ink/30 pt-2">
+    <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
       {/* Raids list their own field armies (with meeting points) in RaidOptions. */}
       {target.kind !== 'army' && (
         <FieldRedirect
@@ -248,7 +250,7 @@ function SendForm({
           {verb}
         </Button>
       </div>
-    </div>
+    </Locked>
   );
 }
 
@@ -334,10 +336,10 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
   const strength = (troops: number) =>
     convoy.troops === null ? null : troops > convoy.troops ? 'überlegen' : 'unterlegen';
   return (
-    <div className="mt-2 border-t border-ink/30 pt-2">
+    <Locked className="mt-2 border-t border-ink/30 pt-2">
       <div className="font-bold">Überfallen</div>
       <p className="text-xs text-ink-soft">
-        Abfangen, bevor der Zug seine Burg erreicht. Wer mehr Truppen hat, gewinnt; der Sieger nimmt
+        Abfangen, bevor der Zug sein Ziel erreicht. Wer mehr Truppen hat, gewinnt; der Sieger nimmt
         die ganze Ladung.
       </p>
       {field.length > 0 && (
@@ -393,7 +395,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
         defaultTroops={(convoy.troops ?? 25) * 2}
         preview={strength}
       />
-    </div>
+    </Locked>
   );
 }
 
@@ -401,6 +403,7 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   const own = army.ownerId === view.self.id;
   const remaining = army.arriveClock - view.clock.clock;
   const carrying = hasResources(army.cargo);
+  const ownerRouted = view.players.find((p) => p.id === army.ownerId)?.routed ?? false;
   return (
     <>
       <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
@@ -425,7 +428,7 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       )}
       {army.chest && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">
-          <ChestIcon size={18} /> Bringt eine Truhe heim — kann nicht überfallen werden.
+          <ChestIcon size={18} /> Bringt eine Truhe heim — die Truhe kann niemand rauben.
         </div>
       )}
       {(army.fog || army.stealth || army.forcedMarch) && (
@@ -436,14 +439,18 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         </div>
       )}
       {own && army.status !== 'returning' && (
-        <Button
-          className="mt-2"
-          onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}
-        >
-          Zurückrufen
-        </Button>
+        <Locked className="mt-2">
+          <Button onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}>
+            Zurückrufen
+          </Button>
+        </Locked>
       )}
-      {!own && army.status === 'returning' && carrying && <RaidOptions view={view} convoy={army} />}
+      {!own && carrying && ownerRouted && (
+        <div className="mt-1 text-xs text-ink-soft italic">
+          Zieht sich nach dem Fall der Burg zurück — unantastbar.
+        </div>
+      )}
+      {!own && isRaidable(army, ownerRouted) && <RaidOptions view={view} convoy={army} />}
     </>
   );
 }
@@ -469,6 +476,9 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             {player.homeTroops} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
           {player.fortified && <div className="text-sea-dark italic">Bollwerk aktiv (+50 %)</div>}
+          {player.routed && (
+            <div className="text-seal italic">Gefallen — alle Truppen ziehen sich zurück</div>
+          )}
           {own ? (
             outposts.length > 0 && (
               <>
@@ -489,7 +499,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           ) : (
             <>
               <p className="mt-1 text-xs text-ink-soft">
-                Sieg: du verlierst 25 %, die Verteidigung 50 %, du erbeutest 50 % der Ressourcen.
+                Sieg: du verlierst 25 %, die Verteidigung 50 %, du erbeutest 50 % der Ressourcen und
+                eine Truhe; der Verlierer gibt seine Stützpunkte auf und zieht alle Truppen zurück.
                 Niederlage: dein Zug fällt, die Verteidigung verliert 25 %.
               </p>
               <SendForm
