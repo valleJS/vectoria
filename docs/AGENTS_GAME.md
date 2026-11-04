@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 6902c50c9cf4ba8c7b5f50f85e94f49fd51613a9
+sources_stamp: f400dda4a7f43c84163934d8ecda0531559e2be9
 ---
 
 # Game rules (prototype)
@@ -30,7 +30,7 @@ returns to registration, keeping registrations.
 land as the game grows (≈365 tiles each at 2 players, ≈92 at 100). Travel time is relative to the
 map width (`travelMs`: crossing = `CROSS_MAP_HOURS`), so neighbours move closer **in time**,
 roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players ≈8 h, 9 ≈4 h,
-20 ≈2.4 h, 50 ≈1.4 h. Outposts (0.75/player) and spots (1.5/player) scale with players; chests
+20 ≈2.4 h, 50 ≈1.4 h. Outposts (0.75/player) and spots (up to 1.5/player) scale with players; chests
 (3 per gameday), gathering time and costs do not.
 
 ## Game clock
@@ -55,6 +55,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
+| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`; the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
 
 ## Bases and outposts
@@ -96,15 +97,27 @@ troops than the other side brought (stops 1-troop harassment).
 
 | Outcome | Attacker loses | Defender loses | Spoils |
 | ------- | -------------- | -------------- | ------ |
-| Attacker wins | 25 % | 50 % | castle: 50 % of home resources; outpost: ownership + all stock (defending survivors flee home); convoy: all cargo |
+| Attacker wins | 25 % | 50 % | castle: 50 % of home resources + a chest (conjured, not taken from the defender); outpost: ownership + all stock (defending survivors flee home); convoy: all cargo |
 | Defender wins | 100 % | 25 % | — |
 
-**Raids**: a returning army carrying resource cargo can be ambushed (chest bearers cannot) by an army sent from a base or
+**Castle fall** (`GameState.rout`): the defender's armies all turn for the home castle on the spot
+(cargo kept), and every outpost is given up: it turns back into an unowned ruin, its garrison
+marching home with the whole stock (no garrison → the stock stays in the ruin). `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
+command in `requirePlaying` until the player's last army is gone (`removeArmy` lifts it). Nobody
+in the field → no lockout. The client greys out every action (`ui/Routed.tsx` `Locked`, `inert`)
+and shows a "Handlungsunfähig" stamp in the top bar.
+
+**Raids**: any marching army carrying resource cargo (`isRaidable` in `shared/entities.ts`: home
+from a spot or a win, or a transfer between own bases) can be ambushed — except while its owner
+is routed (all their armies are immune; raids already underway go empty). A robbed transfer walks
+on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
-raider reaches no later than the convoy; if the convoy gets home first, the raid is refused.
+raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
 A convoy cannot raid in turn: returning armies and armies with cargo cannot be redirected
-(`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen.
+(`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen,
+and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and
+always keeps at least one troop (`raid`), so the chest always gets home.
 
 ## Live ticker
 
@@ -115,6 +128,7 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
 
 - A chest needs `rollChestTroops()` troops to open (`CHEST_TROOPS_MIN`–`MAX`, step 10), shown on
   the map. The army carries it home (`ArmyView.chest`); on arrival `self.chests` counts up.
+  Storming a home castle also puts a chest on the winning army.
 - The card is rolled only when the player opens the chest (`openChest` → `chestOpened`), so the
   reveal happens when they are online.
 - Cards belong to the player, not to a base. One card can be active (`self.activeCard`): an

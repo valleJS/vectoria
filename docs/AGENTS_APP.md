@@ -3,7 +3,7 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed shadcn/ui + Tailwind HUD, design tokens and design sheet.
 audience: agent
 category: codemap
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
 sources_stamp: 57b298c337df567a4775e34a45c1c6824ebd6ba5
@@ -39,7 +39,8 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/ui/layout.ts` | Compact breakpoint (`COMPACT_BELOW` = 900) and per-layout HUD insets, shared by the HUD and the map fit |
 | `src/ui/RuleChanges.tsx` | "Neuerungen": list of game-changing rule changes (`RULE_CHANGES`, newest first) in a small dialog; scroll button beside the handbook (phones: top bar) with a count of unseen entries; opens itself once when unseen ones exist. Seen ids in `localStorage` (`vectoria.ruleChangesSeen`) via the store (`ruleChanges`, `seenRuleChanges`) |
 | `src/ui/ChestOpening.tsx` | Chest-opening overlay: wobbling chest, shake, lid pops, card flips in; opens itself when the store sees new chests at home |
-| `src/ui/Handbook.tsx` | Compass + book bottom-left (phones: book button in the top bar); open state in the store (`handbook`). `HandbookInvite` opens the same book from the join screen and lobby (local open state; VP target from `LobbyInfo` / view). Two-page handbook (contents left, chapter right, ←/→ keys; phones show one page, contents via "☰ Inhalt") on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
+| `src/ui/Handbook.tsx` | Compass + book bottom-left (phones: book button in the top bar); open state in the store (`handbook`). `HandbookInvite` opens the same book from the join screen and lobby (local open state; VP target from `LobbyInfo` / view). Two-page handbook (contents left, chapter right, ←/→ keys; phones show one page, contents via "☰ Inhalt") on all mechanics, numbers pulled from `shared/rules.ts`; each chapter ends with an "Im Detail" block of special and edge cases (`Details`); plus the card catalog |
+| `src/ui/Routed.tsx`, `src/state/routed.ts` | Lockout after the own castle fell (`PlayerPublic.routed`): `useRouted()` and `Locked`, which greys out and `inert`s every action (realm box, send/raid/recall); the top bar shows a pulsing "Handlungsunfähig" stamp |
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land; `FieldRedirect` lists own cargo-free field armies to re-route to this target) / recall / raid (redirect or send, meeting point) for the selected object |

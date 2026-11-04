@@ -1,8 +1,8 @@
 import {
-  CHESTS_PER_GAMEDAY,
-  LOADED_SPEED,
-  VICTORY_POINT_BASE_COST,
-  victoryPointCost,
+  CASTLE_PLUNDER_SHARE,
+  HOUR_MS,
+  SPOT_BALANCE_TOLERANCE_HOURS,
+  SPOT_FAR_HOURS,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { formatPercent, formatResources } from '../game/format';
+import { formatGameDuration, formatPercent } from '../game/format';
 import { useGameStore } from '../state/store';
 
 interface RuleChange {
@@ -32,62 +32,46 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
-    id: 'outpost-loss-recall',
-    date: '2026-11-04',
-    title: 'Gefallener Stützpunkt ruft Züge heim',
+    id: 'raidable-transfers',
+    date: '2026-11-05',
+    title: 'Transporte sind überfallbar',
     body: (
       <>
-        Fällt einer deiner Stützpunkte, kehren alle deine Züge, die gerade dorthin unterwegs sind,{' '}
-        <b>sofort zur Burg</b> um — Heimkehrer wie Verlagerungen, mit ihrer Ladung. Bisher liefen
-        sie erst bis zum Stützpunkt.
+        Auch wer Ressourcen zwischen eigenen Burgen bewegt (etwa „Heimholen“), kann jetzt unterwegs{' '}
+        <b>überfallen</b> werden. Ausgeraubt läuft der Transport leer zu seinem Ziel weiter.
+        Ausnahme: Ist deine Burg gefallen, sind alle deine Züge auf dem Rückzug <b>unantastbar</b>,
+        bis alle daheim sind.
       </>
     ),
   },
   {
-    id: 'loaded-transfer-speed',
-    date: '2026-11-04',
-    title: 'Auch Transporte sind beladen langsamer',
+    id: 'balanced-spots',
+    date: '2026-11-05',
+    title: 'Rohstoff-Vorkommen neu verteilt',
     body: (
       <>
-        Wer Ressourcen zwischen eigenen Burgen und Stützpunkten verlagert, marschiert jetzt
-        ebenfalls nur mit <b>{formatPercent(LOADED_SPEED)} Tempo</b> — wie Züge, die vom Vorkommen
-        heimkehren. Ohne Ladung bleibt es beim normalen Tempo.
+        Alle Vorkommen liegen jetzt an neuen Orten, damit niemand im Vorteil ist: Der Weg zum
+        nächsten Holz, Stein und Gold zusammen ist <b>für alle etwa gleich lang</b> (höchstens{' '}
+        {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Dafür liegt bei
+        jedem eine der drei mindestens <b>{SPOT_FAR_HOURS} Stunden</b> entfernt. Züge auf dem Weg zu
+        einem Vorkommen laufen zum nächsten neuen Vorkommen derselben Ressource weiter — die schon
+        gelaufene Zeit zählt mit. Wer gerade lud, lädt am neuen Vorkommen mit derselben Restzeit
+        fertig.
       </>
     ),
   },
   {
-    id: 'loaded-return-speed',
+    id: 'castle-fall-rout',
     date: '2026-11-04',
-    title: 'Beladene Züge sind langsamer',
+    title: 'Gestürmte Burg: Truhe für den Sieger, Rückzug für den Verlierer',
     body: (
       <>
-        Züge, die Ressourcen heimbringen, marschieren nur noch mit{' '}
-        <b>{formatPercent(LOADED_SPEED)} Tempo</b>. Wer seine Ladung bei einem Überfall verliert,
-        läuft wieder normal schnell. Truhenträger und Züge ohne Ladung sind nicht betroffen.
-      </>
-    ),
-  },
-  {
-    id: 'three-chests',
-    date: '2026-11-04',
-    title: `${CHESTS_PER_GAMEDAY} Truhen pro Spieltag`,
-    body: (
-      <>
-        Jeden Spieltag erscheinen <b>{CHESTS_PER_GAMEDAY} Truhen</b> statt einer. Gleichzeitig
-        liegen höchstens so viele auf der Karte, wie Spieler:innen mitspielen — mindestens aber{' '}
-        {CHESTS_PER_GAMEDAY}.
-      </>
-    ),
-  },
-  {
-    id: 'rising-vp-cost',
-    date: '2026-11-04',
-    title: 'Siegpunkte werden teurer',
-    body: (
-      <>
-        Der erste Siegpunkt kostet {formatResources(VICTORY_POINT_BASE_COST)}, jeder weitere{' '}
-        <b>1 Ressource mehr</b> als der vorige (abwechselnd Stein, Holz, Gold). Der zehnte kostet{' '}
-        {formatResources(victoryPointCost(9))}.
+        Wer eine Burg stürmt, erbeutet wie bisher {formatPercent(CASTLE_PLUNDER_SHARE)} der
+        Ressourcen — und bekommt jetzt <b>eine Truhe</b> dazu. Die Truhe kann ihm auf dem Heimweg
+        niemand rauben, die Ressourcen schon. Wer seine Burg verliert, ruft{' '}
+        <b>sofort alle Züge heim</b>, gibt alle Stützpunkte auf (sie werden wieder Ruinen, die
+        Besatzung zieht mit dem Lager heim) und ist <b>handlungsunfähig</b>, bis alle Truppen daheim
+        sind.
       </>
     ),
   },

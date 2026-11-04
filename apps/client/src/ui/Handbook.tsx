@@ -13,7 +13,10 @@ import {
   GAMEDAY_HOURS,
   GATHER_DURATION_MS,
   GATHER_YIELD_PER_100_TROOPS,
+  HOUR_MS,
   LOADED_SPEED,
+  SPOT_BALANCE_TOLERANCE_HOURS,
+  SPOT_FAR_HOURS,
   RESOURCE_NAMES,
   RESOURCES,
   STARTING_RESOURCES,
@@ -82,6 +85,16 @@ function List({ items }: { items: ReactNode[] }) {
   );
 }
 
+/** "Im Detail": the special and edge cases after a chapter's general part. */
+function Details({ items }: { items: ReactNode[] }) {
+  return (
+    <section className="mt-4 border-t border-ink/30 pt-2">
+      <h3 className="mb-1 text-xs font-bold tracking-[0.2em] text-seal uppercase">Im Detail</h3>
+      <List items={items} />
+    </section>
+  );
+}
+
 function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return (
     <table className="mb-2 w-full border-collapse text-[13px]">
@@ -138,6 +151,14 @@ const CHAPTERS: Chapter[] = [
         <P>
           Du beginnst mit {STARTING_TROOPS} Truppen und {formatResources(STARTING_RESOURCES)}.
         </P>
+        <Details
+          items={[
+            'Das Spiel endet sofort, wenn jemand das Siegziel erreicht — auch mitten im Spieltag.',
+            'Kaufst du mehrere Siegpunkte auf einmal, zahlst du die Summe der einzelnen, steigenden Preise.',
+            'Siegpunkte gehen nie verloren, auch nicht, wenn deine Burg gestürmt wird.',
+            'Beendet der Admin das Spiel bei Gleichstand, gewinnt, wer sich früher angemeldet hat.',
+          ]}
+        />
       </>
     ),
   },
@@ -157,6 +178,15 @@ const CHAPTERS: Chapter[] = [
             `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität.`,
             'Die tags zuvor gewählte Basisaktivität tritt in Kraft.',
             `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen auf der Karte.`,
+          ]}
+        />
+        <Details
+          items={[
+            'Ein Spieltag beginnt mit dem ersten Moment Spielzeit eines Werktags (10 Uhr).',
+            'Auch Laden, Bollwerk und alle anderen Dauern pausieren nachts: Ein Zug, der um 17:30 Uhr noch 1 Stunde braucht, kommt am nächsten Werktag um 10:30 Uhr an.',
+            'Was nachts ankommen würde, kommt nicht an — Kämpfe, Überfälle und Ankünfte passieren nur während der Spielzeit, dann aber exakt in der Reihenfolge ihrer Ankunftszeiten.',
+            'Pausiert der Admin die Uhr, steht alles still wie in der Nacht.',
+            'War der Server länger aus, holt die Uhr die verpasste Spielzeit nach; Einkommen gibt es dabei nur einmal, nicht für jeden verpassten Tag.',
           ]}
         />
       </>
@@ -186,9 +216,27 @@ const CHAPTERS: Chapter[] = [
           angreifbar.
         </P>
         <P>
+          Die Vorkommen sind fair verteilt: Der Weg zum nächsten Holz, Stein und Gold zusammen ist
+          für alle etwa gleich lang (höchstens{' '}
+          {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Dafür liegt bei
+          jedem eine der drei Ressourcen mindestens {SPOT_FAR_HOURS} Stunden entfernt.
+        </P>
+        <P>
           Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines
           Truppenabzeichen mit der Truppenzahl oben rechts daneben zeigt, wer dort gerade lädt.
         </P>
+        <Details
+          items={[
+            'Das Einkommen landet immer in der Basis — auch während deine Burg gefallen ist.',
+            `Ohne gewählte Basisaktivität gibt es nur +${DAILY_BASE_INCOME} jeder Ressource. Wählst du mehrmals am Tag, zählt die letzte Wahl.`,
+            `Die Ausbeute wird abgerundet: Unter 100 Truppen gibt es entsprechend weniger, unter ${Math.ceil(100 / GATHER_YIELD_PER_100_TROOPS)} Truppen gar nichts.`,
+            'Vorkommen erschöpfen sich nie; beliebig viele Züge — auch verschiedener Spieler — können gleichzeitig am selben Vorkommen laden. Dort kämpft niemand.',
+            'Ladende Züge können nicht angegriffen werden. Erst auf dem Heimweg mit Ladung sind sie angreifbar.',
+            'Rufst du einen ladenden Zug zurück oder leitest ihn um, bricht er das Laden ab und hat nichts dabei.',
+            'Die Ladung geht an die Burg, aus der der Zug losgezogen ist — ist dieser Stützpunkt inzwischen verloren, an die Basis.',
+            'Die faire Verteilung der Vorkommen ist ab deiner Heimatburg gemessen, nicht ab Stützpunkten.',
+          ]}
+        />
       </>
     ),
   },
@@ -213,6 +261,18 @@ const CHAPTERS: Chapter[] = [
             `Zwischen eigenen Burgen lassen sich beliebig viele Ressourcen mitnehmen — beladen aber nur mit ${formatPercent(LOADED_SPEED)} Tempo.`,
             'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort zur Burg um — mit ihrer Ladung.',
             'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
+          ]}
+        />
+        <Details
+          items={[
+            'Eine Ruine hat keine Verteidiger: Schon 1 Truppe nimmt sie ein, ganz ohne Verluste. Liegt noch ein Lager darin, gehört es dir.',
+            'Dasselbe gilt für einen eigenen Stützpunkt, aus dem du alle Truppen abgezogen hast — leer ist er für jeden mit 1 Truppe zu haben.',
+            'Wer einen Stützpunkt erobert, bleibt mit allen überlebenden Truppen als Besatzung dort; der Zug kehrt nicht heim.',
+            'Das Bollwerk schützt nur die Basis, nie einen Stützpunkt.',
+            'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Absprungpunkt, sonst nichts.',
+            'Ressourcen mitnehmen geht nur zu einer eigenen Burg. Solche Transporte (z. B. „Heimholen“) sind beladen langsamer und können unterwegs überfallen werden.',
+            'Truppen zu der Burg schicken, in der sie schon stehen, geht nicht.',
+            'Fällt ein Stützpunkt, laufen deine Züge, die von dort aufgebrochen sind, später zur Basis statt dorthin zurück.',
           ]}
         />
       </>
@@ -248,6 +308,16 @@ const CHAPTERS: Chapter[] = [
             </>,
           ]}
         />
+        <Details
+          items={[
+            'Zurückgerufen wird von der aktuellen Position aus, zur Burg, aus der der Zug kam.',
+            'Wer schon heimkehrt, kann nicht zurückgerufen werden — ohne Ladung aber umgeleitet.',
+            'Umleiten geht nicht mit Ladung oder Truhe. Ein umgeleiteter Zug behält Nebel, Tarnung und Eilmarsch.',
+            'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
+            'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe; unterwegs kann niemand dazustoßen.',
+            'Truhenträger ohne Ladung marschieren normal schnell, nur Ressourcen bremsen.',
+          ]}
+        />
       </>
     ),
   },
@@ -279,12 +349,69 @@ const CHAPTERS: Chapter[] = [
         <H>Beute</H>
         <List
           items={[
-            `Burg: ${formatPercent(CASTLE_PLUNDER_SHARE)} aller Ressourcen in der Basis.`,
+            `Burg: ${formatPercent(CASTLE_PLUNDER_SHARE)} aller Ressourcen in der Basis und eine Truhe.`,
             'Stützpunkt / Ruine: der Stützpunkt selbst samt ganzem Lager.',
             'Überfallener Zug: die ganze Ladung.',
           ]}
         />
         <P>Mit der Karte Bollwerk verteidigt die Burg mit ×{FORTIFY_MULTIPLIER} Stärke.</P>
+        <H>Gefallene Burg</H>
+        <P>
+          Wer seine Basis verliert, ruft <b>sofort alle Truppen heim</b>: Jeder Zug kehrt zur Burg
+          um. Alle Stützpunkte werden <b>aufgegeben</b> und verfallen wieder zu Ruinen; ihre
+          Besatzung zieht samt Lager nach Hause (ohne Besatzung bleibt das Lager in der Ruine). Bis
+          die letzten Truppen daheim sind, kannst du <b>nichts tun</b> — nichts kaufen, niemanden
+          losschicken, keine Karte spielen.
+        </P>
+        <H>Rechenbeispiele</H>
+        <Table
+          head={['Kampf', 'Ausgang', 'Verluste']}
+          rows={[
+            ['100 gegen 60', 'Angreifer siegt', 'Angreifer 25, Verteidiger 30'],
+            [
+              '100 gegen 10',
+              'Angreifer siegt',
+              'Angreifer nur 10 (nie mehr, als die Gegenseite hatte), Verteidiger 5',
+            ],
+            [
+              '60 gegen 60',
+              'Verteidiger hält (Gleichstand reicht nicht)',
+              'Angreifer 60, Verteidiger 15',
+            ],
+            ['1 gegen 60', 'Verteidiger hält', 'Angreifer 1, Verteidiger 1'],
+            ['1 gegen 0', 'Angreifer siegt', 'niemand'],
+            [
+              `100 gegen 70 mit Bollwerk`,
+              `Verteidiger hält (70 × ${FORTIFY_MULTIPLIER} = 105)`,
+              'Angreifer 100, Verteidiger 18',
+            ],
+          ]}
+        />
+        <Details
+          items={[
+            'Verluste werden aufgerundet. Ein siegreicher Zug behält aber immer mindestens 1 Truppe.',
+            'Ein verlorener Angriff kostet den ganzen Zug.',
+            'Das Bollwerk zählt nur beim Vergleich der Stärke; die Verluste rechnen mit den echten Truppenzahlen.',
+            'Die Burg selbst wechselt nie den Besitzer. Der Sieger nimmt Beute und Truhe und zieht heim — mit Beute beladen langsamer und überfallbar.',
+            `Die Beute wird je Ressource abgerundet: Wer nur 1 Holz daheim hat, verliert es nicht. Auch wer gar nichts hat, wird gestürmt — die Truhe gibt es trotzdem.`,
+            'Die Truhe entsteht neu; ungeöffnete Truhen und Karten des Verlierers bleiben, wo sie sind.',
+            'Kommen mehrere Angreifer an, wird nacheinander gekämpft, in der Reihenfolge ihrer Ankunft. Jeder Kampf sieht die Verteidigung, die der vorige übrig gelassen hat.',
+            'Eine gefallene Burg lässt sich erneut stürmen — jeder weitere Sieg bringt eine weitere Truhe.',
+          ]}
+        />
+        <H>Gefallene Burg im Detail</H>
+        <List
+          items={[
+            'Alle Züge drehen um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Ladung und Truhen nehmen sie mit.',
+            'Ladende Züge brechen ab und kommen ohne Ladung heim.',
+            'Stützpunkte werden zu Ruinen. Die Besatzung trägt das ganze Lager heim (beladen, also langsamer).',
+            'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Deine Basis kann aber weiter gestürmt werden.',
+            'Stehen gerade keine Truppen außerhalb, gibt es keine Sperre; die Stützpunkte sind trotzdem aufgegeben.',
+            'Während der Sperre läuft das Einkommen weiter, du kannst aber auch keine Truhe öffnen und die Basisaktivität nicht wechseln.',
+            'Du kannst in der Zeit weiter angegriffen und überfallen werden; heimkehrende Truppen verstärken die Basis, sobald sie ankommen.',
+            'Die Sperre endet in dem Moment, in dem der letzte Zug daheim ankommt.',
+          ]}
+        />
       </>
     ),
   },
@@ -294,20 +421,37 @@ const CHAPTERS: Chapter[] = [
     body: () => (
       <>
         <P>
-          Ein heimkehrender Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen. Wähle ihn auf der
-          Karte an und schicke Truppen aus einer Burg los oder leite einen Zug im Feld um. Der
-          Treffpunkt wird vorausberechnet — erreicht der Zug seine Burg vorher, geht es nicht.
-          Beladene Züge laufen nur mit {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter
-          einzuholen; nach einem verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell
-          weiter.
+          Ein Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen — auf dem Heimweg ebenso wie als
+          Transport zwischen eigenen Burgen. Wähle ihn auf der Karte an und schicke Truppen aus
+          einer Burg los oder leite einen Zug im Feld um. Der Treffpunkt wird vorausberechnet —
+          erreicht der Zug sein Ziel vorher, geht es nicht. Beladene Züge laufen nur mit{' '}
+          {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter einzuholen; nach einem
+          verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell weiter.
         </P>
         <P>
-          Züge, die eine Truhe heimbringen, und Züge ohne Ladung können nicht überfallen werden.
+          Züge ohne Ladung können nicht überfallen werden. Eine Truhe lässt sich nie rauben — trägt
+          ihr Zug auch Ressourcen, kann man ihm aber die Ressourcen abnehmen. Ein Truhenträger
+          behält dabei immer mindestens eine Truppe, die Truhe kommt also sicher heim.
         </P>
         <P>
           Ein Zug, der selbst Ressourcen heimbringt, kann niemanden überfallen: Wer Ladung trägt,
           lässt sich weder umleiten noch mit Ressourcen auf einen Überfall schicken.
         </P>
+        <Details
+          items={[
+            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute, Transporte zwischen eigenen Burgen. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
+            'Ausnahme Rückzug: Ist die Burg eines Spielers gefallen, sind alle seine Züge unantastbar, bis alle daheim sind. Ein Überfall, der schon unterwegs ist, geht dann ins Leere.',
+            'Ein ausgeraubter Transport läuft leer und wieder normal schnell zu seinem Ziel weiter.',
+            'Gewinnt der Überfall, nimmt der Räuber die ganze Ladung und trägt sie selbst heim — beladen, also langsamer und seinerseits überfallbar.',
+            'Der Überfallene zieht danach ohne Ladung weiter, wieder in normalem Tempo und mit seinen Verlusten.',
+            'Scheitert der Überfall, fällt der ganze Räuberzug; der Überfallene verliert nur ein Viertel.',
+            'Wird ein Zug ganz aufgerieben, ist er weg. Ausnahme: Ein Truhenträger behält immer mindestens 1 Truppe.',
+            'Der Räuber kommt exakt zum geplanten Zeitpunkt am Treffpunkt an. Ist der Zug dann nicht mehr da (schon daheim, oder ein anderer hat ihn schon ausgeraubt und er ist schneller geworden), geht der Überfall ins Leere und der Räuber kehrt leer um.',
+            'Wurde der Zug vorher schon von jemand anderem ausgeraubt, gibt es nichts mehr zu holen — ein leerer Zug wird nicht überfallen.',
+            'Eilmarsch auf dem Räuberzug macht ihn schneller und erlaubt einen früheren Treffpunkt. Mit Nebel sieht das Opfer nicht, wie stark der Räuber ist.',
+            'Eigene Züge kannst du nicht überfallen.',
+          ]}
+        />
       </>
     ),
   },
@@ -325,9 +469,22 @@ const CHAPTERS: Chapter[] = [
         <List
           items={[
             'Wer zuerst mit genug Truppen ankommt, birgt die Truhe.',
-            'Die Truppen bringen sie sofort heim und können dabei nicht überfallen werden.',
+            'Die Truppen bringen sie sofort heim; die Truhe kann ihnen niemand rauben.',
+            'Wer eine Burg stürmt, bekommt zusätzlich zur Beute eine Truhe.',
             'Zu wenige Truppen kehren mit leeren Händen um.',
             'Daheim wartet die Truhe auf dich. Erst beim Öffnen zeigt sich, welche Karte darin liegt.',
+          ]}
+        />
+        <Details
+          items={[
+            'Mit zu wenigen Truppen kannst du gar nicht erst zu einer Truhe aufbrechen oder umleiten.',
+            'Kommen zwei Züge an, gewinnt, wer zuerst da ist. Der zweite findet nichts und kehrt leer um.',
+            'Ist die Karte schon voll (so viele Truhen wie Spieler, mindestens drei), erscheinen am neuen Spieltag entsprechend weniger.',
+            'Truhen erscheinen möglichst weit weg von Burgen, Stützpunkten, Vorkommen und anderen Truhen.',
+            'Ein Truhenträger kann nicht umgeleitet werden und kehrt immer heim — zu der Burg, aus der er kam. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
+            'Eine normal geborgene Truhe ist nie überfallbar, weil ihr Zug keine Ressourcen trägt. Nur eine Truhe aus einem Burgsturm reist zusammen mit Beute — dann kann man die Beute rauben, die Truhe nie.',
+            'Ungeöffnete Truhen daheim kann dir niemand nehmen, auch nicht beim Sturm auf deine Burg.',
+            `Jede Karte ist beim Öffnen gleich wahrscheinlich (1 zu ${CARD_TYPES.length}).`,
           ]}
         />
       </>
@@ -354,6 +511,17 @@ const CHAPTERS: Chapter[] = [
           ]}
         />
         <P>Alle Karten findest du im Kartenkatalog.</P>
+        <Details
+          items={[
+            'Eine scharf geschaltete Marschkarte bleibt in deiner Hand, bis ein Zug sie mitnimmt. Du kannst sie wieder entschärfen oder durch eine andere ersetzen.',
+            'Beim Losschicken entscheidest du, ob die scharfe Karte mitgeht. Umleiten verbraucht keine Karte.',
+            'Nebel gilt für das ganze Leben des Zuges, auch auf dem Heimweg: Andere sehen nur „?“, auch im Liveticker.',
+            'Tarnung verbirgt Ziel und Route nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
+            'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
+            'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
+            'Karten können nicht gestohlen werden und gehen beim Sturm auf deine Burg nicht verloren.',
+          ]}
+        />
       </>
     ),
   },
@@ -393,6 +561,13 @@ const CHAPTERS: Chapter[] = [
           Ändern sich während des Spiels die Regeln, steht das unter <b>Neuerungen</b> (Schriftrolle
           neben dem Handbuch). Neue Änderungen erscheinen dort einmal von selbst.
         </P>
+        <Details
+          items={[
+            'Ladungen sind immer für alle sichtbar, auch unter Nebel oder Tarnung.',
+            'Der Liveticker zeigt die letzten 60 Ereignisse, deine Chronik die letzten 30 Einträge.',
+            'Der Liveticker schreibt mit, was alle sehen: Unter Nebel steht dort „?“ statt der Truppenzahl, unter Tarnung „unbekanntes Ziel“.',
+          ]}
+        />
       </>
     ),
   },

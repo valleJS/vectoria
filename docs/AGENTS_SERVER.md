@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 61c76f5ca45f187268b76a9d3bb2899bd57608b7
+sources_stamp: f400dda4a7f43c84163934d8ecda0531559e2be9
 ---
 
 # Server codemap (`apps/server`)
@@ -24,6 +24,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/GameState.ts` | Authoritative game: phases, commands, bases, clock advance, arrivals, combat, raids, feed, views, save migration |
 | `src/game/calendar.ts` | Mon–Fri 10–18 schedule in a time zone; downtime catch-up |
 | `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
+| `src/game/spots.ts` | Balanced resource spot layout (equal walk totals, one far resource; count is a cap, no same-resource clusters); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
