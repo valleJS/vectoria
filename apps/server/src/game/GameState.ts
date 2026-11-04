@@ -911,6 +911,49 @@ export class GameState {
     this.dirty = true;
   }
 
+  /**
+   * Admin: swaps two players' home castle positions, nothing else (troops, resources, outposts
+   * stay with each player). Armies heading for either castle re-route from where they stand.
+   */
+  swapCastles(playerId: string, otherId: string): void {
+    const a = this.player(playerId);
+    const b = this.player(otherId);
+    if (!a || !b || a === b) throw new RuleError('Unbekannter Spieler.');
+    if (!a.castle || !b.castle) throw new RuleError('Beide brauchen eine Burg.');
+    [a.castle, b.castle] = [b.castle, a.castle];
+    for (const army of this.data.armies) {
+      const owner = this.player(army.ownerId);
+      if (!owner) continue;
+      const position = this.armyPosition(army);
+      if (army.status === 'returning') {
+        // Heading for its own home castle (not an outpost) of one of the two.
+        if (army.baseId === null && (owner === a || owner === b)) {
+          this.startReturn(army, position);
+        }
+      } else if (
+        army.status === 'outbound' &&
+        army.target.kind === 'castle' &&
+        (army.target.id === a.id || army.target.id === b.id)
+      ) {
+        this.reroute(army, position, this.player(army.target.id)!.castle!);
+      }
+    }
+    this.addFeed('march', `Die Burgen von ${a.name} und ${b.name} tauschen die Plätze.`);
+    for (const p of [a, b]) this.addLog(p, 'Deine Burg steht jetzt an einem neuen Ort.');
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** Re-plans an outbound army's march from `from` to `to` at its current pace. */
+  private reroute(army: ArmyRecord, from: Vec2, to: Vec2): void {
+    const map = this.map!;
+    army.path = findPath(map, from, to) ?? [from, to];
+    army.departClock = this.data.clock;
+    const speed = hasResources(army.cargo) ? LOADED_SPEED : 1;
+    army.arriveClock =
+      this.data.clock + travelMs(pathLength(army.path), map.width, army.forcedMarch, speed);
+  }
+
   kick(playerId: string): void {
     this.data.players = this.data.players.filter((p) => p.id !== playerId);
     this.data.armies = this.data.armies.filter((a) => a.ownerId !== playerId);

@@ -195,6 +195,8 @@ export type AdminAction =
   | { action: 'newGameday' }
   | { action: 'spawnChest' }
   | { action: 'kick'; playerId: string }
+  /** Swaps the two players' home castle positions; everything else stays with each player. */
+  | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
   | { action: 'grant'; playerId: string; resource: ResourceType; amount: number };
 
@@ -347,6 +349,10 @@ export function parseAdminAction(value: unknown): AdminAction | null {
         : null;
     case 'kick':
       return isId(msg.playerId) ? { action: 'kick', playerId: msg.playerId } : null;
+    case 'swapCastles':
+      return isId(msg.playerId) && isId(msg.otherId) && msg.playerId !== msg.otherId
+        ? { action: 'swapCastles', playerId: msg.playerId, otherId: msg.otherId }
+        : null;
     case 'setEmail': {
       const email = normalizeEmail(msg.email);
       return isId(msg.playerId) && email

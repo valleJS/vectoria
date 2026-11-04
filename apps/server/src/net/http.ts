@@ -68,6 +68,8 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.spawnChest();
     case 'kick':
       return state.kick(action.playerId);
+    case 'swapCastles':
+      return state.swapCastles(action.playerId, action.otherId);
     case 'setEmail':
       return state.setEmail(action.playerId, action.email);
     case 'grant':
