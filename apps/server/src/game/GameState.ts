@@ -186,6 +186,11 @@ const last = <T>(items: readonly T[]): T => items[items.length - 1]!;
 export class GameState {
   tick = 0;
   dirty = false;
+  /**
+   * Bumped by events players should see at once (arrivals, battles, a new gameday). The clock
+   * alone does not count: clients run it on themselves between the regular state pushes.
+   */
+  revision = 0;
   map: MapData | null = null;
 
   private readonly options: GameOptions;
@@ -201,6 +206,7 @@ export class GameState {
       this.map = generateMap(saved.mapSize, saved.mapSize, saved.seed);
     }
     this.data = saved ? this.migrate(saved) : this.emptyGame(options.seed, []);
+    if (saved && this.map && this.data.phase === 'running') this.recallFromLostOutposts();
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
   }
 
@@ -466,6 +472,7 @@ export class GameState {
       if (!next || this.data.phase !== 'running') break;
       this.data.clock = Math.max(this.data.clock, next.arriveClock);
       this.arrive(next);
+      this.revision++;
     }
     this.data.clock = end;
     this.dirty = true;
@@ -630,6 +637,54 @@ export class GameState {
     }
   }
 
+  /**
+   * On load: armies still heading for an outpost their owner has lost meanwhile (saved before
+   * `recallFromLostOutpost` existed) turn home now. Only certain cases: returners, and transfers
+   * recognisable by their cargo; an empty march on a foreign outpost may be a deliberate attack.
+   */
+  private recallFromLostOutposts(): void {
+    const lost = (army: ArmyRecord, id: string | null | undefined) =>
+      !!id && this.data.outposts.find((o) => o.id === id)?.ownerId !== army.ownerId;
+    for (const army of this.data.armies) {
+      const owner = this.player(army.ownerId);
+      if (!owner) continue;
+      const returner = army.status === 'returning' && lost(army, army.baseId);
+      const transfer =
+        army.status === 'outbound' &&
+        army.target.kind === 'outpost' &&
+        hasResources(army.cargo) &&
+        lost(army, army.target.id);
+      if (!returner && !transfer) continue;
+      army.baseId = null;
+      this.startReturn(army, this.armyPosition(army));
+      this.addLog(
+        owner,
+        `Dein Zug (${army.troops}) kehrt zur Burg zurück — dein Stützpunkt ist gefallen.`,
+      );
+      this.dirty = true;
+    }
+  }
+
+  /**
+   * The outpost fell: the former owner's armies heading there turn for the home castle on the
+   * spot (returners and transfers alike, cargo kept); armies elsewhere that left from it will
+   * return home instead.
+   */
+  private recallFromLostOutpost(owner: PlayerRecord, outpostId: string, name: string): void {
+    for (const army of this.data.armies) {
+      if (army.ownerId !== owner.id) continue;
+      const headingThere =
+        (army.status === 'returning' && army.baseId === outpostId) ||
+        (army.status === 'outbound' &&
+          army.target.kind === 'outpost' &&
+          army.target.id === outpostId);
+      if (army.baseId === outpostId) army.baseId = null;
+      if (!headingThere) continue;
+      this.startReturn(army, this.armyPosition(army));
+      this.addLog(owner, `Dein Zug (${army.troops}) kehrt zur Burg zurück — ${name} ist gefallen.`);
+    }
+  }
+
   private assaultOutpost(army: ArmyRecord, attacker: PlayerRecord, outpost: Outpost): void {
     const defender = outpost.ownerId ? this.player(outpost.ownerId) : undefined;
     const name = this.outpostName(outpost.id);
@@ -656,6 +711,7 @@ export class GameState {
     if (defender?.castle && outpost.troops > 0) {
       this.data.armies.push(this.fleeingArmy(defender, outpost.position, outpost.troops, plunder));
     }
+    if (defender) this.recallFromLostOutpost(defender, outpost.id, name);
     outpost.ownerId = attacker.id;
     outpost.troops = Math.max(1, army.troops - losses.attacker);
     addResources(outpost.resources, army.cargo);
@@ -761,6 +817,7 @@ export class GameState {
   }
 
   private startGameday(): void {
+    this.revision++;
     this.data.gameday++;
     for (const player of this.data.players) {
       player.activity = player.pendingActivity ?? player.activity;
@@ -852,6 +909,49 @@ export class GameState {
       troopsNeeded: rollChestTroops(),
     });
     this.dirty = true;
+  }
+
+  /**
+   * Admin: swaps two players' home castle positions, nothing else (troops, resources, outposts
+   * stay with each player). Armies heading for either castle re-route from where they stand.
+   */
+  swapCastles(playerId: string, otherId: string): void {
+    const a = this.player(playerId);
+    const b = this.player(otherId);
+    if (!a || !b || a === b) throw new RuleError('Unbekannter Spieler.');
+    if (!a.castle || !b.castle) throw new RuleError('Beide brauchen eine Burg.');
+    [a.castle, b.castle] = [b.castle, a.castle];
+    for (const army of this.data.armies) {
+      const owner = this.player(army.ownerId);
+      if (!owner) continue;
+      const position = this.armyPosition(army);
+      if (army.status === 'returning') {
+        // Heading for its own home castle (not an outpost) of one of the two.
+        if (army.baseId === null && (owner === a || owner === b)) {
+          this.startReturn(army, position);
+        }
+      } else if (
+        army.status === 'outbound' &&
+        army.target.kind === 'castle' &&
+        (army.target.id === a.id || army.target.id === b.id)
+      ) {
+        this.reroute(army, position, this.player(army.target.id)!.castle!);
+      }
+    }
+    this.addFeed('march', `Die Burgen von ${a.name} und ${b.name} tauschen die Plätze.`);
+    for (const p of [a, b]) this.addLog(p, 'Deine Burg steht jetzt an einem neuen Ort.');
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** Re-plans an outbound army's march from `from` to `to` at its current pace. */
+  private reroute(army: ArmyRecord, from: Vec2, to: Vec2): void {
+    const map = this.map!;
+    army.path = findPath(map, from, to) ?? [from, to];
+    army.departClock = this.data.clock;
+    const speed = hasResources(army.cargo) ? LOADED_SPEED : 1;
+    army.arriveClock =
+      this.data.clock + travelMs(pathLength(army.path), map.width, army.forcedMarch, speed);
   }
 
   kick(playerId: string): void {

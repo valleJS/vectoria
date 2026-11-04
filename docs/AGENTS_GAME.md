@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 945886b400eb16c5ef1abd4ece76d27b2424fd1d
+sources_stamp: 6902c50c9cf4ba8c7b5f50f85e94f49fd51613a9
 ---
 
 # Game rules (prototype)
@@ -18,8 +18,11 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 
 `registration` → admin "Anmeldung schließen & starten" → `running` → `ended` (a player reaches
 `VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
-registration (closed system). The map is generated at start, sized by `mapSizeForPlayers`
-(24–96 tiles square). Admin "reset" returns to registration, keeping registrations.
+registration (closed system). Admin tools while running: kick (armies vanish, outposts turn
+to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
+stays with each player; armies heading for either castle re-route from where they stand). The
+map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
+returns to registration, keeping registrations.
 
 ## Map scaling
 
@@ -57,7 +60,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 ## Bases and outposts
 
 - A player's **bases** are the home castle plus owned outposts. Armies leave from a base
-  (`sendArmy.from`, null = home) and return to it; if that outpost was lost meanwhile, they go home.
+  (`sendArmy.from`, null = home) and return to it. When an outpost falls, `recallFromLostOutpost`
+  turns the former owner's armies heading there (returners and transfers, cargo kept) home on the
+  spot; armies elsewhere that left from it return home later.
 - **Outposts** (`OUTPOSTS_PER_PLAYER`, min `MIN_OUTPOSTS`) start as empty, unowned **ruins**,
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving

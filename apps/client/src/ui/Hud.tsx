@@ -97,7 +97,15 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
           : 'gap-x-4 px-4 py-1.5'
       }`}
     >
-      <span className={`font-bold italic ${compact ? 'text-lg' : 'text-xl'}`}>Vectoria</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <img
+          src="/favicon.svg"
+          alt=""
+          className={`-my-1 w-auto ${compact ? 'h-7' : 'h-8'}`}
+          draggable={false}
+        />
+        <span className={`font-bold italic ${compact ? 'text-lg' : 'text-xl'}`}>Vectoria</span>
+      </span>
       <span className="flex min-w-0 items-center gap-2 leading-tight">
         <SunIcon size={compact ? 20 : 22} lit={clock.running} />
         <span className="min-w-0">

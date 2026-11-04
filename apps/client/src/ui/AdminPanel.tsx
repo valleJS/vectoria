@@ -43,6 +43,7 @@ export function AdminPanel() {
   const [input, setInput] = useState('');
   const [state, setState] = useState<AdminState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [swap, setSwap] = useState<{ a: string; b: string }>({ a: '', b: '' });
   const [grant, setGrant] = useState<{ resource: ResourceType; amount: number }>({
     resource: 'wood',
     amount: 5,
@@ -232,6 +233,46 @@ export function AdminPanel() {
                 </SelectContent>
               </Select>
             </div>
+            {state.phase === 'running' && state.players.length > 1 && (
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-ink-soft">
+                Hauptburgen tauschen:
+                {(['a', 'b'] as const).map((side, i) => (
+                  <span key={side} className="contents">
+                    {i === 1 && <span aria-hidden>⇄</span>}
+                    <Select
+                      value={swap[side] || undefined}
+                      onValueChange={(value) => setSwap({ ...swap, [side]: value })}
+                    >
+                      <SelectTrigger
+                        className="h-7 w-40 text-ink"
+                        aria-label={i === 0 ? 'Erste Burg' : 'Zweite Burg'}
+                      >
+                        <SelectValue placeholder="— wählen —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {state.players.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                ))}
+                <Button
+                  disabled={!swap.a || !swap.b || swap.a === swap.b}
+                  onClick={() => {
+                    const name = (id: string) => state.players.find((p) => p.id === id)?.name;
+                    run(
+                      { action: 'swapCastles', playerId: swap.a, otherId: swap.b },
+                      `Burgen von ${name(swap.a)} und ${name(swap.b)} tauschen? Nur die Orte wechseln, alles andere bleibt bei den Spieler:innen.`,
+                    );
+                  }}
+                >
+                  Tauschen
+                </Button>
+              </div>
+            )}
             <table className="w-full text-left tabular-nums">
               <thead className="text-ink-soft">
                 <tr>

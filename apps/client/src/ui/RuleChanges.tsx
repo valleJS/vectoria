@@ -32,6 +32,18 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'outpost-loss-recall',
+    date: '2026-11-04',
+    title: 'Gefallener Stützpunkt ruft Züge heim',
+    body: (
+      <>
+        Fällt einer deiner Stützpunkte, kehren alle deine Züge, die gerade dorthin unterwegs sind,{' '}
+        <b>sofort zur Burg</b> um — Heimkehrer wie Verlagerungen, mit ihrer Ladung. Bisher liefen
+        sie erst bis zum Stützpunkt.
+      </>
+    ),
+  },
+  {
     id: 'loaded-transfer-speed',
     date: '2026-11-04',
     title: 'Auch Transporte sind beladen langsamer',

@@ -1,6 +1,7 @@
 import {
   hasResources,
   HOUR_MS,
+  pointAlong,
   RESOURCES,
   type ArmyView,
   type GameView,
@@ -91,6 +92,11 @@ interface ArmySprite {
    */
   cargo: Container;
   target: PointData;
+  /**
+   * Remaining route (world px) with the game clock at its start and at arrival, so the army walks
+   * on smoothly between state updates. Null when the route is hidden (stealth) or not walking.
+   */
+  motion: { route: PointData[]; from: number; to: number } | null;
   /** Colour + status the soldiers were last drawn with, so they are only redrawn on change. */
   look: string;
   /** Cargo the marker was last drawn for. */
@@ -591,6 +597,7 @@ export class GameRenderer {
           text: '',
           cargo,
           target,
+          motion: null,
           look: '',
           cargoKey: '',
           marching: false,
@@ -602,6 +609,14 @@ export class GameRenderer {
       sprite.target = target;
       sprite.marching = !gathering;
       sprite.offset = offsets.get(army.id) ?? { x: 0, y: 0 };
+      sprite.motion =
+        !gathering && army.route && army.route.length > 1 && army.arriveClock > view.clock.clock
+          ? {
+              route: army.route.map((p) => this.px(p)),
+              from: view.clock.clock,
+              to: army.arriveClock,
+            }
+          : null;
       const look = `${color}:${gathering}`;
       if (look !== sprite.look) {
         // At a deposit the resource stays in view: the army is shown as its planted claim flag.
@@ -933,7 +948,13 @@ export class GameRenderer {
     const seconds = performance.now() / 1000;
     const u = this.unit;
     const k = this.pieceScale;
-    for (const { container, figure, target, marching, stride, offset } of this.armies.values()) {
+    const clock = this.clock;
+    for (const sprite of this.armies.values()) {
+      const { container, figure, marching, stride, motion, offset } = sprite;
+      // Walk on along the known route by the game clock; the server corrects once a second.
+      const target = motion
+        ? pointAlong(motion.route, (clock - motion.from) / (motion.to - motion.from))
+        : sprite.target;
       container.x += (target.x - container.x) * t;
       container.y += (target.y - container.y) * t;
       // Fanned-out stacks and flag slots slide into place instead of jumping.
