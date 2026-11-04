@@ -159,7 +159,7 @@ export function RuleChangesButton({ compact = false }: { compact?: boolean }) {
       type="button"
       onClick={() => setRuleChanges(true)}
       title={label}
-      className="relative mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
+      className="pointer-events-auto relative mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
     >
       <ScrollGlyph />
       <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
