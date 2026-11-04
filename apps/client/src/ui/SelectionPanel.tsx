@@ -3,6 +3,7 @@ import {
   emptyResources,
   findPath,
   GATHER_DURATION_MS,
+  LOADED_RETURN_SPEED,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
@@ -23,6 +24,7 @@ import {
   cssColor,
   describeTarget,
   formatGameDuration,
+  formatPercent,
   formatResources,
   outpostLabel,
   ownBases,
@@ -338,6 +340,12 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       {carrying && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">
           Ladung: {formatResources(army.cargo)}
+          {army.status === 'returning' && (
+            <span className="font-normal text-ink-soft">
+              {' '}
+              · {formatPercent(LOADED_RETURN_SPEED)} Tempo
+            </span>
+          )}
         </div>
       )}
       {army.chest && (
@@ -468,8 +476,9 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <Title icon={<ResourceIcon resource={spot.resource} size={26} />}>{name}-Vorkommen</Title>
           <div className="text-ink-soft">
             Deine Truppen ziehen hin, laden {formatGameDuration(GATHER_DURATION_MS)} lang und
-            bringen je 100 Truppen {GATHER_YIELD_PER_100_TROOPS} {name} heim. Auf dem Rückweg können
-            sie überfallen werden.
+            bringen je 100 Truppen {GATHER_YIELD_PER_100_TROOPS} {name} heim. Beladen marschieren
+            sie heim nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo und können überfallen
+            werden.
           </div>
           {here.length > 0 && (
             <div>

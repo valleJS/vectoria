@@ -13,6 +13,7 @@ import {
   GAMEDAY_HOURS,
   GATHER_DURATION_MS,
   GATHER_YIELD_PER_100_TROOPS,
+  LOADED_RETURN_SPEED,
   RESOURCE_NAMES,
   RESOURCES,
   STARTING_RESOURCES,
@@ -23,14 +24,13 @@ import {
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { compassRose, dataUrl } from '../art/svg';
-import { formatGameDuration, formatResources } from '../game/format';
+import { formatGameDuration, formatPercent, formatResources } from '../game/format';
 import { useGameStore } from '../state/store';
 import { CardFace } from './CardFace';
 import { CardArt } from './icons';
 
 const COMPASS_URL = dataUrl(compassRose());
 const INK = '#3b2a18';
-const pct = (share: number) => `${Math.round(share * 100)} %`;
 
 /** Leather-bound book with a gold clasp; the handbook's button. */
 function BookGlyph({ size = 44 }: { size?: number }) {
@@ -152,7 +152,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität.`,
             'Die tags zuvor gewählte Basisaktivität tritt in Kraft.',
-            `${CHESTS_PER_GAMEDAY === 1 ? 'Eine neue Truhe erscheint' : `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen`} auf der Karte.`,
+            `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen auf der Karte.`,
           ]}
         />
       </>
@@ -177,8 +177,13 @@ const CHAPTERS: Chapter[] = [
         <P>
           Schicke Truppen zu einem Vorkommen. Dort laden sie{' '}
           {formatGameDuration(GATHER_DURATION_MS)} lang und bringen je 100 Truppen{' '}
-          {GATHER_YIELD_PER_100_TROOPS} Einheiten zurück — zu der Burg, aus der sie kamen. Auf dem
-          Heimweg sind sie mit Ladung angreifbar.
+          {GATHER_YIELD_PER_100_TROOPS} Einheiten zurück — zu der Burg, aus der sie kamen. Beladen
+          marschieren sie heim nur mit <b>{formatPercent(LOADED_RETURN_SPEED)} Tempo</b> und sind
+          unterwegs angreifbar.
+        </P>
+        <P>
+          Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines
+          Truppenabzeichen mit der Truppenzahl oben rechts daneben zeigt, wer dort gerade lädt.
         </P>
       </>
     ),
@@ -232,7 +237,8 @@ const CHAPTERS: Chapter[] = [
               <b>Umleiten:</b> ein Zug ohne Ladung kann im Feld ein neues Ziel bekommen.
             </>,
             <>
-              <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war.
+              <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
+              Ressourcen im Gepäck geht es nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo heim.
             </>,
           ]}
         />
@@ -254,20 +260,20 @@ const CHAPTERS: Chapter[] = [
           rows={[
             [
               'Angreifer siegt',
-              pct(COMBAT.attackerWinsAttackerLoss),
-              pct(COMBAT.attackerWinsDefenderLoss),
+              formatPercent(COMBAT.attackerWinsAttackerLoss),
+              formatPercent(COMBAT.attackerWinsDefenderLoss),
             ],
             [
               'Verteidiger hält',
-              pct(COMBAT.defenderWinsAttackerLoss),
-              pct(COMBAT.defenderWinsDefenderLoss),
+              formatPercent(COMBAT.defenderWinsAttackerLoss),
+              formatPercent(COMBAT.defenderWinsDefenderLoss),
             ],
           ]}
         />
         <H>Beute</H>
         <List
           items={[
-            `Burg: ${pct(CASTLE_PLUNDER_SHARE)} aller Ressourcen in der Basis.`,
+            `Burg: ${formatPercent(CASTLE_PLUNDER_SHARE)} aller Ressourcen in der Basis.`,
             'Stützpunkt / Ruine: der Stützpunkt selbst samt ganzem Lager.',
             'Überfallener Zug: die ganze Ladung.',
           ]}
@@ -285,9 +291,16 @@ const CHAPTERS: Chapter[] = [
           Ein heimkehrender Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen. Wähle ihn auf der
           Karte an und schicke Truppen aus einer Burg los oder leite einen Zug im Feld um. Der
           Treffpunkt wird vorausberechnet — erreicht der Zug seine Burg vorher, geht es nicht.
+          Beladene Züge laufen nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo und sind daher
+          leichter einzuholen; nach einem verlorenen Überfall ziehen sie ohne Ladung wieder normal
+          schnell weiter.
         </P>
         <P>
           Züge, die eine Truhe heimbringen, und Züge ohne Ladung können nicht überfallen werden.
+        </P>
+        <P>
+          Ein Zug, der selbst Ressourcen heimbringt, kann niemanden überfallen: Wer Ladung trägt,
+          lässt sich weder umleiten noch mit Ressourcen auf einen Überfall schicken.
         </P>
       </>
     ),
@@ -298,8 +311,10 @@ const CHAPTERS: Chapter[] = [
     body: () => (
       <>
         <P>
-          Jeden Spieltag erscheint eine Truhe. Um sie zu öffnen, braucht es eine bestimmte Zahl
-          Truppen ({CHEST_TROOPS_MIN}–{CHEST_TROOPS_MAX}); sie steht auf der Karte neben der Truhe.
+          Jeden Spieltag erscheinen {CHESTS_PER_GAMEDAY} Truhen auf der Karte. Gleichzeitig liegen
+          dort höchstens so viele, wie Spieler:innen mitspielen — mindestens aber{' '}
+          {CHESTS_PER_GAMEDAY}. Um eine Truhe zu öffnen, braucht es eine bestimmte Zahl Truppen (
+          {CHEST_TROOPS_MIN}–{CHEST_TROOPS_MAX}); sie steht auf der Karte neben der Truhe.
         </P>
         <List
           items={[
@@ -363,6 +378,14 @@ const CHAPTERS: Chapter[] = [
           Der Liveticker oben links meldet öffentliche Ereignisse: Aufbrüche, Kämpfe, geborgene
           Truhen, eroberte Stützpunkte, neue Spieltage. Deine eigene Chronik findest du in der
           Seitenleiste.
+        </P>
+        <P>
+          In der Rangliste zeigt ein <b>grüner Punkt</b> neben dem Namen, wer gerade online ist; ein
+          leerer Kreis heißt offline.
+        </P>
+        <P>
+          Ändern sich während des Spiels die Regeln, steht das unter <b>Neuerungen</b> (Schriftrolle
+          neben dem Handbuch). Neue Änderungen erscheinen dort einmal von selbst.
         </P>
       </>
     ),

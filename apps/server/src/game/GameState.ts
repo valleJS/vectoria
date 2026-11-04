@@ -6,6 +6,8 @@ import {
   CARDS,
   CASTLE_PLUNDER_SHARE,
   CHESTS_PER_GAMEDAY,
+  LOADED_RETURN_SPEED,
+  maxChestsOnMap,
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
@@ -739,6 +741,8 @@ export class GameState {
         army.id,
       );
       this.startReturn(army, last(army.path));
+      // Robbed of its load, the convoy marches on home at normal speed.
+      if (!hasResources(convoy.cargo)) this.startReturn(convoy, this.armyPosition(convoy));
     } else {
       this.addLog(
         raider,
@@ -766,7 +770,7 @@ export class GameState {
       this.addLog(player, `Gameday ${this.data.gameday} beginnt: +${formatResources(income)}.`);
     }
     this.addFeed('day', `Spieltag ${this.data.gameday} beginnt.`);
-    const chestCap = this.data.players.length;
+    const chestCap = maxChestsOnMap(this.data.players.length);
     for (let i = 0; i < CHESTS_PER_GAMEDAY && this.data.chests.length < chestCap; i++) {
       this.spawnChest();
     }
@@ -799,7 +803,7 @@ export class GameState {
       player.homeTroops = STARTING_TROOPS;
       player.resources = { ...STARTING_RESOURCES };
     });
-    // The first gameday start (next tick) spawns the first chest.
+    // The first gameday start (next tick) spawns the first chests.
     this.data.phase = 'running';
     this.addFeed('day', 'Das Spiel beginnt.');
     this.dirty = true;
@@ -1210,7 +1214,10 @@ export class GameState {
     army.path = findPath(this.map!, from, base.position) ?? [from, base.position];
     army.target = base.id ? { kind: 'outpost', id: base.id } : { kind: 'castle', id: owner.id };
     army.departClock = this.data.clock;
-    army.arriveClock = this.data.clock + travelMs(pathLength(army.path), this.map!.width);
+    // Resource cargo slows the march home; chests and empty hands do not.
+    const speed = hasResources(army.cargo) ? LOADED_RETURN_SPEED : 1;
+    army.arriveClock =
+      this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
     // The way home is open for everyone to see (and to ambush).
     army.stealth = false;
     army.forcedMarch = false;

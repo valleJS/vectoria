@@ -64,8 +64,13 @@ export const CASTLE_PLUNDER_SHARE = 0.5;
 export const OUTPOST_PLUNDER_SHARE = 1;
 export const CONVOY_PLUNDER_SHARE = 1;
 
-/** One chest spawns per gameday, up to one per player on the map. */
-export const CHESTS_PER_GAMEDAY = 1;
+/** Chests spawning at each gameday start, up to `maxChestsOnMap` lying on the map. */
+export const CHESTS_PER_GAMEDAY = 3;
+
+/** Chests that may lie on the map at once: one per player, but at least one gameday's worth. */
+export function maxChestsOnMap(players: number): number {
+  return Math.max(CHESTS_PER_GAMEDAY, players);
+}
 /** Troops needed to open a chest: random in this range, in steps of `CHEST_TROOPS_STEP`. */
 export const CHEST_TROOPS_MIN = 20;
 export const CHEST_TROOPS_MAX = 100;
@@ -182,8 +187,19 @@ export function mapSizeForPlayers(players: number): number {
   return Math.min(96, Math.max(24, Math.round(16 + 8 * Math.sqrt(Math.max(1, players)))));
 }
 
-/** Game-clock milliseconds to travel `distance` tiles on a map `mapWidth` tiles wide. */
-export function travelMs(distance: number, mapWidth: number, forcedMarch = false): number {
+/** Speed of an army heading home with resource cargo, relative to normal marching speed. */
+export const LOADED_RETURN_SPEED = 0.75;
+
+/**
+ * Game-clock milliseconds to travel `distance` tiles on a map `mapWidth` tiles wide, at `speed`
+ * times the normal pace (forced march: 2, loaded convoy: `LOADED_RETURN_SPEED`).
+ */
+export function travelMs(
+  distance: number,
+  mapWidth: number,
+  forcedMarch = false,
+  speed = 1,
+): number {
   const ms = (distance / mapWidth) * CROSS_MAP_HOURS * HOUR_MS;
-  return Math.round(forcedMarch ? ms / 2 : ms);
+  return Math.round(ms / ((forcedMarch ? 2 : 1) * speed));
 }

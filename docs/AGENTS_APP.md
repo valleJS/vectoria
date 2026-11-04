@@ -24,7 +24,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/net/api.ts` | HTTP client for email auth, lobby, admin |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
-| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests with troop requirement, faded ruins, attack alerts, selection, walking armies with cargo/chest markers, raid crosses); click → nearest pick |
+| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests with troop requirement, faded ruins, attack alerts, selection, walking armies with cargo/chest markers, raid crosses; an army gathering at a spot shrinks to a badge top-right of the spot so the resource stays visible); click → nearest pick (a gathering army is picked at its badge) |
 | `src/game/terrain.ts` | Static map: tile fields → flat vector regions in old-map tones (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector fallbacks (army banner, castle) for colours without art; dashed line/circle helpers |
@@ -35,10 +35,11 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target and outpost labels, own bases (`ownBases`), card colours |
 | `src/ui/Hud.tsx` | Game overlay. Wide (≥ 900 px): slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box bottom-right: player-wide part (VP, chests to open, activity, cards) above one section per base ("Basis" with shop, then outposts; folds once there are 2+). Compact (phones, `CompactHud`): top bar with handbook button, full-screen map, bottom tab bar (Ticker, Auswahl, Züge, Rang + Chronik, Reich) opening one panel as a sheet; a map selection opens Auswahl |
 | `src/ui/layout.ts` | Compact breakpoint (`COMPACT_BELOW` = 900) and per-layout HUD insets, shared by the HUD and the map fit |
+| `src/ui/RuleChanges.tsx` | "Neuerungen": list of game-changing rule changes (`RULE_CHANGES`, newest first) in a small dialog; scroll button beside the handbook (phones: top bar) with a count of unseen entries; opens itself once when unseen ones exist. Seen ids in `localStorage` (`vectoria.ruleChangesSeen`) via the store (`ruleChanges`, `seenRuleChanges`) |
 | `src/ui/ChestOpening.tsx` | Chest-opening overlay: wobbling chest, shake, lid pops, card flips in; opens itself when the store sees new chests at home |
 | `src/ui/Handbook.tsx` | Compass + book bottom-left (phones: book button in the top bar); open state in the store (`handbook`). `HandbookInvite` opens the same book from the join screen and lobby (local open state; VP target from `LobbyInfo` / view). Two-page handbook (contents left, chapter right, ←/→ keys; phones show one page, contents via "☰ Inhalt") on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm) |
-| `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards) |
+| `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land) / recall / raid (redirect or send, meeting point) for the selected object |
 | `src/ui/JoinScreen.tsx`, `AdminPanel.tsx`, `Panel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails), shared parchment panel/button |
 | `src/index.css` | Tailwind theme tokens (`parchment`, `ink`, `seal`, `sea`, …) and serif font |

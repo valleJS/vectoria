@@ -174,3 +174,16 @@ export function CardArt({ card, className = '' }: { card: CardType; className?: 
     </svg>
   );
 }
+
+/** Presence marker next to a player's name: green dot when online, faint ring when offline. */
+export function OnlineDot({ online }: { online: boolean }) {
+  const label = online ? 'online' : 'offline';
+  return (
+    <span
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${online ? 'bg-[#3fa34d] shadow-[0_0_0_1px_rgba(0,0,0,0.25)]' : 'border border-ink/40'}`}
+      title={label}
+      aria-label={label}
+      role="img"
+    />
+  );
+}

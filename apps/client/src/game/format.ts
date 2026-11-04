@@ -133,3 +133,8 @@ const CARD_COLORS: Record<CardType, string> = {
 export function cardColor(card: CardType): string {
   return CARD_COLORS[card];
 }
+
+/** A share as a whole percentage, e.g. 0.75 → "75 %" (non-breaking space). */
+export function formatPercent(share: number): string {
+  return `${Math.round(share * 100)}\u00a0%`;
+}
