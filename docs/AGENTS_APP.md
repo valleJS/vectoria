@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
-sources_stamp: ec9046517d8ed6ebf8b6e073c47a7b98ed6ea426
+sources_stamp: 9456abd13f125b04f862fa6deac387cd3b0f2450
 ---
 
 # Client codemap (`apps/client`)
@@ -40,7 +40,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/ui/Handbook.tsx` | Compass + book bottom-left (phones: book button in the top bar); open state in the store (`handbook`). `HandbookInvite` opens the same book from the join screen and lobby (local open state; VP target from `LobbyInfo` / view). Two-page handbook (contents left, chapter right, ←/→ keys; phones show one page, contents via "☰ Inhalt") on all mechanics, numbers pulled from `shared/rules.ts`, plus the card catalog |
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
-| `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land) / recall / raid (redirect or send, meeting point) for the selected object |
+| `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land; `FieldRedirect` lists own cargo-free field armies to re-route to this target) / recall / raid (redirect or send, meeting point) for the selected object |
 | `src/ui/JoinScreen.tsx`, `AdminPanel.tsx`, `Panel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails), shared parchment panel/button |
 | `src/index.css` | Tailwind theme tokens (`parchment`, `ink`, `seal`, `sea`, …) and serif font |
 | `vite.config.ts` | Dev proxy `/ws` and `/api` → `localhost:3001` |
