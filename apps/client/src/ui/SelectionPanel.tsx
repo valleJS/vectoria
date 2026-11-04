@@ -253,8 +253,8 @@ function SendForm({
 }
 
 /**
- * Own armies in the field that could take this target instead: outbound or gathering, without
- * cargo, not already heading here. Redirecting re-routes them from where they stand.
+ * Own armies in the field that could take this target instead: any status (also on the way
+ * home), but without cargo or a chest, and not already heading here. Redirecting re-routes them from where they stand.
  */
 function FieldRedirect({
   view,
@@ -274,8 +274,8 @@ function FieldRedirect({
   const field = view.armies.filter(
     (a) =>
       a.ownerId === view.self.id &&
-      a.status !== 'returning' &&
       !hasResources(a.cargo) &&
+      !a.chest &&
       !(a.target?.kind === target.kind && a.target.id === target.id),
   );
   if (field.length === 0) return null;
@@ -329,7 +329,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
   const track = trackOf(view, convoy);
   if (!map || !track) return null;
   const field = view.armies.filter(
-    (a) => a.ownerId === view.self.id && a.status !== 'returning' && !hasResources(a.cargo),
+    (a) => a.ownerId === view.self.id && !hasResources(a.cargo) && !a.chest,
   );
   const strength = (troops: number) =>
     convoy.troops === null ? null : troops > convoy.troops ? 'überlegen' : 'unterlegen';

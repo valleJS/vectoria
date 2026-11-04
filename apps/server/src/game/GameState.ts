@@ -362,8 +362,8 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
-    if (army.status === 'returning') throw new RuleError('Der Zug ist schon auf dem Heimweg.');
-    if (hasResources(army.cargo)) {
+    // Empty-handed armies can be re-routed anywhere, even on their way home.
+    if (hasResources(army.cargo) || army.chest) {
       throw new RuleError('Ein Zug mit Ladung kann nicht umgeleitet werden.');
     }
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
