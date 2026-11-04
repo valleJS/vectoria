@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
+import { OnlineDot } from './icons';
 import { Button, Panel } from './Panel';
 
 const TOKEN_KEY = 'vectoria.adminToken';
@@ -233,7 +234,10 @@ export function AdminPanel() {
                 {state.players.map((p) => (
                   <tr key={p.id} className="border-t border-ink/20">
                     <td className="py-1">
-                      <span className={p.online ? 'text-moss' : ''}>{p.name}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <OnlineDot online={p.online} />
+                        {p.name}
+                      </span>
                     </td>
                     <td className="text-xs">
                       <button

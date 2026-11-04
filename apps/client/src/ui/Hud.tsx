@@ -32,6 +32,7 @@ import {
   CardArt,
   CastleIcon,
   ChestIcon,
+  OnlineDot,
   ResourceIcon,
   ShieldIcon,
   StarIcon,
@@ -40,6 +41,7 @@ import {
 import { CardProfile } from './CardFace';
 import { ChestOpening } from './ChestOpening';
 import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
+import { RuleChanges, RuleChangesButton } from './RuleChanges';
 import { compactQuery } from './layout';
 import { Button, SectionLabel } from './Panel';
 import { SelectionContent } from './SelectionPanel';
@@ -107,6 +109,7 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
             ? `${Math.round(latencyMs)} ms`
             : label}
       </span>
+      {compact && <RuleChangesButton compact />}
       {compact && <HandbookButton />}
     </header>
   );
@@ -520,11 +523,11 @@ function Leaderboard({ view }: { view: GameView }) {
               <span className="w-4 text-right text-xs text-ink-soft">{rank + 1}.</span>
               <ShieldIcon color={color} />
               <span
-                className={`min-w-0 flex-1 truncate ${p.online ? '' : 'text-ink-soft italic'} ${p.id === view.self.id ? 'font-bold' : ''}`}
-                title={p.online ? undefined : 'offline'}
+                className={`min-w-0 flex-1 truncate ${p.id === view.self.id ? 'font-bold' : ''}`}
               >
                 {p.name}
               </span>
+              <OnlineDot online={p.online} />
               <span className="h-1.5 w-16 border border-ink/50 bg-parchment-deep">
                 <span
                   className="block h-full"
@@ -874,8 +877,9 @@ export function Hud() {
               <div className="flex max-h-[55%] min-h-0 flex-col">
                 <Ticker view={view} />
               </div>
-              <div className="mt-auto">
+              <div className="mt-auto flex items-end gap-2">
                 <HandbookCorner />
+                <RuleChangesButton />
               </div>
             </div>
             <div className="flex flex-1 flex-col items-center justify-end">
@@ -894,6 +898,7 @@ export function Hud() {
       <ChestOpening />
       <CardProfile />
       <Handbook />
+      <RuleChanges />
     </>
   );
 }

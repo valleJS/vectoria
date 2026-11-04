@@ -32,6 +32,25 @@ function writeToken(token: string | null): void {
   }
 }
 
+const SEEN_RULE_CHANGES_KEY = 'vectoria.ruleChangesSeen';
+
+/** Ids of rule changes this browser has already shown (see ui/RuleChanges.tsx). */
+function readSeenRuleChanges(): string[] {
+  try {
+    return localStorage.getItem(SEEN_RULE_CHANGES_KEY)?.split(',').filter(Boolean) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeenRuleChanges(ids: string[]): void {
+  try {
+    localStorage.setItem(SEEN_RULE_CHANGES_KEY, ids.join(','));
+  } catch {
+    // Storage unavailable: the changes just show up as new again next time.
+  }
+}
+
 interface GameStore {
   status: ConnectionStatus;
   latencyMs: number | null;
@@ -53,6 +72,10 @@ interface GameStore {
   revealedCard: CardType | null;
   /** The handbook is open. */
   handbook: boolean;
+  /** The rule-changes notice is open. */
+  ruleChanges: boolean;
+  /** Rule changes already shown in this browser. */
+  seenRuleChanges: string[];
 
   setStatus(status: ConnectionStatus): void;
   setLatency(latencyMs: number): void;
@@ -67,6 +90,9 @@ interface GameStore {
   setChestOverlay(open: boolean): void;
   revealCard(card: CardType | null): void;
   setHandbook(open: boolean): void;
+  setRuleChanges(open: boolean): void;
+  /** Remembers these rule changes as seen, so they lose their "Neu" mark. */
+  markRuleChangesSeen(ids: string[]): void;
 }
 
 export const useGameStore = create<GameStore>()((set) => ({
@@ -85,6 +111,8 @@ export const useGameStore = create<GameStore>()((set) => ({
   chestOverlay: false,
   revealedCard: null,
   handbook: false,
+  ruleChanges: false,
+  seenRuleChanges: readSeenRuleChanges(),
 
   setStatus: (status) => set({ status }),
   setLatency: (latencyMs) => set({ latencyMs }),
@@ -108,4 +136,11 @@ export const useGameStore = create<GameStore>()((set) => ({
   setChestOverlay: (chestOverlay) => set({ chestOverlay, revealedCard: null }),
   revealCard: (revealedCard) => set({ revealedCard }),
   setHandbook: (handbook) => set({ handbook }),
+  setRuleChanges: (ruleChanges) => set({ ruleChanges }),
+  markRuleChangesSeen: (ids) =>
+    set((s) => {
+      const seen = [...new Set([...s.seenRuleChanges, ...ids])];
+      writeSeenRuleChanges(seen);
+      return { seenRuleChanges: seen };
+    }),
 }));

@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 2354bfcef1b9f940491ab0b486eaa391d1d59367
+sources_stamp: 8732dcb61cfe24f74e247d7d90e387d0d1c40670
 ---
 
 # Game rules (prototype)
@@ -28,7 +28,7 @@ land as the game grows (≈365 tiles each at 2 players, ≈92 at 100). Travel ti
 map width (`travelMs`: crossing = `CROSS_MAP_HOURS`), so neighbours move closer **in time**,
 roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players ≈8 h, 9 ≈4 h,
 20 ≈2.4 h, 50 ≈1.4 h. Outposts (0.75/player) and spots (1.5/player) scale with players; chests
-(1 per gameday), gathering time and costs do not.
+(3 per gameday), gathering time and costs do not.
 
 ## Game clock
 
@@ -39,7 +39,8 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   payout is granted for missed days.
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
   (always). Then: pending activity becomes active, every player gets 1 of each resource and 3 of
-  the active one, and `CHESTS_PER_GAMEDAY` (1) chest spawns (cap = player count).
+  the active one, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
+  (one per player, at least `CHESTS_PER_GAMEDAY`).
 
 ## Economy
 
@@ -51,7 +52,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
-| Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from |
+| Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_RETURN_SPEED` (0.75×) |
 
 ## Bases and outposts
 
@@ -76,6 +77,10 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
+- Heading home with resource cargo is slower: `startReturn` passes `LOADED_RETURN_SPEED` (0.75)
+  to `travelMs`. Chest bearers and empty armies march at normal speed; a convoy robbed of all
+  cargo is re-timed from where it stands and walks on at normal speed. Transfers to an own base
+  (outbound with cargo, e.g. "Heimholen") are not affected.
 - Everything is visible to everyone. Fog/stealth null out fields in `GameState.armyView`.
 
 ## Combat
@@ -93,7 +98,8 @@ troops than the other side brought (stops 1-troop harassment).
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy gets home first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
-VP are never stolen.
+A convoy cannot raid in turn: returning armies and armies with cargo cannot be redirected
+(`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen.
 
 ## Live ticker
 
@@ -116,3 +122,10 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
 | Tarnung (`stealth`) | on send | others don't see the target |
 | Eilmarsch (`forcedMarch`) | on send | outbound trip takes half as long |
 | Bollwerk (`fortify`) | instant | castle defends ×1.5 for one gameday |
+
+## Rule changes notice
+
+Every change that alters how a running game plays (balance numbers, rules — not UI) gets an entry
+at the top of `RULE_CHANGES` in `apps/client/src/ui/RuleChanges.tsx`: a new stable `id`, the go-live
+date, a title and a short German text with numbers pulled from `shared/rules.ts`. Players see it
+once as a pop-up and later under "Neuerungen".

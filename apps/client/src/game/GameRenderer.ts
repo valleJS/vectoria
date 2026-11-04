@@ -44,6 +44,9 @@ const CASTLE_CENTRE_Y = 66;
  */
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
+/** Offset (glyph units) of a gathering army's badge from its spot: right of and above it. */
+const GATHER_BADGE_X = 24;
+const GATHER_BADGE_Y = 18;
 /** On load the camera starts this much closer than the whole-map fit, framed on the own castle. */
 const START_ZOOM_IN = 1.6;
 
@@ -221,7 +224,7 @@ export class GameRenderer {
     const candidates: { selection: Selection; position: Vec2 }[] = [
       ...this.view.armies.map((a) => ({
         selection: { kind: 'army' as const, id: a.id },
-        position: a.position,
+        position: this.armyPickPosition(a),
       })),
       ...this.view.players.flatMap((p) =>
         p.castle ? [{ selection: { kind: 'castle' as const, id: p.id }, position: p.castle }] : [],
@@ -249,6 +252,19 @@ export class GameRenderer {
       }
     }
     return best;
+  }
+
+  /** Where an army is clicked: its badge for a gathering army (the spot itself selects the spot). */
+  private armyPickPosition(army: ArmyView): Vec2 {
+    const sprite = this.armies.get(army.id);
+    if (army.status !== 'gathering' || !sprite || !this.map) return army.position;
+    const { container } = sprite;
+    const size = this.map.tileSize;
+    const badgeY = -8 * this.unit;
+    return {
+      x: army.position.x - (container.pivot.x * container.scale.x) / size,
+      y: army.position.y + ((badgeY - container.pivot.y) * container.scale.y) / size,
+    };
   }
 
   private setMap(map: MapData | null): void {
@@ -497,15 +513,18 @@ export class GameRenderer {
     const seen = new Set<string>();
     this.routeLines = [];
     this.routeMarks.clear();
+    /** Gathering armies already badged per spot, so several at one spot sit side by side. */
+    const gatherSlots = new Map<string, number>();
 
     for (const army of view.armies) {
       seen.add(army.id);
       const color = playerColor(view, army.ownerId);
       const carrying = hasResources(army.cargo);
+      const gathering = army.status === 'gathering';
       // Empty-handed armies heading home fade; convoys and chest bearers stay bold.
       const faded = army.status === 'returning' && !carrying && !army.chest;
       const target = this.px(army.position);
-      if (army.route && army.status !== 'gathering') {
+      if (army.route && !gathering) {
         const route = army.route.map((p) => this.px(p));
         const to = route[route.length - 1]!;
         const alpha = faded ? 0.5 : 1;
@@ -553,13 +572,32 @@ export class GameRenderer {
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
-      sprite.marching = army.status !== 'gathering';
+      sprite.marching = !gathering;
+      // At a spot the resource stays in view: the army shrinks to a badge at its top right.
+      const slot = gathering && army.target ? (gatherSlots.get(army.target.id) ?? 0) : 0;
+      if (gathering && army.target) gatherSlots.set(army.target.id, slot + 1);
+      if (gathering)
+        sprite.container.pivot.set(-(GATHER_BADGE_X + slot * 26) * u, GATHER_BADGE_Y * u);
+      else sprite.container.pivot.set(0, 0);
       const look = `${color}:${army.status}`;
       if (look !== sprite.look) {
         sprite.look = look;
-        for (const child of sprite.figure.removeChildren()) child.destroy();
+        for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
         const art = this.art.soldiers.get(color);
-        sprite.figure.addChild(art ? artSprite(art, 38 * u) : drawBanner(new Graphics(), color, u));
+        if (gathering) {
+          const disk = new Graphics()
+            .circle(0, -8 * u, 12 * u)
+            .fill(PARCHMENT)
+            .stroke({ width: 2 * u, color });
+          sprite.figure.addChild(
+            disk,
+            art ? artSprite(art, 21 * u) : drawBanner(new Graphics(), color, u * 0.5),
+          );
+        } else {
+          sprite.figure.addChild(
+            art ? artSprite(art, 38 * u) : drawBanner(new Graphics(), color, u),
+          );
+        }
         sprite.container.alpha = faded ? 0.75 : 1;
       }
       const cargoKey = JSON.stringify([army.cargo, army.chest]);
@@ -568,13 +606,16 @@ export class GameRenderer {
         this.drawCargo(sprite, army, u);
         sprite.container.alpha = faded ? 0.75 : 1;
       }
-      const text =
-        (army.troops === null ? '?' : String(army.troops)) +
-        (army.status === 'gathering' ? ' · sammelt' : '');
+      const troops = army.troops === null ? '?' : String(army.troops);
+      const text = `${army.status}:${troops}`;
       if (text !== sprite.text) {
         sprite.text = text;
         for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
-        sprite.plate.addChild(this.nameplate(text, color, u, { top: 2 * u, size: 11 * u }));
+        sprite.plate.addChild(
+          gathering
+            ? this.nameplate(troops, null, u, { top: 3 * u, size: 9 * u })
+            : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }),
+        );
       }
     }
 
