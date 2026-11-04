@@ -6,7 +6,7 @@ category: runbook
 last_verified: 2026-11-04
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: 61c76f5ca45f187268b76a9d3bb2899bd57608b7
+sources_stamp: 6d5f707d7fdd7635248024a5ca701bc5cb1ad997
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)
@@ -334,5 +334,33 @@ nicht lesen. Dann zusätzlich das `…-before-<sha>.json`-Backup dieses Deploys 
 - **Root-Login per SSH:** Nach dem Setup einen eigenen Admin-User mit sudo nutzen und in
   `/etc/ssh/sshd_config` `PermitRootLogin no` setzen. Der Deploy-Key kann ohnehin nur `deploy.sh`
   starten.
+- **SSH-Bots aussperren:** Bots versuchen sich täglich über tausend Mal per SSH anzumelden. Sie
+  belegen Verbindungsplätze, sodass sshd neue Verbindungen zeitweise abweist (auch den Deploy:
+  `kex_exchange_identification: Connection reset by peer`). Der Deploy-Schritt versucht es deshalb
+  bis zu fünfmal. Auf dem Server sperrt fail2ban Bots nach 3 Fehlversuchen für 24 h, Wiederholungs-
+  täter (`recidive`) für eine Woche, und `MaxStartups` ist großzügiger:
+  ```bash
+  cat > /etc/fail2ban/jail.local <<'EOF'
+  [DEFAULT]
+  backend = systemd
+  findtime = 10m
+
+  [sshd]
+  enabled = true
+  maxretry = 3
+  bantime = 24h
+
+  [recidive]
+  enabled = true
+  logpath = /var/log/fail2ban.log
+  backend = auto
+  bantime = 1w
+  findtime = 1d
+  maxretry = 3
+  EOF
+  echo 'MaxStartups 30:30:100' > /etc/ssh/sshd_config.d/10-maxstartups.conf
+  sshd -t && systemctl reload ssh
+  systemctl restart fail2ban && fail2ban-client status sshd
+  ```
 - **Docker-Gruppe:** Mitglieder der Docker-Gruppe sind faktisch root. Deshalb ist der Deploy-Key
   per `command=` auf das Skript beschränkt.
