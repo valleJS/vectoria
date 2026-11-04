@@ -58,12 +58,19 @@ const RECENT_ATTACK_MS = HOUR_MS;
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
 /**
- * A gathering army plants its claim flag at the deposit's right front (glyph units from the spot
- * centre); further gatherers at the same spot stand a step to the right.
+ * A gathering army is a bubble in its owner's colour with the troop count, on a ring around the
+ * deposit (glyph units from the spot centre); gatherers at one spot line up clockwise from the
+ * top right, a wider ring takes the rest once one is full.
  */
-const GATHER_FLAG_X = 15;
-const GATHER_FLAG_Y = 10;
-const GATHER_FLAG_STEP = 10;
+const GATHER_RING = 27;
+const GATHER_RING_STEP = 18;
+const GATHER_BUBBLE = 8;
+const GATHER_START_ANGLE = -Math.PI / 3;
+/**
+ * Serif with lining figures for counts centred in a bubble: Georgia's old-style figures rise and
+ * dip (a 5 hangs below the line), so they never sit in the middle.
+ */
+const LINING_SERIF = '"Times New Roman", Times, serif';
 /** Armies closer than this (tiles) are fanned out side by side so each stays readable. */
 const STACK_RADIUS_TILES = 0.7;
 /** Horizontal spacing (glyph units) of fanned-out armies. */
@@ -110,7 +117,7 @@ function windowLights(
 
 interface ArmySprite {
   container: Container;
-  /** Holds the soldiers, or the claim flag while gathering. */
+  /** Holds the soldiers (or tent), or the bubble while gathering. */
   figure: Container;
   /** Troop count nameplate, rebuilt when `text` changes. */
   plate: Container;
@@ -134,7 +141,7 @@ interface ArmySprite {
   marching: boolean;
   /** Offsets the walking bob so armies don't step in unison. */
   stride: number;
-  /** Display offset (world px at piece scale 1) the container eases toward: fan-out or flag slot. */
+  /** Display offset (world px at piece scale 1) the container eases toward: fan-out or gather ring slot. */
   offset: PointData;
   /** At night: the campfire's flame and light, flickered in `animate`. */
   fire: { flame: Sprite; light: Sprite; scale: number } | null;
@@ -179,6 +186,8 @@ export class GameRenderer {
   private routePhase = 0;
   private readonly alertUnderLayer = new Container();
   private readonly siteLayer = new Container();
+  /** Resource deposits, in front of everything else so no piece or label ever hides one. */
+  private readonly spotLayer = new Container();
   private readonly alertLayer = new Container();
   private alerts: SiteAlert[] = [];
   private alertsKey = '';
@@ -203,6 +212,11 @@ export class GameRenderer {
   private view: GameView | null = null;
   /** Fingerprint of the last drawn sites, so labels aren't re-rasterised every tick. */
   private sitesKey = '';
+  /** Night lights of the sites (windows, chests) and of deposits someone is loading at. */
+  private siteLights: NightLight[] = [];
+  private gatherLights: NightLight[] = [];
+  /** Spots with gatherers, so their lights are rebuilt only when that changes. */
+  private gatherKey = '';
   /** Game clock of the last view and when it arrived, to run the clock on between updates. */
   private clockSync = { clock: 0, at: 0, rate: 0 };
   private selfId: string | null = null;
@@ -241,6 +255,7 @@ export class GameRenderer {
       this.selectionRing,
       this.armyLayer,
       this.night.fireflies,
+      this.spotLayer,
     );
     app.stage.addChild(this.world);
 
@@ -338,7 +353,7 @@ export class GameRenderer {
   }
 
   /**
-   * Where an army is clicked: where it is drawn (fanned out of a stack), and its flag for a
+   * Where an army is clicked: where it is drawn (fanned out of a stack), and its bubble for a
    * gathering army (the deposit itself selects the spot).
    */
   private armyPickPosition(army: ArmyView): Vec2 {
@@ -346,7 +361,7 @@ export class GameRenderer {
     if (!sprite || !this.map) return army.position;
     const { container } = sprite;
     const size = this.map.tileSize;
-    const lift = army.status === 'gathering' ? -14 * this.unit : -10 * this.unit;
+    const lift = army.status === 'gathering' ? 0 : -10 * this.unit;
     return {
       x: army.position.x - (container.pivot.x * container.scale.x) / size,
       y: army.position.y + ((lift - container.pivot.y) * container.scale.y) / size,
@@ -445,7 +460,9 @@ export class GameRenderer {
       : '';
     if (key === this.sitesKey) return;
     this.sitesKey = key;
-    for (const child of this.siteLayer.removeChildren()) child.destroy({ children: true });
+    for (const layer of [this.siteLayer, this.spotLayer]) {
+      for (const child of layer.removeChildren()) child.destroy({ children: true });
+    }
     this.sparkles = [];
     if (!view || !this.map) return;
     this.buildGround(view);
@@ -463,7 +480,7 @@ export class GameRenderer {
       const piece = new Container();
       piece.position.copyFrom(this.px(spot.position));
       piece.addChild(artSprite(this.art.deposits[spot.resource], 44 * u, true));
-      this.siteLayer.addChild(piece);
+      this.spotLayer.addChild(piece);
     }
 
     for (const chest of view.chests) {
@@ -551,7 +568,8 @@ export class GameRenderer {
         kind: 'chest' as const,
       })),
     ];
-    this.night.setLights(lights);
+    this.siteLights = lights;
+    this.night.setLights([...this.siteLights, ...this.gatherLights]);
   }
 
   /**
@@ -609,6 +627,21 @@ export class GameRenderer {
     this.routeLines = [];
     this.routeMarks.clear();
     const offsets = this.armyOffsets(view.armies, u);
+
+    // A deposit someone is loading at glows at night: lanterns of the working troops.
+    const worked = [
+      ...new Set(
+        view.armies.flatMap((a) => (a.status === 'gathering' && a.target ? [a.target.id] : [])),
+      ),
+    ].sort();
+    const gatherKey = `${u}:${worked.join(',')}`;
+    if (gatherKey !== this.gatherKey) {
+      this.gatherKey = gatherKey;
+      this.gatherLights = view.spots
+        .filter((s) => worked.includes(s.id))
+        .map((s) => ({ ...this.px(s.position), radius: 22 * u, kind: 'lantern' as const }));
+      this.night.setLights([...this.siteLights, ...this.gatherLights]);
+    }
 
     for (const army of view.armies) {
       seen.add(army.id);
@@ -685,43 +718,48 @@ export class GameRenderer {
           : null;
       const look = `${color}:${gathering}:${camp}:${this.night.night}`;
       if (look !== sprite.look) {
-        // At a deposit the resource stays in view: the army is shown as its planted claim flag.
-        const art = camp
-          ? this.art.pieces.tent(color)
-          : gathering
-            ? this.art.pieces.flag(color)
-            : this.art.pieces.soldiers(color);
-        sprite.look = art ? look : '';
         for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
         sprite.fire = null;
-        if (art && camp) {
-          sprite.fire = this.campfire(sprite.figure, u, { x: 12 * u, y: 2 * u }, 0.9);
-          sprite.figure.addChildAt(artSprite(art, 28 * u), 1);
-        } else if (art) {
-          // A lantern-like glow keeps gatherers visible at night, too.
-          if (this.night.night)
-            sprite.fire = this.campfire(sprite.figure, u, { x: 7 * u, y: 1 * u }, 0.6);
-          sprite.figure.addChild(artSprite(art, gathering ? 17 * u : 38 * u));
+        if (gathering) {
+          // At a deposit the resource stays in view: the army is a bubble on the ring around it.
+          sprite.look = look;
+          sprite.figure.addChild(
+            new Graphics()
+              .circle(0, 0, GATHER_BUBBLE * u)
+              .fill(color)
+              .stroke({ width: 1.2 * u, color: INK })
+              .circle(0, 0, (GATHER_BUBBLE - 1.6) * u)
+              .stroke({ width: 0.8 * u, color: PARCHMENT, alpha: 0.7 }),
+          );
+        } else {
+          const art = camp ? this.art.pieces.tent(color) : this.art.pieces.soldiers(color);
+          sprite.look = art ? look : '';
+          if (art && camp) {
+            sprite.fire = this.campfire(sprite.figure, u, { x: 12 * u, y: 2 * u }, 0.9);
+            sprite.figure.addChildAt(artSprite(art, 28 * u), 1);
+          } else if (art) {
+            sprite.figure.addChild(artSprite(art, 38 * u));
+          }
         }
         // The plate's position depends on the look.
         sprite.text = '';
       }
       sprite.container.alpha = faded ? 0.75 : 1;
-      const cargoKey = JSON.stringify([army.cargo, army.chest, gathering]);
+      const cargoKey = JSON.stringify([army.cargo, army.chest, gathering, camp]);
       if (cargoKey !== sprite.cargoKey) {
         sprite.cargoKey = cargoKey;
-        this.drawCargo(sprite, army, u);
+        this.drawCargo(sprite, army, u, camp);
       }
       const troops = army.troops === null ? '?' : String(army.troops);
       const text = `${gathering}:${troops}`;
       if (text !== sprite.text) {
         sprite.text = text;
         for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
-        const plate = gathering
-          ? this.nameplate(troops, color, u, { top: -33 * u, size: 9 * u })
-          : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u });
-        if (gathering) plate.x = 1.5 * u;
-        sprite.plate.addChild(plate);
+        sprite.plate.addChild(
+          gathering
+            ? this.label(troops, (troops.length > 3 ? 6.5 : 8) * u, PARCHMENT, false, LINING_SERIF)
+            : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }),
+        );
       }
     }
 
@@ -734,22 +772,33 @@ export class GameRenderer {
 
   /**
    * Display offsets (world px at piece scale 1) so stacked armies stay apart: gathering armies
-   * plant their flags in a row at the deposit's right front; other armies standing within
+   * sit as bubbles on a ring around their deposit; other armies standing within
    * STACK_RADIUS_TILES of each other fan out side by side (two rows past four), ordered by id so
    * nobody swaps places between updates.
    */
   private armyOffsets(armies: readonly ArmyView[], u: number): Map<string, PointData> {
     const offsets = new Map<string, PointData>();
-    const flagSlots = new Map<string, number>();
+    const gatherSlots = new Map<string, number>();
     const loose: ArmyView[] = [];
     for (const army of [...armies].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       if (army.status === 'gathering' && army.target) {
-        const slot = flagSlots.get(army.target.id) ?? 0;
-        flagSlots.set(army.target.id, slot + 1);
-        offsets.set(army.id, {
-          x: (GATHER_FLAG_X + slot * GATHER_FLAG_STEP) * u,
-          y: (GATHER_FLAG_Y - (slot % 2) * 3) * u,
-        });
+        let slot = gatherSlots.get(army.target.id) ?? 0;
+        gatherSlots.set(army.target.id, slot + 1);
+        // Fill ring after ring, bubbles just apart on each.
+        let radius = GATHER_RING;
+        for (;;) {
+          const fits = Math.floor((2 * Math.PI * radius) / (2 * GATHER_BUBBLE + 3));
+          if (slot < fits) {
+            const angle = GATHER_START_ANGLE + (slot * 2 * Math.PI) / Math.max(fits, 1);
+            offsets.set(army.id, {
+              x: Math.cos(angle) * radius * u,
+              y: Math.sin(angle) * radius * u,
+            });
+            break;
+          }
+          slot -= fits;
+          radius += GATHER_RING_STEP;
+        }
       } else {
         loose.push(army);
       }
@@ -969,9 +1018,9 @@ export class GameRenderer {
 
   /**
    * A parchment tag with the main resource's icon and the total load (beside the soldiers, or
-   * the claim flag while gathering); a small chest while the army brings one home.
+   * the bubble while gathering); a small chest while the army brings one home.
    */
-  private drawCargo(sprite: ArmySprite, army: ArmyView, u: number): void {
+  private drawCargo(sprite: ArmySprite, army: ArmyView, u: number, camp: boolean): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
     const gathering = army.status === 'gathering';
     if (army.chest) {
@@ -987,8 +1036,11 @@ export class GameRenderer {
     const w = amount.width + 22 * u;
     const h = 14 * u;
     const tag = new Container();
+    // Tucked against the figure (drawn behind it): at the soldiers' heads, or on the tent's right
+    // slope.
     if (gathering) tag.position.set(13 * u, -9 * u);
-    else tag.position.set(15 * u, -26 * u);
+    else if (camp) tag.position.set(6 * u, -17 * u);
+    else tag.position.set(9 * u, -14 * u);
     const plate = new Graphics()
       .roundRect(0, -h / 2, w, h, h / 2)
       .fill(PARCHMENT)
@@ -1031,11 +1083,17 @@ export class GameRenderer {
     }
   }
 
-  private label(text: string, fontSize: number, fill: number, italic = false): Text {
+  private label(
+    text: string,
+    fontSize: number,
+    fill: number,
+    italic = false,
+    fontFamily = SERIF,
+  ): Text {
     const label = new Text({
       text,
       style: {
-        fontFamily: SERIF,
+        fontFamily,
         fontSize,
         fontStyle: italic ? 'italic' : 'normal',
         fontWeight: italic ? 'normal' : 'bold',
@@ -1061,13 +1119,15 @@ export class GameRenderer {
         : sprite.target;
       container.x += (target.x - container.x) * t;
       container.y += (target.y - container.y) * t;
-      // Fanned-out stacks and flag slots slide into place instead of jumping.
+      // Fanned-out stacks and gather ring slots slide into place instead of jumping.
       container.pivot.x += (-offset.x - container.pivot.x) * t;
       container.pivot.y += (-offset.y - container.pivot.y) * t;
       container.scale.set(k);
       figure.y = marching ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
     }
-    for (const piece of this.siteLayer.children) piece.scale.set(k);
+    for (const layer of [this.siteLayer, this.spotLayer]) {
+      for (const piece of layer.children) piece.scale.set(k);
+    }
     for (const alert of this.alerts) {
       alert.under.scale.set(k);
       alert.over.scale.set(k);
@@ -1075,6 +1135,7 @@ export class GameRenderer {
     this.selectionRing.scale.set(k);
     // Night: moonlit pieces, flickering campfires, ring in moonlight.
     this.siteLayer.tint = this.night.update(ticker.deltaMS, seconds, k);
+    this.spotLayer.tint = this.siteLayer.tint;
     this.selectionRing.tint = mix(RING_DAY, RING_NIGHT, this.night.amount);
     for (const { fire } of this.armies.values()) {
       if (!fire) continue;

@@ -891,21 +891,6 @@ export function soldiers(color: string): Art {
   return { svg: svg(60, 56, body), width: 60, height: 56, anchor: { x: 30, y: 50 } };
 }
 
-/**
- * Claim flag an army plants at a deposit while it gathers: a swallow-tailed pennant on a pole in
- * the owner's colour, 34×52, standing at (8, 48).
- */
-export function claimFlag(color: string): Art {
-  const body = `
-    ${groundShadow(10, 48, 8, 2.4)}
-    <path d="M4 48q4-4 8 0z" fill="${TIMBER.shade}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M8 47V6" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
-    <path d="M8 47V6" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
-    ${pennant(8, 47, 7, color, 24, false)}
-    <circle cx="8" cy="5" r="2.8" fill="${GOLD}" stroke="${INK}" stroke-width="1.4"/>`;
-  return { svg: svg(34, 52, body), width: 34, height: 52, anchor: { x: 8, y: 48 } };
-}
-
 // ---- Night camp ----
 
 /**

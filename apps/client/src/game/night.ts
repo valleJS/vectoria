@@ -4,8 +4,9 @@ import type { MapArt } from '../art/textures';
 import { hash2 } from './fields';
 
 // Night rest ("Nachtruhe": the game clock stands still outside gameday hours). The map sinks into
-// moonlit blue, castles and outposts glow warm from their windows, chests shimmer, fireflies drift over the forests
-// and stars twinkle on the water. Everything fades in and out with `amount`.
+// moonlit blue, castles and outposts glow warm from their windows, deposits glow where troops are
+// loading, chests shimmer, fireflies drift over the forests and stars twinkle on the water.
+// Everything fades in and out with `amount`.
 
 /** Moonlight multiplied over the map at full night: deep blue that keeps the map's contrast. */
 const NIGHT_SKY = 0x4a5794;
@@ -32,7 +33,8 @@ export function isNightRest(view: GameView): boolean {
 }
 
 /**
- * A light on the map: a lit window of a castle or outpost, or a shimmering chest. `x`, `y` is the
+ * A light on the map: a lit window of a castle or outpost, a shimmering chest, or the lanterns of
+ * troops loading at a deposit. `x`, `y` is the
  * site (the light scales with the pieces around it), `dx`, `dy` the light's offset from it, all in
  * world px at piece scale 1.
  */
@@ -43,7 +45,7 @@ export interface NightLight {
   dy?: number;
   /** Radius of the light, world px. */
   radius: number;
-  kind: 'window' | 'chest';
+  kind: 'window' | 'chest' | 'lantern';
 }
 
 interface Glow {
@@ -158,8 +160,8 @@ export class NightScene {
   }
 
   /**
-   * Rebuilds the lights for the current sites: chests shimmer in a pool on the ground, castles and
-   * outposts only glow from their windows (over the building, no pool around it).
+   * Rebuilds all lights: chests shimmer and worked deposits glow in a pool on the ground, castles
+   * and outposts only glow from their windows (over the building, no pool around it).
    */
   setLights(lights: NightLight[]): void {
     for (const layer of [this.glowUnder, this.glowOver]) {
@@ -171,6 +173,13 @@ export class NightScene {
         const pool = this.glowSprite(light, light.radius * 3.4, TREASURE_LIGHT);
         this.glowUnder.addChild(pool.container);
         this.glows.push({ sprite: pool.sprite, alpha: 0.6, phase: i * 1.7, flicker: 0.3 });
+        continue;
+      }
+      if (light.kind === 'lantern') {
+        // Warm pool on the ground around the deposit (the deposit itself stays in front).
+        const pool = this.glowSprite(light, light.radius * 3.4, FIRELIGHT);
+        this.glowUnder.addChild(pool.container);
+        this.glows.push({ sprite: pool.sprite, alpha: 0.8, phase: i * 1.7, flicker: 0.15 });
         continue;
       }
       const lamp = this.glowSprite(light, light.radius * 6, FIRELIGHT);

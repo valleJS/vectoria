@@ -9,7 +9,6 @@ import {
   campfire,
   castle,
   chest,
-  claimFlag,
   conifer,
   dataUrl,
   deposit,
@@ -57,7 +56,6 @@ export interface PieceCache {
   castle(color: number, style: number): ArtTexture | null;
   outpost(color: number): ArtTexture | null;
   soldiers(color: number): ArtTexture | null;
-  flag(color: number): ArtTexture | null;
   /** Night camp of an army. */
   tent(color: number): ArtTexture | null;
   /** Called (once per batch) when textures asked for earlier have become ready. */
@@ -184,7 +182,6 @@ function pieceCache(): PieceCache {
     castle: (color, style) => get(`castle:${style}:${color}`, () => castle(css(color), style)),
     outpost: (color) => get(`outpost:${color}`, () => outpost(css(color))),
     soldiers: (color) => get(`soldiers:${color}`, () => soldiers(css(color))),
-    flag: (color) => get(`flag:${color}`, () => claimFlag(css(color))),
     tent: (color) => get(`tent:${color}`, () => tent(css(color))),
   };
   function get(key: string, make: () => Art): ArtTexture | null {
@@ -220,7 +217,6 @@ async function preload(pieces: PieceCache): Promise<void> {
       pieces.castle(c, 2),
       pieces.outpost(c),
       pieces.soldiers(c),
-      pieces.flag(c),
       pieces.tent(c),
     ]);
   asks();
