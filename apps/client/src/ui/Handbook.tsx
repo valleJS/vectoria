@@ -1,6 +1,7 @@
 import {
   CARD_TYPES,
   CARDS,
+  cardChance,
   CASTLE_PLUNDER_SHARE,
   CHEST_TROOPS_MAX,
   CHEST_TROOPS_MIN,
@@ -484,7 +485,7 @@ const CHAPTERS: Chapter[] = [
             'Ein Truhenträger kann nicht umgeleitet werden und kehrt immer heim — zu der Burg, aus der er kam. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
             'Eine normal geborgene Truhe ist nie überfallbar, weil ihr Zug keine Ressourcen trägt. Nur eine Truhe aus einem Burgsturm reist zusammen mit Beute — dann kann man die Beute rauben, die Truhe nie.',
             'Ungeöffnete Truhen daheim kann dir niemand nehmen, auch nicht beim Sturm auf deine Burg.',
-            `Jede Karte ist beim Öffnen gleich wahrscheinlich (1 zu ${CARD_TYPES.length}).`,
+            `Welche Karte in einer Truhe liegt, ist Zufall: ${CARD_TYPES.map((c) => `${CARDS[c].name} ${formatPercent(cardChance(c))}`).join(', ')}.`,
           ]}
         />
       </>
@@ -519,6 +520,10 @@ const CHAPTERS: Chapter[] = [
             'Tarnung verbirgt Ziel und Route nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
             'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
             'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
+            'Seeweg führt den Hinweg schnurgerade zum Ziel, auch übers Wasser. Heim geht es wieder über Land. Wer umleitet, verlässt den Seeweg; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
+            'Füllhorn zahlt an den nächsten drei Spieltag-Anfängen je +1 Holz, Stein und Gold zusätzlich in deine Burg. Mehrere Füllhörner verlängern um je drei Spieltage.',
+            'Schuhe klauen trifft alle Züge, die die gewählte Person in den nächsten 8 Stunden Spielzeit losschickt (auch Heimwege und Umleitungen): 75 % Tempo, beladen also nur noch etwa 56 %. Schon laufende Züge behalten ihr Tempo.',
+            'Hofumzug tauscht die Orte deiner Burg und eines deiner Stützpunkte. Truppen und Lager bleiben, wo sie hingehören: Die Burg nimmt ihre mit, der Stützpunkt seine. Züge auf dem Weg zu einer der beiden laufen zum neuen Ort weiter. Hofumzug ist seltener als die anderen Karten.',
             'Karten können nicht gestohlen werden und gehen beim Sturm auf deine Burg nicht verloren.',
           ]}
         />

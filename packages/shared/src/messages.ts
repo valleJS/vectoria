@@ -59,6 +59,8 @@ export interface RedirectArmyMessage {
 export interface ActivateCardMessage {
   type: 'activateCard';
   card: CardType | null;
+  /** For cards with a `target`: the own outpost id or the other player's id. */
+  target?: string;
 }
 
 /** Opens one chest waiting at home; the server answers with `chestOpened`. */
@@ -303,9 +305,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         : null;
     }
     case 'activateCard':
-      return msg.card === null || isCard(msg.card)
+      if (msg.card !== null && !isCard(msg.card)) return null;
+      if (msg.target !== undefined && !isId(msg.target)) return null;
+      return msg.target === undefined
         ? { type: 'activateCard', card: msg.card }
-        : null;
+        : { type: 'activateCard', card: msg.card, target: msg.target };
     case 'openChest':
       return { type: 'openChest' };
     default:

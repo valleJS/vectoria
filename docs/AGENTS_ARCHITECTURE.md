@@ -74,7 +74,7 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
-| C→S | `activateCard` | Instant card: takes effect; march card: armed for the next army; `null` disarms |
+| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id or player id, for cards that aim); march card: armed for the next army; `null` disarms |
 | C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
 | S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
 | S→C | `map` | Map changed (game start / reset) |

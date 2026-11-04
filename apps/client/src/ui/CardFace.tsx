@@ -1,11 +1,19 @@
+import { useState } from 'react';
 import { CARDS, type CardType } from '@vectoria/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { gameSocket } from '../net/socket';
 import { useGameStore } from '../state/store';
-import { cardColor } from '../game/format';
+import { cardColor, ownBases } from '../game/format';
 import { CardArt } from './icons';
 import { Button } from './Panel';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const USE_TEXT: Record<'march' | 'instant', { badge: string; line: string }> = {
   march: { badge: 'Marsch', line: 'Aktivieren, dann mit dem nächsten Zug losschicken' },
@@ -51,13 +59,31 @@ export function CardFace({ card, className = '' }: { card: CardType; className?:
 /** Modal profile of a card in hand, with the action to activate (or disarm) it. */
 export function CardProfile() {
   const card = useGameStore((s) => s.cardProfile);
-  const self = useGameStore((s) => s.view?.self);
+  const view = useGameStore((s) => s.view);
   const showCard = useGameStore((s) => s.showCard);
-  if (!card || !self) return null;
+  const [picked, setPicked] = useState<string | undefined>(undefined);
+  const self = view?.self;
+  if (!card || !view || !self) return null;
   const count = self.cards.filter((c) => c === card).length;
   const active = self.activeCard === card;
   const info = CARDS[card];
-  const close = () => showCard(null);
+  const close = () => {
+    setPicked(undefined);
+    showCard(null);
+  };
+  // Cards aimed at something: the own outposts (Hofumzug) or the other players (Schuhe klauen).
+  const targets =
+    info.target === 'ownOutpost'
+      ? ownBases(view).flatMap((b) =>
+          b.id ? [{ id: b.id, label: `${b.name} · ${b.troops} Truppen` }] : [],
+        )
+      : info.target === 'player'
+        ? view.players
+            .filter((p) => p.id !== self.id && p.castle)
+            .map((p) => ({ id: p.id, label: p.name }))
+        : [];
+  const target = targets.find((t) => t.id === picked)?.id;
+  const ready = !info.target || target !== undefined;
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
@@ -73,6 +99,30 @@ export function CardProfile() {
               <span>Im Besitz: {count}</span>
               {active && <b className="text-seal">aktiv</b>}
             </div>
+            {count > 0 && info.target && (
+              <Select value={target ?? ''} onValueChange={setPicked}>
+                <SelectTrigger aria-label="Ziel der Karte" className="w-full">
+                  <SelectValue
+                    placeholder={
+                      targets.length === 0
+                        ? info.target === 'ownOutpost'
+                          ? 'Du hast keinen Stützpunkt'
+                          : 'Niemand sonst da'
+                        : info.target === 'ownOutpost'
+                          ? 'Stützpunkt wählen'
+                          : 'Wen trifft es?'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {targets.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {count > 0 &&
               (active ? (
                 <Button onClick={() => gameSocket.send({ type: 'activateCard', card: null })}>
@@ -81,8 +131,13 @@ export function CardProfile() {
               ) : (
                 <Button
                   variant="primary"
+                  disabled={!ready}
                   onClick={() => {
-                    gameSocket.send({ type: 'activateCard', card });
+                    gameSocket.send(
+                      target === undefined
+                        ? { type: 'activateCard', card }
+                        : { type: 'activateCard', card, target },
+                    );
                     if (info.use === 'instant') close();
                   }}
                 >
