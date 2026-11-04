@@ -3,10 +3,10 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed Tailwind HUD.
 audience: agent
 category: codemap
-last_verified: 2026-11-02
+last_verified: 2026-11-04
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json]
-sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
+sources_stamp: cbffabe6fd75851d5397d4b008a8ff21c5c04c50
 ---
 
 # Client codemap (`apps/client`)
@@ -31,7 +31,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/art/svg.ts` | All illustrated art as SVG source: resources, spot medallions, trees, mountains, castles, soldiers (armies), chest + sparkle, alarm badge, ship, compass |
 | `src/art/textures.ts` | Rasterises the SVG art once into Pixi textures (`loadMapArt`): decoration sepia-toned, pieces with a parchment cut-out edge |
 | `src/game/palette.ts` | Pixi colours (ink, parchment, seal, sea, resources), heraldic player palette, `sepia()` backdrop toning |
-| `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets |
+| `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets; optional focus (zoom in, centre on a point, clamped to the map edges) used once per map to start on the own castle (`GameRenderer.frame`, `START_ZOOM_IN`) |
 | `src/game/format.ts` | Durations, player colours (viewer red, others by join order), target and outpost labels, own bases (`ownBases`), card colours |
 | `src/ui/Hud.tsx` | Game overlay. Wide (≥ 900 px): slim top bar (clock, connection), live ticker top-left, tabbed sidebar (selection, armies, ranking, chronicle) and the player's realm box bottom-right: player-wide part (VP, chests to open, activity, cards) above one section per base ("Basis" with shop, then outposts; folds once there are 2+). Compact (phones, `CompactHud`): top bar with handbook button, full-screen map, bottom tab bar (Ticker, Auswahl, Züge, Rang + Chronik, Reich) opening one panel as a sheet; a map selection opens Auswahl |
 | `src/ui/layout.ts` | Compact breakpoint (`COMPACT_BELOW` = 900) and per-layout HUD insets, shared by the HUD and the map fit |
