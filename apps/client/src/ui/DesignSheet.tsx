@@ -9,7 +9,6 @@ import {
   castle,
   CASTLE_STYLE_NAMES,
   chest,
-  claimFlag,
   conifer,
   deposit,
   flame,
@@ -406,8 +405,14 @@ export function DesignSheet() {
             </Tile>
           ))}
           {HERALDRY.slice(0, 5).map((c) => (
-            <Tile key={`f${c}`} label="Sammelflagge">
-              <MapArt art={claimFlag(c)} options={{ outline: true }} height={60} />
+            <Tile key={`f${c}`} label="Sammelnd">
+              {/* Mirrors the Pixi bubble in GameRenderer (gathering armies around a deposit). */}
+              <span
+                className="grid size-8 place-items-center rounded-full border border-ink text-[11px] font-bold text-parchment shadow-[inset_0_0_0_2px_rgba(246,238,219,0.7)]"
+                style={{ background: c, fontFamily: '"Times New Roman", Times, serif' }}
+              >
+                120
+              </span>
             </Tile>
           ))}
           {HERALDRY.slice(0, 5).map((c) => (

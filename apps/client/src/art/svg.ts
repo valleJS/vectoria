@@ -695,6 +695,27 @@ function block(x: number, w: number, top: number, bottom: number, fill = MASONRY
     <rect x="${x}" y="${top}" width="${w}" height="${bottom - top}" fill="none" ${LINE}/>`;
 }
 
+/** A window that is lit at night: centre and size in art px (night.ts puts a small glow there). */
+export interface LitWindow {
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Slit window of `roundTower(x, w, top, …)`. */
+const slit = (x: number, w: number, top: number): LitWindow => ({
+  x: x + w / 2,
+  y: top + 19.5,
+  size: 4,
+});
+
+/** Lit windows per castle style, matching the drawings in `castle` (the gate stays dark). */
+export const CASTLE_WINDOWS: readonly (readonly LitWindow[])[] = [
+  [{ x: 60, y: 47, size: 8 }, slit(4, 26, 50), slit(90, 26, 50)],
+  [{ x: 60, y: 54, size: 11 }],
+  [{ x: 60, y: 57, size: 10 }, slit(12, 16, 44), slit(92, 16, 44)],
+];
+
 /** Number of castle designs; format.ts assigns one per player. */
 export const CASTLE_STYLE_NAMES = ['Burg', 'Bergfried', 'Zitadelle'] as const;
 
@@ -760,6 +781,9 @@ export function castle(color: string, style = 0): Art {
     centreY: 66,
   };
 }
+
+/** Lit window of the outpost watchtower, matching `outpost`. */
+export const OUTPOST_WINDOWS: readonly LitWindow[] = [{ x: 42, y: 37, size: 5 }];
 
 /** Outpost ("Stützpunkt") in the owner's colour: a watchtower behind a palisade. 84×80, standing
  *  at (42, 72), centred at y 50. */
@@ -865,21 +889,6 @@ function soldier(x: number, y: number, scale: number, color: string): string {
 export function soldiers(color: string): Art {
   const body = `${soldier(17, 42, 0.82, color)}${soldier(43, 42, 0.82, color)}${soldier(30, 50, 1, color)}`;
   return { svg: svg(60, 56, body), width: 60, height: 56, anchor: { x: 30, y: 50 } };
-}
-
-/**
- * Claim flag an army plants at a deposit while it gathers: a swallow-tailed pennant on a pole in
- * the owner's colour, 34×52, standing at (8, 48).
- */
-export function claimFlag(color: string): Art {
-  const body = `
-    ${groundShadow(10, 48, 8, 2.4)}
-    <path d="M4 48q4-4 8 0z" fill="${TIMBER.shade}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M8 47V6" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
-    <path d="M8 47V6" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
-    ${pennant(8, 47, 7, color, 24, false)}
-    <circle cx="8" cy="5" r="2.8" fill="${GOLD}" stroke="${INK}" stroke-width="1.4"/>`;
-  return { svg: svg(34, 52, body), width: 34, height: 52, anchor: { x: 8, y: 48 } };
 }
 
 // ---- Night camp ----
