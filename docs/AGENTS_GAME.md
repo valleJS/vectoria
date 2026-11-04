@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 8732dcb61cfe24f74e247d7d90e387d0d1c40670
+sources_stamp: ec9046517d8ed6ebf8b6e073c47a7b98ed6ea426
 ---
 
 # Game rules (prototype)
@@ -52,7 +52,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
-| Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_RETURN_SPEED` (0.75×) |
+| Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
 
 ## Bases and outposts
 
@@ -77,10 +77,10 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
-- Heading home with resource cargo is slower: `startReturn` passes `LOADED_RETURN_SPEED` (0.75)
+- Heading home with resource cargo is slower: `startReturn` passes `LOADED_SPEED` (0.75)
   to `travelMs`. Chest bearers and empty armies march at normal speed; a convoy robbed of all
-  cargo is re-timed from where it stands and walks on at normal speed. Transfers to an own base
-  (outbound with cargo, e.g. "Heimholen") are not affected.
+  cargo is re-timed from where it stands and walks on at normal speed. Transfers between own
+  bases with cargo (`sendArmy`, e.g. "Heimholen") march at `LOADED_SPEED` too.
 - Everything is visible to everyone. Fog/stealth null out fields in `GameState.armyView`.
 
 ## Combat

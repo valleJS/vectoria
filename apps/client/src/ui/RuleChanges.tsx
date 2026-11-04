@@ -1,6 +1,6 @@
 import {
   CHESTS_PER_GAMEDAY,
-  LOADED_RETURN_SPEED,
+  LOADED_SPEED,
   VICTORY_POINT_BASE_COST,
   victoryPointCost,
 } from '@vectoria/shared';
@@ -23,15 +23,26 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'loaded-transfer-speed',
+    date: '2026-11-04',
+    title: 'Auch Transporte sind beladen langsamer',
+    body: (
+      <>
+        Wer Ressourcen zwischen eigenen Burgen und Stützpunkten verlagert, marschiert jetzt
+        ebenfalls nur mit <b>{formatPercent(LOADED_SPEED)} Tempo</b> — wie Züge, die vom Vorkommen
+        heimkehren. Ohne Ladung bleibt es beim normalen Tempo.
+      </>
+    ),
+  },
+  {
     id: 'loaded-return-speed',
     date: '2026-11-04',
     title: 'Beladene Züge sind langsamer',
     body: (
       <>
         Züge, die Ressourcen heimbringen, marschieren nur noch mit{' '}
-        <b>{formatPercent(LOADED_RETURN_SPEED)} Tempo</b>. Wer seine Ladung bei einem Überfall
-        verliert, läuft wieder normal schnell. Truhenträger und Züge ohne Ladung sind nicht
-        betroffen.
+        <b>{formatPercent(LOADED_SPEED)} Tempo</b>. Wer seine Ladung bei einem Überfall verliert,
+        läuft wieder normal schnell. Truhenträger und Züge ohne Ladung sind nicht betroffen.
       </>
     ),
   },
@@ -148,7 +159,7 @@ export function RuleChangesButton({ compact = false }: { compact?: boolean }) {
       type="button"
       onClick={() => setRuleChanges(true)}
       title={label}
-      className="relative mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
+      className="pointer-events-auto relative mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
     >
       <ScrollGlyph />
       <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
