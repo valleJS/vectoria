@@ -144,6 +144,16 @@ function SendForm({
 
   return (
     <div className="mt-2 space-y-2 border-t border-ink/30 pt-2">
+      {/* Raids list their own field armies (with meeting points) in RaidOptions. */}
+      {target.kind !== 'army' && (
+        <FieldRedirect
+          view={view}
+          target={target}
+          position={position}
+          verb={verb}
+          minTroops={minTroops}
+        />
+      )}
       {bases.length > 1 && (
         <label className="flex items-center gap-2">
           <span className="text-ink-soft">Von</span>
@@ -238,6 +248,68 @@ function SendForm({
           {verb}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Own armies in the field that could take this target instead: outbound or gathering, without
+ * cargo, not already heading here. Redirecting re-routes them from where they stand.
+ */
+function FieldRedirect({
+  view,
+  target,
+  position,
+  verb,
+  minTroops,
+}: {
+  view: GameView;
+  target: ArmyTarget;
+  position: Vec2;
+  verb: string;
+  minTroops: number;
+}) {
+  const map = useGameStore((s) => s.map);
+  if (!map) return null;
+  const field = view.armies.filter(
+    (a) =>
+      a.ownerId === view.self.id &&
+      a.status !== 'returning' &&
+      !hasResources(a.cargo) &&
+      !(a.target?.kind === target.kind && a.target.id === target.id),
+  );
+  if (field.length === 0) return null;
+  return (
+    <div>
+      <div className="text-xs text-ink-soft">Zug im Feld umleiten:</div>
+      <ul className="divide-y divide-ink/15">
+        {field.map((army) => {
+          const path = findPath(map, army.position, position);
+          const troops = army.troops ?? 0;
+          const enough = troops >= minTroops;
+          return (
+            <li key={army.id} className="flex items-center justify-between gap-2 py-1">
+              <span className="min-w-0">
+                Zug ({troops}) → {describeTarget(view, army.target)}
+                <span className="block text-xs text-ink-soft">
+                  {!path
+                    ? 'Kein Landweg dorthin.'
+                    : !enough
+                      ? `Zu wenige Truppen (mind. ${minTroops}).`
+                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch))}`}
+                </span>
+              </span>
+              <Button
+                disabled={!path || !enough}
+                title={verb}
+                onClick={() => gameSocket.send({ type: 'redirectArmy', armyId: army.id, target })}
+              >
+                Umleiten
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
