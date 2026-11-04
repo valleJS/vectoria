@@ -6,7 +6,7 @@ import {
   CARDS,
   CASTLE_PLUNDER_SHARE,
   CHESTS_PER_GAMEDAY,
-  LOADED_RETURN_SPEED,
+  LOADED_SPEED,
   maxChestsOnMap,
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
@@ -313,7 +313,9 @@ export class GameState {
       throw new RuleError('Die Truppen sind schon dort.');
     }
     const forcedMarch = cards.includes('forcedMarch');
-    const destination = this.destination(player, base.position, target, forcedMarch);
+    // Resource cargo slows the march, like convoys heading home from a spot.
+    const speed = hasResources(cargo) ? LOADED_SPEED : 1;
+    const destination = this.destination(player, base.position, target, forcedMarch, speed);
     this.checkChestTroops(target, troops);
     if (hasResources(cargo)) {
       if (!destination.ownBase) {
@@ -1133,6 +1135,7 @@ export class GameState {
     from: Vec2,
     target: ArmyTarget,
     forcedMarch: boolean,
+    speed = 1,
   ): Destination {
     const map = this.map!;
     const now = this.data.clock;
@@ -1177,7 +1180,7 @@ export class GameState {
     if (!path) throw new RuleError('Dorthin führt kein Landweg.');
     return {
       path,
-      arriveClock: now + travelMs(pathLength(path), map.width, forcedMarch),
+      arriveClock: now + travelMs(pathLength(path), map.width, forcedMarch, speed),
       ownBase,
     };
   }
@@ -1215,7 +1218,7 @@ export class GameState {
     army.target = base.id ? { kind: 'outpost', id: base.id } : { kind: 'castle', id: owner.id };
     army.departClock = this.data.clock;
     // Resource cargo slows the march home; chests and empty hands do not.
-    const speed = hasResources(army.cargo) ? LOADED_RETURN_SPEED : 1;
+    const speed = hasResources(army.cargo) ? LOADED_SPEED : 1;
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
     // The way home is open for everyone to see (and to ambush).

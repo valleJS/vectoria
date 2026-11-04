@@ -3,7 +3,7 @@ import {
   emptyResources,
   findPath,
   GATHER_DURATION_MS,
-  LOADED_RETURN_SPEED,
+  LOADED_SPEED,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
@@ -125,6 +125,9 @@ function SendForm({
   const load = Object.fromEntries(
     RESOURCES.map((r) => [r, Math.min(cargo[r], base.resources[r])]),
   ) as Resources;
+  // Carrying resources slows the march (same rule as the server).
+  const loaded = allowCargo && hasResources(load);
+  const arrival = travel !== null && loaded ? Math.round(travel / LOADED_SPEED) : travel;
   const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
 
   const send = () => {
@@ -229,7 +232,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(travel)}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${loaded ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -340,10 +343,10 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       {carrying && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">
           Ladung: {formatResources(army.cargo)}
-          {army.status === 'returning' && (
+          {(army.status === 'returning' || army.status === 'outbound') && (
             <span className="font-normal text-ink-soft">
               {' '}
-              · {formatPercent(LOADED_RETURN_SPEED)} Tempo
+              · {formatPercent(LOADED_SPEED)} Tempo
             </span>
           )}
         </div>
@@ -477,8 +480,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div className="text-ink-soft">
             Deine Truppen ziehen hin, laden {formatGameDuration(GATHER_DURATION_MS)} lang und
             bringen je 100 Truppen {GATHER_YIELD_PER_100_TROOPS} {name} heim. Beladen marschieren
-            sie heim nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo und können überfallen
-            werden.
+            sie heim nur mit {formatPercent(LOADED_SPEED)} Tempo und können überfallen werden.
           </div>
           {here.length > 0 && (
             <div>

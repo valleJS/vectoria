@@ -187,12 +187,12 @@ export function mapSizeForPlayers(players: number): number {
   return Math.min(96, Math.max(24, Math.round(16 + 8 * Math.sqrt(Math.max(1, players)))));
 }
 
-/** Speed of an army heading home with resource cargo, relative to normal marching speed. */
-export const LOADED_RETURN_SPEED = 0.75;
+/** Speed of an army carrying resources (home from a spot, or between own bases), relative to normal. */
+export const LOADED_SPEED = 0.75;
 
 /**
  * Game-clock milliseconds to travel `distance` tiles on a map `mapWidth` tiles wide, at `speed`
- * times the normal pace (forced march: 2, loaded convoy: `LOADED_RETURN_SPEED`).
+ * times the normal pace (forced march: 2, loaded convoy: `LOADED_SPEED`).
  */
 export function travelMs(
   distance: number,

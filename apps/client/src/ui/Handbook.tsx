@@ -13,7 +13,7 @@ import {
   GAMEDAY_HOURS,
   GATHER_DURATION_MS,
   GATHER_YIELD_PER_100_TROOPS,
-  LOADED_RETURN_SPEED,
+  LOADED_SPEED,
   RESOURCE_NAMES,
   RESOURCES,
   STARTING_RESOURCES,
@@ -178,8 +178,8 @@ const CHAPTERS: Chapter[] = [
           Schicke Truppen zu einem Vorkommen. Dort laden sie{' '}
           {formatGameDuration(GATHER_DURATION_MS)} lang und bringen je 100 Truppen{' '}
           {GATHER_YIELD_PER_100_TROOPS} Einheiten zurück — zu der Burg, aus der sie kamen. Beladen
-          marschieren sie heim nur mit <b>{formatPercent(LOADED_RETURN_SPEED)} Tempo</b> und sind
-          unterwegs angreifbar.
+          marschieren sie heim nur mit <b>{formatPercent(LOADED_SPEED)} Tempo</b> und sind unterwegs
+          angreifbar.
         </P>
         <P>
           Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines
@@ -206,7 +206,7 @@ const CHAPTERS: Chapter[] = [
         <List
           items={[
             'Ressourcen im Stützpunkt kannst du nicht ausgeben; bring sie erst heim („Heimholen“).',
-            'Zwischen eigenen Burgen lassen sich beliebig viele Ressourcen mitnehmen.',
+            `Zwischen eigenen Burgen lassen sich beliebig viele Ressourcen mitnehmen — beladen aber nur mit ${formatPercent(LOADED_SPEED)} Tempo.`,
             'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim.',
             'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
           ]}
@@ -238,7 +238,7 @@ const CHAPTERS: Chapter[] = [
             </>,
             <>
               <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
-              Ressourcen im Gepäck geht es nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo heim.
+              Ressourcen im Gepäck geht es nur mit {formatPercent(LOADED_SPEED)} Tempo heim.
             </>,
           ]}
         />
@@ -291,9 +291,9 @@ const CHAPTERS: Chapter[] = [
           Ein heimkehrender Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen. Wähle ihn auf der
           Karte an und schicke Truppen aus einer Burg los oder leite einen Zug im Feld um. Der
           Treffpunkt wird vorausberechnet — erreicht der Zug seine Burg vorher, geht es nicht.
-          Beladene Züge laufen nur mit {formatPercent(LOADED_RETURN_SPEED)} Tempo und sind daher
-          leichter einzuholen; nach einem verlorenen Überfall ziehen sie ohne Ladung wieder normal
-          schnell weiter.
+          Beladene Züge laufen nur mit {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter
+          einzuholen; nach einem verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell
+          weiter.
         </P>
         <P>
           Züge, die eine Truhe heimbringen, und Züge ohne Ladung können nicht überfallen werden.

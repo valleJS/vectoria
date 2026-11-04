@@ -24,7 +24,7 @@ state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AGENTS_ARCHITECTURE.md)
 | `src/net/api.ts` | HTTP client for email auth, lobby, admin |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
-| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests with troop requirement, faded ruins, attack alerts, selection, walking armies with cargo/chest markers, raid crosses; an army gathering at a spot shrinks to a badge top-right of the spot so the resource stays visible); click → nearest pick (a gathering army is picked at its badge) |
+| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles/outposts/spots/twinkling chests with troop requirement, faded ruins, attack alerts, selection, walking armies with cargo/chest markers, raid crosses; an army gathering at a spot shrinks to a badge top-right of the spot so the resource stays visible); click → nearest pick (a gathering army is picked at its badge), clicking the same spot again cycles through everything stacked there |
 | `src/game/terrain.ts` | Static map: tile fields → flat vector regions in old-map tones (sea, shallows, land, forest, rock), inked coast, detail sprites, frame |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Vector fallbacks (army banner, castle) for colours without art; dashed line/circle helpers |

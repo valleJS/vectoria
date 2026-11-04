@@ -29,6 +29,8 @@ import { buildTerrain, type Clearing, type Terrain } from './terrain';
 const UNIT_SMOOTHING_MS = 150;
 /** Clicks within this many tiles of a site or army select it. */
 const PICK_RADIUS_TILES = 0.9;
+/** A click this close to the previous one (tiles) cycles to the next thing stacked there. */
+const REPICK_RADIUS_TILES = 0.5;
 /** Selection ring rotation, radians per second. */
 const SELECTION_SPIN = 0.6;
 const FORTIFY_BLUE = 0x3b6ea5;
@@ -136,6 +138,8 @@ export class GameRenderer {
   private readonly unsubscribe: () => void;
   private map: MapData | null = null;
   private built: Terrain | null = null;
+  /** Tile of the previous map click, to tell a repeated click on the same spot. */
+  private lastPick: Vec2 | null = null;
   /** The camera has been framed on the own castle for the current map. */
   private framed = false;
   /** Castle and spot positions the terrain was last built around. */
@@ -178,7 +182,10 @@ export class GameRenderer {
     app.stage.addChild(this.world);
 
     this.camera = new Camera(app.canvas, this.world, {
-      onClick: (point) => useGameStore.getState().select(this.pick(point)),
+      onClick: (point) => {
+        const store = useGameStore.getState();
+        store.select(this.pick(point, store.selection));
+      },
       onZoomChange: (zoom) => {
         this.pieceScale = Math.min(PIECE_MAX_SCALE, Math.max(1, PIECE_ZOOM / zoom));
         useGameStore.getState().setZoom(zoom);
@@ -217,7 +224,7 @@ export class GameRenderer {
   }
 
   /** Nearest army or site to a world point, within the pick radius. */
-  private pick(point: PointData): Selection | null {
+  private pick(point: PointData, current: Selection | null): Selection | null {
     if (!this.map || !this.view) return null;
     const size = this.map.tileSize;
     const tile = { x: point.x / size, y: point.y / size };
@@ -242,16 +249,22 @@ export class GameRenderer {
         position: c.position,
       })),
     ];
-    let best: Selection | null = null;
-    let bestDistance = PICK_RADIUS_TILES;
-    for (const { selection, position } of candidates) {
-      const d = Math.hypot(position.x - tile.x, position.y - tile.y);
-      if (d < bestDistance) {
-        best = selection;
-        bestDistance = d;
-      }
-    }
-    return best;
+    const hits = candidates
+      .map(({ selection, position }) => ({
+        selection,
+        d: Math.hypot(position.x - tile.x, position.y - tile.y),
+      }))
+      .filter((hit) => hit.d < PICK_RADIUS_TILES)
+      .sort((a, b) => a.d - b.d)
+      .map((hit) => hit.selection);
+    // Clicking the same spot again steps through everything stacked there (nearest first).
+    const last = this.lastPick;
+    this.lastPick = tile;
+    const again = last && Math.hypot(last.x - tile.x, last.y - tile.y) < REPICK_RADIUS_TILES;
+    const index = again
+      ? hits.findIndex((h) => h.kind === current?.kind && h.id === current.id)
+      : -1;
+    return hits[(index + 1) % hits.length] ?? null;
   }
 
   /** Where an army is clicked: its badge for a gathering army (the spot itself selects the spot). */
