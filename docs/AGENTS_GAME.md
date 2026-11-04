@@ -73,7 +73,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
-- Redirect (`redirectArmy`): an outbound or gathering army without cargo can get a new target.
+- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home.
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
