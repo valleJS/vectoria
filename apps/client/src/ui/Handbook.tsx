@@ -234,7 +234,8 @@ const CHAPTERS: Chapter[] = [
               <b>Zurückrufen:</b> jederzeit, solange der Zug nicht schon heimkehrt.
             </>,
             <>
-              <b>Umleiten:</b> ein Zug ohne Ladung kann im Feld ein neues Ziel bekommen.
+              <b>Umleiten:</b> ein Zug ohne Ladung kann im Feld ein neues Ziel bekommen — wähle das
+              Ziel auf der Karte, unter „Zug im Feld umleiten“ stehen deine Züge.
             </>,
             <>
               <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
