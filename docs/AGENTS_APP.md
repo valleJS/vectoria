@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-05
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
-sources_stamp: fd964998d2b0e14ec346917b33e696a52e2e8a72
+sources_stamp: e6321f496cfd6252b8a97aae30ba07a7669557ea
 ---
 
 # Client codemap (`apps/client`)
@@ -24,13 +24,13 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/net/api.ts` | HTTP client for email auth, lobby, admin |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
-| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles in the owner's colour + style, outposts as watchtowers / ruins, resource deposits, twinkling chests with troop requirement, attack alerts, selection, walking armies with cargo/chest tags (moved along their route by the client clock between the 1/s state pushes), raid crosses). Armies within `STACK_RADIUS_TILES` fan out side by side (`armyOffsets`, eased in `animate`); armies gathering at a spot are bubbles in the owner's colour with the troop count, on a ring around the deposit (`GATHER_RING`, a wider ring once full). Click → nearest pick at the drawn position (fan-out, bubble); clicking the same spot again cycles through everything stacked there. Coloured pieces come from the lazy `art.pieces` cache; `onReady` redraws once a new colour is rasterised |
+| `src/game/GameRenderer.ts` | Pixi layers (terrain, marching land routes, castles in the owner's colour + style, outposts as watchtowers / ruins, resource deposits (the gold mine shines: breathing glow + glints at `GOLD_MINE_GLINTS`), twinkling chests with troop requirement, attack alerts, no destination ring (the route ends there; only a planned raid gets crossed strokes, `raidMarks`), walking armies with cargo/chest tags (moved along their route by the client clock between the 1/s state pushes), raid crosses). Outpost plates name only the owner (or "Ruine"), smaller than castle plates. The own castle stands on a base in its colour (ellipse at the ground line + soft glow) and its plate carries a gold star (`nameplate({ home })`). Each army has a figure mode (`drawFigure`): soldiers, tent at night, a ship with rolling motion and foam wake while a Seeweg leg (`army.sea`) crosses drawn water (`Terrain.isWater`; boards/lands with a splash only after `SHORE_S` past the coastline, bow follows the route direction), or a heraldic shield with the troop count while gathering, on a ring around the deposit (`GATHER_RING`, a wider ring once full). Armies within `STACK_RADIUS_TILES` fan out side by side (`armyOffsets`, eased in `animate`). Focus ring (`drawFocus`, every frame at the piece as drawn via `focusTarget` / `armyFocus`): parchment band with orbiting studs on the ground, four breathing arrowheads in the accent colour, locks on over `LOCK_MS`. Click → nearest pick at the drawn position (fan-out, badge); clicking the same spot again cycles through everything stacked there. Coloured pieces come from the lazy `art.pieces` cache; `onReady` redraws once a new colour is rasterised |
 | `src/game/night.ts` | Night rest (`NightScene`, `isNightRest` shared with the HUD): while the game runs but its clock stands still outside gameday hours (not an admin pause), the map is multiplied into moonlit blue, castles/held outposts glow warm and flickering from their windows only (`CASTLE_WINDOWS` / `OUTPOST_WINDOWS` in `art/svg.ts`, kept next to the drawings), deposits glow while someone loads there, chests shimmer, fireflies drift over forests and stars twinkle on water; fades in/out, starts at once when the game is opened at night. The renderer turns marching armies into tents with a campfire (gatherers stay bubbles), tints sites moonlit and slows the route dashes (`ROUTE_FLOW_NIGHT`). `?night` forces it for review |
-| `src/game/terrain.ts` | Static map: tile fields → flat vector regions in old-map tones (sea, land, forest, rock); the shallow band is a wide stroke along the coastline under the land fill (no polygon holes), soft brown coast line; detail sprites (trees; rocks: crags likelier and bigger towards a rock area's interior, loose boulders along its rim and on nearby meadow; grass), cogs on open sea and small boats on lakes/straits (hash-ranked, spaced, count scales with map area), frame |
+| `src/game/terrain.ts` | Static map: tile fields → flat vector regions in old-map tones (sea, land, forest, rock); the shallow band is a wide stroke along the coastline under the land fill (no polygon holes), soft brown coast line; detail sprites (trees; rocks: crags likelier and bigger towards a rock area's interior, loose boulders along its rim and on nearby meadow; grass), cogs on open sea and small boats on lakes/straits (hash-ranked, spaced, count scales with map area), frame; `isWater` samples the drawn coastline |
 | `src/game/fields.ts` | Field maths: blur, value noise, distance transform, marching-squares contours, Chaikin smoothing |
 | `src/game/glyphs.ts` | Dashed line/circle helpers (routes, rings) |
-| `src/art/svg.ts` | All illustrated art as SVG source, one drawing language (light top-left, ground shadow, `facets` for rocks/chunks): resource icons (log, stone chunk, gold nugget), deposits (woodpile, quarry, gold mine), trees (conifer tiers painted bottom-up), rocks + boulders, grass tuft, cog + boat, castles (3 styles, `CASTLE_STYLE_NAMES`), outpost watchtower + ruin, soldiers, tent + campfire (night camp), front-view chest (`chestParts` shared with the opening overlay) + sparkle, alarm badge, smoke puff + flame, compass |
-| `src/art/textures.ts` | Rasterises the SVG art into Pixi textures (`loadMapArt`, `artCanvas`): decoration sepia-toned, pieces with a parchment cut-out edge; coloured pieces (castle per style, outpost, soldiers) through a lazy per-colour cache (`PieceCache`), preloaded for the palette |
+| `src/art/svg.ts` | All illustrated art as SVG source, one drawing language (light top-left, ground shadow, `facets` for rocks/chunks): resource icons (log, stone chunk, gold nugget), deposits (woodpile, quarry, gold mine), trees (conifer tiers painted bottom-up), rocks + boulders, grass tuft, cog + boat, army ship (`armyShip`), gather shield (`gatherShield`), castles (3 styles, `CASTLE_STYLE_NAMES`), outpost watchtower + ruin, soldiers, tent + campfire (night camp), front-view chest (`chestParts` shared with the opening overlay) + sparkle, alarm badge, smoke puff + flame, compass |
+| `src/art/textures.ts` | Rasterises the SVG art into Pixi textures (`loadMapArt`, `artCanvas`): decoration sepia-toned, pieces with a parchment cut-out edge; coloured pieces (castle per style, outpost, soldiers, tent, ship, gather shield) through a lazy per-colour cache (`PieceCache`), preloaded for the palette |
 | `src/theme/tokens.ts` | Design tokens — the one colour source: ink/parchment ramp, meaning colours, material ramps (masonry, timber, granite, gold), terrain, heraldry; `CSS_TOKENS` lists what `index.css` mirrors |
 | `src/game/palette.ts` | The tokens as Pixi numbers, `sepia()` backdrop toning |
 | `src/game/Camera.ts` | Pan (drag), zoom (wheel/pinch, cursor-anchored), click vs drag, screen↔world, fit with HUD insets; optional focus (zoom in, centre on a point, clamped to the map edges) used once per map to start on the own castle (`GameRenderer.frame`, `START_ZOOM_IN`) |
@@ -82,7 +82,10 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
   spots, chests, armies, routes, the alarm badge) are in colour, with INK outlines and a parchment
   cut-out edge (`rasterise(…, { outline: true })`). Keep new art on the right side.
 - **Pieces stay readable:** zoomed out, sites and armies grow up to `PIECE_MAX_SCALE` so they
-  never shrink below their size at `PIECE_ZOOM`. Every site is its own container in `siteLayer`; resource deposits sit in `spotLayer`, the topmost layer, so no piece or label hides them.
+  never shrink below their size at `PIECE_ZOOM`. Every site (castle, outpost, chest, deposit) is its own container in `siteLayer`, sorted by map y; its
+  nameplates sit at the same spot in `labelLayer` above all sites. Layer order, bottom to top: terrain +
+  night, ground marks (alert rings, routes, wakes, focus ring), sites, lamp light, focus arrows,
+  labels, alerts, armies (y-sorted, gather shields on top), fireflies.
 - **Map size scales with players:** never a fixed image — tiles are 32 world px and all art is
   sized per tile, so a bigger map is simply more world. `Camera.fit` zooms out to show it all
   (min zoom 0.25); past ~20 players the piece scale cap is reached and sites get small and
@@ -91,7 +94,8 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
   colour (none for neutral info such as outpost stock); proportions follow the font size.
   No coloured ground halos: treasure reads from the art (chest, cargo tag, gold route).
 - **Motion means action:** route dashes march toward their target, marching soldiers bob, and
-  castles/outposts show alerts (`drawAlerts`): swords badge + pulsing ring while an enemy army is
+  castles/outposts show alerts (`drawAlerts`): swords badge + warning ring (`drawWarning`: red band,
+  outward alarm ripples, an arrowhead toward each attacker as drawn) while an enemy army is
   outbound to them, rising smoke puffs, tower flames and shock waves for `RECENT_ATTACK_MS` of game
   clock after an assault
   (`attackedAt` from the server). All of it runs in `animate`; nothing redraws via React.

@@ -35,6 +35,8 @@ export interface Terrain {
   root: Container;
   /** Hides details (trees, peaks, grass) whose bounds come within `radius` world px of a point. */
   clearAround(points: { x: number; y: number; radius: number }[]): void;
+  /** Whether a world point lies on the drawn water (past the coastline, clearings are land). */
+  isWater(x: number, y: number): boolean;
 }
 
 /** A place (tile units, like server positions) that must be land; `open` also clears forest/rock. */
@@ -337,6 +339,7 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   );
   return {
     root,
+    isWater: (x, y) => sample(landField, x, y, 0) < 0.5,
     clearAround(points) {
       for (const d of details) {
         d.sprite.visible = !points.some((p) => {
