@@ -7,7 +7,7 @@ import {
   RESOURCES,
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
-  VICTORY_POINT_COST,
+  victoryPointCost,
   type ArmyView,
   type CardType,
   type FeedEntry,
@@ -230,6 +230,8 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     .reduce((sum, a) => sum + (a.troops ?? 0), 0);
   const buy = (item: 'troops' | 'victoryPoint', count: number) =>
     gameSocket.send({ type: 'buy', item, count });
+  const owned = view.players.find((p) => p.id === self.id)?.victoryPoints ?? 0;
+  const vpCost = victoryPointCost(owned);
   return (
     <>
       <BaseStats view={view} base={base} />
@@ -258,16 +260,16 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
-            <StarIcon size={16} /> 1 Siegpunkt
+            <StarIcon size={16} /> {owned + 1}. Siegpunkt
             <span className="ml-1 text-xs text-ink-soft">
-              <Cost cost={VICTORY_POINT_COST} />
+              <Cost cost={vpCost} />
             </span>
           </span>
           <Button
             variant="primary"
             className="px-2 py-0.5"
             onClick={() => buy('victoryPoint', 1)}
-            disabled={!canAfford(self.resources, VICTORY_POINT_COST)}
+            disabled={!canAfford(self.resources, vpCost)}
           >
             1×
           </Button>

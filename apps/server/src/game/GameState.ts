@@ -32,7 +32,7 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   travelMs,
-  VICTORY_POINT_COST,
+  victoryPointsCost,
   type AdminState,
   type ArmyStatus,
   type ArmyTarget,
@@ -271,11 +271,14 @@ export class GameState {
 
   buy(playerId: string, item: 'troops' | 'victoryPoint', count: number): void {
     const player = this.requirePlaying(playerId);
-    const cost = item === 'troops' ? TROOP_BATCH_COST : VICTORY_POINT_COST;
-    if (!canAfford(player.resources, cost, count)) {
+    // Victory points get dearer one by one, so their price is the sum over the whole purchase.
+    const cost =
+      item === 'troops' ? TROOP_BATCH_COST : victoryPointsCost(player.victoryPoints, count);
+    const times = item === 'troops' ? count : 1;
+    if (!canAfford(player.resources, cost, times)) {
       throw new RuleError('Nicht genug Ressourcen in deiner Burg.');
     }
-    for (const r of RESOURCES) player.resources[r] -= cost[r] * count;
+    for (const r of RESOURCES) player.resources[r] -= cost[r] * times;
     if (item === 'troops') {
       player.homeTroops += count * TROOP_BATCH_SIZE;
     } else {
