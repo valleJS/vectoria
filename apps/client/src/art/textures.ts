@@ -3,6 +3,7 @@ import { CanvasSource, Texture } from 'pixi.js';
 import { INK, NEUTRAL_COLOR, PARCHMENT, PLAYER_PALETTE, SELF_COLOR, sepia } from '../game/palette';
 import {
   alarm,
+  armyShip,
   boat,
   boulder,
   broadleaf,
@@ -14,6 +15,7 @@ import {
   deposit,
   flame,
   FOLIAGE,
+  gatherShield,
   grassTuft,
   outpost,
   resourceIcon,
@@ -58,6 +60,10 @@ export interface PieceCache {
   soldiers(color: number): ArtTexture | null;
   /** Night camp of an army. */
   tent(color: number): ArtTexture | null;
+  /** An army at sea (Seeweg card). */
+  ship(color: number): ArtTexture | null;
+  /** Badge of troops loading at a deposit. */
+  shield(color: number): ArtTexture | null;
   /** Called (once per batch) when textures asked for earlier have become ready. */
   onReady: (() => void) | null;
 }
@@ -183,6 +189,8 @@ function pieceCache(): PieceCache {
     outpost: (color) => get(`outpost:${color}`, () => outpost(css(color))),
     soldiers: (color) => get(`soldiers:${color}`, () => soldiers(css(color))),
     tent: (color) => get(`tent:${color}`, () => tent(css(color))),
+    ship: (color) => get(`ship:${color}`, () => armyShip(css(color))),
+    shield: (color) => get(`shield:${color}`, () => gatherShield(css(color))),
   };
   function get(key: string, make: () => Art): ArtTexture | null {
     const hit = ready.get(key);
@@ -218,6 +226,8 @@ async function preload(pieces: PieceCache): Promise<void> {
       pieces.outpost(c),
       pieces.soldiers(c),
       pieces.tent(c),
+      pieces.ship(c),
+      pieces.shield(c),
     ]);
   asks();
   await new Promise<void>((resolve) => {
