@@ -71,8 +71,10 @@ export class Camera {
   }
 
   /**
-   * Centres a world-space rectangle at the largest zoom that fits it inside the viewport minus
-   * `insets` (screen px covered by overlays).
+   * Shows a world-space rectangle (origin 0,0) inside the viewport minus `insets` (screen px
+   * covered by overlays). Without `focus` it is centred at the largest zoom that fits it whole.
+   * With `focus`, the zoom is that fit times `zoomIn` and the view centres on `focus` as far as
+   * possible without showing more than `padding` beyond the rectangle's edges.
    */
   fit(
     width: number,
@@ -81,16 +83,27 @@ export class Camera {
     viewHeight: number,
     padding = 32,
     insets = { top: 0, right: 0, bottom: 0, left: 0 },
+    focus?: { point: PointData; zoomIn: number },
   ): void {
     const areaWidth = viewWidth - insets.left - insets.right;
     const areaHeight = viewHeight - insets.top - insets.bottom;
-    const zoom = this.clampZoom(
-      Math.min((areaWidth - padding * 2) / width, (areaHeight - padding * 2) / height),
+    const fitZoom = Math.min(
+      (areaWidth - padding * 2) / width,
+      (areaHeight - padding * 2) / height,
     );
+    const zoom = this.clampZoom(fitZoom * (focus?.zoomIn ?? 1));
+    // Centre on the focus, but keep the view's edges within the rectangle (plus padding); an axis
+    // the view covers whole stays centred.
+    const centre = (point: number, size: number, area: number) => {
+      const half = area / zoom / 2 - padding / zoom;
+      return half * 2 >= size ? size / 2 : Math.min(size - half, Math.max(half, point));
+    };
+    const cx = focus ? centre(focus.point.x, width, areaWidth) : width / 2;
+    const cy = focus ? centre(focus.point.y, height, areaHeight) : height / 2;
     this.world.scale.set(zoom);
     this.world.position.set(
-      insets.left + (areaWidth - width * zoom) / 2,
-      insets.top + (areaHeight - height * zoom) / 2,
+      insets.left + areaWidth / 2 - cx * zoom,
+      insets.top + areaHeight / 2 - cy * zoom,
     );
     this.onZoomChange?.(zoom);
   }

@@ -44,6 +44,8 @@ const CASTLE_CENTRE_Y = 66;
  */
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
+/** On load the camera starts this much closer than the whole-map fit, framed on the own castle. */
+const START_ZOOM_IN = 1.6;
 
 /**
  * Sprite of map art whose drawing is `width` world px wide (outline padding not counted),
@@ -131,6 +133,8 @@ export class GameRenderer {
   private readonly unsubscribe: () => void;
   private map: MapData | null = null;
   private built: Terrain | null = null;
+  /** The camera has been framed on the own castle for the current map. */
+  private framed = false;
   /** Castle and spot positions the terrain was last built around. */
   private clearingsKey = '';
   private view: GameView | null = null;
@@ -249,22 +253,32 @@ export class GameRenderer {
 
   private setMap(map: MapData | null): void {
     this.map = map;
+    this.framed = false;
     this.sitesKey = '';
     for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
     this.built = null;
     this.clearingsKey = '';
     if (!map) return;
     this.buildGround(this.view);
+    this.frame(null);
+  }
+
+  /**
+   * Fits the map into the area the HUD leaves free (side panels, or the phone's tab bar). Given
+   * the own castle, starts a bit closer and framed on it, without looking past the map's edge.
+   */
+  private frame(castle: Vec2 | null): void {
+    if (!this.map) return;
     const { width, height } = this.app.screen;
-    // Fit the map into the area the HUD leaves free (side panels, or the phone's tab bar).
     const wide = width >= COMPACT_BELOW;
     this.camera.fit(
-      map.width * map.tileSize,
-      map.height * map.tileSize,
+      this.map.width * this.map.tileSize,
+      this.map.height * this.map.tileSize,
       width,
       height,
       wide ? 24 : 8,
       wide ? HUD_INSETS.wide : HUD_INSETS.compact,
+      castle ? { point: this.px(castle), zoomIn: START_ZOOM_IN } : undefined,
     );
   }
 
@@ -290,6 +304,12 @@ export class GameRenderer {
 
   private setView(view: GameView | null, selfId: string | null): void {
     this.view = view;
+    // Once per map: when the own castle is first known, move the camera onto it.
+    const castle = view?.players.find((p) => p.id === selfId)?.castle;
+    if (!this.framed && this.map && castle) {
+      this.framed = true;
+      this.frame(castle);
+    }
     if (view) {
       const { clock, running, timeScale } = view.clock;
       this.clockSync = { clock, at: performance.now(), rate: running ? timeScale : 0 };
