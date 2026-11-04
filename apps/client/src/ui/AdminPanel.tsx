@@ -10,7 +10,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
 import { OnlineDot } from './icons';
-import { Button, Panel } from './Panel';
+import { Button, Panel, Tip } from './Panel';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const TOKEN_KEY = 'vectoria.adminToken';
 const POLL_MS = 2_000;
@@ -90,12 +98,13 @@ export function AdminPanel() {
               setToken(input);
             }}
           >
-            <input
+            <Input
               type="password"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Admin-Token"
-              className="flex-1 border border-ink/50 bg-parchment-dark px-2 py-1"
+              aria-label="Admin-Token"
+              className="h-7 flex-1"
             />
             <Button type="submit" variant="primary">
               Login
@@ -200,23 +209,28 @@ export function AdminPanel() {
           <Panel title="Spieler:innen">
             <div className="mb-2 flex items-center gap-2 text-ink-soft">
               Gutschrift:
-              <input
+              <Input
                 type="number"
                 value={grant.amount}
                 onChange={(e) => setGrant({ ...grant, amount: Math.trunc(Number(e.target.value)) })}
-                className="w-16 border border-ink/50 bg-parchment-dark px-2 py-0.5"
+                aria-label="Menge"
+                className="h-7 w-16"
               />
-              <select
+              <Select
                 value={grant.resource}
-                onChange={(e) => setGrant({ ...grant, resource: e.target.value as ResourceType })}
-                className="border border-ink/50 bg-parchment-dark px-2 py-0.5"
+                onValueChange={(value) => setGrant({ ...grant, resource: value as ResourceType })}
               >
-                {RESOURCES.map((r) => (
-                  <option key={r} value={r}>
-                    {RESOURCE_NAMES[r]}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-7 w-28" aria-label="Rohstoff">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESOURCES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {RESOURCE_NAMES[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <table className="w-full text-left tabular-nums">
               <thead className="text-ink-soft">
@@ -240,17 +254,21 @@ export function AdminPanel() {
                       </span>
                     </td>
                     <td className="text-xs">
-                      <button
-                        type="button"
-                        className="text-left underline decoration-dotted hover:text-seal"
-                        title="E-Mail für den Login ändern"
-                        onClick={() => {
-                          const email = window.prompt(`Login-E-Mail für ${p.name}:`, p.email ?? '');
-                          if (email) run({ action: 'setEmail', playerId: p.id, email });
-                        }}
-                      >
-                        {p.email ?? 'keine — setzen'}
-                      </button>
+                      <Tip label="E-Mail für den Login ändern">
+                        <Button
+                          variant="link"
+                          className="text-left text-xs decoration-dotted"
+                          onClick={() => {
+                            const email = window.prompt(
+                              `Login-E-Mail für ${p.name}:`,
+                              p.email ?? '',
+                            );
+                            if (email) run({ action: 'setEmail', playerId: p.id, email });
+                          }}
+                        >
+                          {p.email ?? 'keine — setzen'}
+                        </Button>
+                      </Tip>
                     </td>
                     <td>{p.victoryPoints}</td>
                     <td>

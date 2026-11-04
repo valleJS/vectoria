@@ -20,9 +20,18 @@ import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
-import { formatResources, outpostLabel, playerColor } from './format';
-import { dashedCircle, dashedPolyline, drawBanner, drawCastle } from './glyphs';
-import { CARGO_GOLD, INK, NEUTRAL_COLOR, PARCHMENT, SEA, SEAL, SERIF } from './palette';
+import { formatResources, outpostLabel, playerColor, playerHeraldry } from './format';
+import { dashedCircle, dashedPolyline } from './glyphs';
+import {
+  CARGO_GOLD,
+  FORTIFY_BLUE,
+  INK,
+  NEUTRAL_COLOR,
+  PARCHMENT,
+  SEA,
+  SEAL,
+  SERIF,
+} from './palette';
 import { buildTerrain, type Clearing, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
@@ -33,32 +42,37 @@ const PICK_RADIUS_TILES = 0.9;
 const REPICK_RADIUS_TILES = 0.5;
 /** Selection ring rotation, radians per second. */
 const SELECTION_SPIN = 0.6;
-const FORTIFY_BLUE = 0x3b6ea5;
 /** Route dashes march toward the target at this many glyph units per second. */
 const ROUTE_FLOW = 14;
 /** A castle or outpost smokes for this long (game clock) after an assault. */
 const RECENT_ATTACK_MS = HOUR_MS;
-/** Castle art: y of the body centre, which sits on the castle tile (the ground line is lower). */
-const CASTLE_CENTRE_Y = 66;
 /**
  * Sites and armies never shrink below their size at this zoom: zoomed out, the pieces grow
  * (up to PIECE_MAX_SCALE) so the live parts of the map stay readable over the terrain.
  */
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
-/** Offset (glyph units) of a gathering army's badge from its spot: right of and above it. */
-const GATHER_BADGE_X = 24;
-const GATHER_BADGE_Y = 18;
+/**
+ * A gathering army plants its claim flag at the deposit's right front (glyph units from the spot
+ * centre); further gatherers at the same spot stand a step to the right.
+ */
+const GATHER_FLAG_X = 15;
+const GATHER_FLAG_Y = 10;
+const GATHER_FLAG_STEP = 10;
+/** Armies closer than this (tiles) are fanned out side by side so each stays readable. */
+const STACK_RADIUS_TILES = 0.7;
+/** Horizontal spacing (glyph units) of fanned-out armies. */
+const STACK_STEP = 27;
 /** On load the camera starts this much closer than the whole-map fit, framed on the own castle. */
 const START_ZOOM_IN = 1.6;
 
 /**
  * Sprite of map art whose drawing is `width` world px wide (outline padding not counted),
- * anchored at its ground point or at `anchorY` (art px of the unpadded drawing).
+ * anchored at its ground point, or at its visual centre when `centred` (sites on their tile).
  */
-function artSprite(art: ArtTexture, width: number, anchorY?: number): Sprite {
+function artSprite(art: ArtTexture, width: number, centred = false): Sprite {
   const sprite = new Sprite(art.texture);
-  const y = anchorY === undefined ? art.anchor.y : anchorY + art.pad;
+  const y = centred ? art.centreY : art.anchor.y;
   sprite.anchor.set(art.anchor.x / art.width, y / art.height);
   sprite.scale.set(width / (art.width - art.pad * 2));
   return sprite;
@@ -66,7 +80,7 @@ function artSprite(art: ArtTexture, width: number, anchorY?: number): Sprite {
 
 interface ArmySprite {
   container: Container;
-  /** Holds the soldiers (or the vector fallback for colours without a texture). */
+  /** Holds the soldiers, or the claim flag while gathering. */
   figure: Container;
   /** Troop count nameplate, rebuilt when `text` changes. */
   plate: Container;
@@ -85,6 +99,8 @@ interface ArmySprite {
   marching: boolean;
   /** Offsets the walking bob so armies don't step in unison. */
   stride: number;
+  /** Display offset (world px at piece scale 1) the container eases toward: fan-out or flag slot. */
+  offset: PointData;
 }
 
 /** A route drawn with marching dashes; redrawn every frame. */
@@ -104,7 +120,8 @@ interface SiteAlert {
   wave: Graphics;
   swords: Sprite;
   swordsScale: number;
-  smoke: Graphics[];
+  smoke: { sprite: Sprite; size: number; spin: number }[];
+  flames: { sprite: Sprite; size: number }[];
   /** Ring radius and badge height, world px. */
   radius: number;
   incoming: boolean;
@@ -149,6 +166,7 @@ export class GameRenderer {
   private sitesKey = '';
   /** Game clock of the last view and when it arrived, to run the clock on between updates. */
   private clockSync = { clock: 0, at: 0, rate: 0 };
+  private selfId: string | null = null;
 
   static async create(host: HTMLElement): Promise<GameRenderer> {
     const app = new Application();
@@ -193,6 +211,12 @@ export class GameRenderer {
     });
 
     app.ticker.add(this.animate);
+    // Pieces in a colour seen for the first time are rasterised on demand; redraw once ready.
+    art.pieces.onReady = () => {
+      this.sitesKey = '';
+      for (const sprite of this.armies.values()) sprite.look = '';
+      this.setView(this.view, this.selfId);
+    };
 
     const initial = useGameStore.getState();
     this.setMap(initial.map);
@@ -208,6 +232,7 @@ export class GameRenderer {
   }
 
   destroy(): void {
+    this.art.pieces.onReady = null;
     this.unsubscribe();
     this.camera.destroy();
     this.app.destroy({ removeView: true }, { children: true });
@@ -267,16 +292,19 @@ export class GameRenderer {
     return hits[(index + 1) % hits.length] ?? null;
   }
 
-  /** Where an army is clicked: its badge for a gathering army (the spot itself selects the spot). */
+  /**
+   * Where an army is clicked: where it is drawn (fanned out of a stack), and its flag for a
+   * gathering army (the deposit itself selects the spot).
+   */
   private armyPickPosition(army: ArmyView): Vec2 {
     const sprite = this.armies.get(army.id);
-    if (army.status !== 'gathering' || !sprite || !this.map) return army.position;
+    if (!sprite || !this.map) return army.position;
     const { container } = sprite;
     const size = this.map.tileSize;
-    const badgeY = -8 * this.unit;
+    const lift = army.status === 'gathering' ? -14 * this.unit : -10 * this.unit;
     return {
       x: army.position.x - (container.pivot.x * container.scale.x) / size,
-      y: army.position.y + ((badgeY - container.pivot.y) * container.scale.y) / size,
+      y: army.position.y + ((lift - container.pivot.y) * container.scale.y) / size,
     };
   }
 
@@ -333,6 +361,7 @@ export class GameRenderer {
 
   private setView(view: GameView | null, selfId: string | null): void {
     this.view = view;
+    this.selfId = selfId;
     // Once per map: when the own castle is first known, move the camera onto it.
     const castle = view?.players.find((p) => p.id === selfId)?.castle;
     if (!this.framed && this.map && castle) {
@@ -385,19 +414,14 @@ export class GameRenderer {
     for (const spot of view.spots) {
       const piece = new Container();
       piece.position.copyFrom(this.px(spot.position));
-      piece.addChild(artSprite(this.art.spots[spot.resource], 40 * u));
+      piece.addChild(artSprite(this.art.deposits[spot.resource], 44 * u, true));
       this.siteLayer.addChild(piece);
     }
 
     for (const chest of view.chests) {
       const piece = new Container();
       piece.position.copyFrom(this.px(chest.position));
-      // Gold ground halo, like a convoy carrying resources: treasure to be had.
-      const halo = new Graphics()
-        .ellipse(0, 9 * u, 20 * u, 6.5 * u)
-        .fill({ color: CARGO_GOLD, alpha: 0.3 })
-        .stroke({ width: 1.4 * u, color: CARGO_GOLD });
-      piece.addChild(halo, artSprite(this.art.chest, 34 * u));
+      piece.addChild(artSprite(this.art.chest, 34 * u));
       piece.addChild(
         this.nameplate(`ab ${chest.troopsNeeded} Truppen`, null, u, { top: 16 * u, size: 10 * u }),
       );
@@ -418,19 +442,13 @@ export class GameRenderer {
       const color = outpost.ownerId ? playerColor(view, outpost.ownerId) : NEUTRAL_COLOR;
       const site = new Container();
       site.position.copyFrom(this.px(outpost.position));
-      const art = this.art.castles.get(color);
-      let building: Container;
-      if (art) {
-        building = artSprite(art, 40 * u, CASTLE_CENTRE_Y);
-      } else {
-        building = drawCastle(new Graphics(), color, u * 0.7);
-      }
-      // Unowned outposts are ruins: faded until someone rebuilds them.
-      if (!outpost.ownerId) building.alpha = 0.5;
+      // Unowned outposts are ruins until someone takes them; owned ones a watchtower.
+      const art = outpost.ownerId ? this.art.pieces.outpost(color) : this.art.ruin;
+      if (art) site.addChild(artSprite(art, 40 * u, true));
       const plate = this.nameplate(`${outpostLabel(view, outpost)} · ${outpost.troops}`, color, u, {
         top: 17 * u,
       });
-      site.addChild(building, plate);
+      site.addChild(plate);
       if (hasResources(outpost.resources)) {
         const stock = this.nameplate(`Lager: ${formatResources(outpost.resources)}`, null, u, {
           top: 37 * u,
@@ -443,7 +461,7 @@ export class GameRenderer {
 
     for (const player of view.players) {
       if (!player.castle) continue;
-      const color = playerColor(view, player.id);
+      const { color, style } = playerHeraldry(view, player.id);
       const castle = new Container();
       castle.position.copyFrom(this.px(player.castle));
       const rings = new Graphics();
@@ -457,15 +475,10 @@ export class GameRenderer {
           .circle(0, 0, 26.5 * u)
           .stroke({ width: u, color: FORTIFY_BLUE, alpha: 0.85 });
       }
-      const art = this.art.castles.get(color);
-      let building: Container;
-      if (art) {
-        // Centre the castle body, not its ground line, on the castle tile.
-        building = artSprite(art, 58 * u, CASTLE_CENTRE_Y);
-      } else {
-        building = drawCastle(new Graphics(), color, u);
-      }
-      castle.addChild(rings, building);
+      castle.addChild(rings);
+      // Centre the castle body, not its ground line, on the castle tile.
+      const art = this.art.pieces.castle(color, style);
+      if (art) castle.addChild(artSprite(art, 58 * u, true));
       castle.addChild(this.nameplate(`${player.name} · ${player.homeTroops}`, color, u));
       if (!player.online) castle.alpha = 0.85;
       this.siteLayer.addChild(castle);
@@ -526,8 +539,7 @@ export class GameRenderer {
     const seen = new Set<string>();
     this.routeLines = [];
     this.routeMarks.clear();
-    /** Gathering armies already badged per spot, so several at one spot sit side by side. */
-    const gatherSlots = new Map<string, number>();
+    const offsets = this.armyOffsets(view.armies, u);
 
     for (const army of view.armies) {
       seen.add(army.id);
@@ -569,6 +581,8 @@ export class GameRenderer {
         const cargo = new Container();
         container.addChild(cargo, figure, plate);
         container.position.copyFrom(target);
+        const offset = offsets.get(army.id) ?? { x: 0, y: 0 };
+        container.pivot.set(-offset.x, -offset.y);
         this.armyLayer.addChild(container);
         sprite = {
           container,
@@ -581,54 +595,39 @@ export class GameRenderer {
           cargoKey: '',
           marching: false,
           stride: Math.random() * Math.PI * 2,
+          offset,
         };
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
       sprite.marching = !gathering;
-      // At a spot the resource stays in view: the army shrinks to a badge at its top right.
-      const slot = gathering && army.target ? (gatherSlots.get(army.target.id) ?? 0) : 0;
-      if (gathering && army.target) gatherSlots.set(army.target.id, slot + 1);
-      if (gathering)
-        sprite.container.pivot.set(-(GATHER_BADGE_X + slot * 26) * u, GATHER_BADGE_Y * u);
-      else sprite.container.pivot.set(0, 0);
-      const look = `${color}:${army.status}`;
+      sprite.offset = offsets.get(army.id) ?? { x: 0, y: 0 };
+      const look = `${color}:${gathering}`;
       if (look !== sprite.look) {
-        sprite.look = look;
+        // At a deposit the resource stays in view: the army is shown as its planted claim flag.
+        const art = gathering ? this.art.pieces.flag(color) : this.art.pieces.soldiers(color);
+        sprite.look = art ? look : '';
         for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
-        const art = this.art.soldiers.get(color);
-        if (gathering) {
-          const disk = new Graphics()
-            .circle(0, -8 * u, 12 * u)
-            .fill(PARCHMENT)
-            .stroke({ width: 2 * u, color });
-          sprite.figure.addChild(
-            disk,
-            art ? artSprite(art, 21 * u) : drawBanner(new Graphics(), color, u * 0.5),
-          );
-        } else {
-          sprite.figure.addChild(
-            art ? artSprite(art, 38 * u) : drawBanner(new Graphics(), color, u),
-          );
-        }
-        sprite.container.alpha = faded ? 0.75 : 1;
+        if (art) sprite.figure.addChild(artSprite(art, gathering ? 17 * u : 38 * u));
+        // The plate's position depends on the look.
+        sprite.text = '';
       }
-      const cargoKey = JSON.stringify([army.cargo, army.chest]);
+      sprite.container.alpha = faded ? 0.75 : 1;
+      const cargoKey = JSON.stringify([army.cargo, army.chest, gathering]);
       if (cargoKey !== sprite.cargoKey) {
         sprite.cargoKey = cargoKey;
         this.drawCargo(sprite, army, u);
-        sprite.container.alpha = faded ? 0.75 : 1;
       }
       const troops = army.troops === null ? '?' : String(army.troops);
-      const text = `${army.status}:${troops}`;
+      const text = `${gathering}:${troops}`;
       if (text !== sprite.text) {
         sprite.text = text;
         for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
-        sprite.plate.addChild(
-          gathering
-            ? this.nameplate(troops, null, u, { top: 3 * u, size: 9 * u })
-            : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }),
-        );
+        const plate = gathering
+          ? this.nameplate(troops, color, u, { top: -33 * u, size: 9 * u })
+          : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u });
+        if (gathering) plate.x = 1.5 * u;
+        sprite.plate.addChild(plate);
       }
     }
 
@@ -637,6 +636,52 @@ export class GameRenderer {
       sprite.container.destroy({ children: true });
       this.armies.delete(id);
     }
+  }
+
+  /**
+   * Display offsets (world px at piece scale 1) so stacked armies stay apart: gathering armies
+   * plant their flags in a row at the deposit's right front; other armies standing within
+   * STACK_RADIUS_TILES of each other fan out side by side (two rows past four), ordered by id so
+   * nobody swaps places between updates.
+   */
+  private armyOffsets(armies: readonly ArmyView[], u: number): Map<string, PointData> {
+    const offsets = new Map<string, PointData>();
+    const flagSlots = new Map<string, number>();
+    const loose: ArmyView[] = [];
+    for (const army of [...armies].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (army.status === 'gathering' && army.target) {
+        const slot = flagSlots.get(army.target.id) ?? 0;
+        flagSlots.set(army.target.id, slot + 1);
+        offsets.set(army.id, {
+          x: (GATHER_FLAG_X + slot * GATHER_FLAG_STEP) * u,
+          y: (GATHER_FLAG_Y - (slot % 2) * 3) * u,
+        });
+      } else {
+        loose.push(army);
+      }
+    }
+    const clustered = new Set<string>();
+    for (const army of loose) {
+      if (clustered.has(army.id)) continue;
+      const group = loose.filter(
+        (other) =>
+          !clustered.has(other.id) &&
+          Math.hypot(other.position.x - army.position.x, other.position.y - army.position.y) <
+            STACK_RADIUS_TILES,
+      );
+      for (const member of group) clustered.add(member.id);
+      const perRow = group.length > 4 ? Math.ceil(group.length / 2) : group.length;
+      group.forEach((member, i) => {
+        const row = Math.floor(i / perRow);
+        const inRow = Math.min(perRow, group.length - row * perRow);
+        const col = i % perRow;
+        offsets.set(member.id, {
+          x: (col - (inRow - 1) / 2) * STACK_STEP * u + row * 6 * u,
+          y: (row * 20 - (group.length > 1 ? (col % 2) * 4 : 0)) * u,
+        });
+      });
+    }
+    return offsets;
   }
 
   /** Route dashes, shifted by `routePhase` so they march toward the target. */
@@ -724,18 +769,25 @@ export class GameRenderer {
         .fill({ color: SEAL, alpha: 0.12 });
       const wave = new Graphics().circle(0, 0, radius).stroke({ width: 2.6 * u, color: SEAL });
       const swords = artSprite(this.art.alarm, 24 * u);
-      const smoke = [0, 1, 2, 3, 4, 5].map(() =>
-        new Graphics()
-          .circle(0, 0, 6 * u)
-          .fill({ color: 0x847d74 })
-          .stroke({ width: 0.9 * u, color: INK, alpha: 0.35 }),
-      );
+      const burnt = site.attackedAt !== null;
+      const smoke = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
+        const size = (14 + (i % 3) * 3) * u;
+        const sprite = artSprite(this.art.smoke[i % this.art.smoke.length]!, size, true);
+        sprite.visible = burnt;
+        return { sprite, size, spin: (i % 2 ? 1 : -1) * (0.2 + (i % 3) * 0.1) };
+      });
+      const flames = [-1, 1].map((side) => {
+        const size = 9 * u;
+        const sprite = artSprite(this.art.flame, size);
+        sprite.position.set(side * site.radius * 0.42 * u, -site.radius * 0.28 * u);
+        sprite.visible = burnt;
+        return { sprite, size };
+      });
       ring.visible = site.incoming;
       swords.visible = site.incoming;
-      wave.visible = site.attackedAt !== null;
-      for (const puff of smoke) puff.visible = site.attackedAt !== null;
+      wave.visible = burnt;
       under.addChild(ring, wave);
-      over.addChild(...smoke, swords);
+      over.addChild(...flames.map((f) => f.sprite), ...smoke.map((p) => p.sprite), swords);
       this.alertUnderLayer.addChild(under);
       this.alertLayer.addChild(over);
       this.alerts.push({
@@ -746,6 +798,7 @@ export class GameRenderer {
         swords,
         swordsScale: swords.scale.x,
         smoke,
+        flames,
         radius,
         incoming: site.incoming,
         attackedAt: site.attackedAt,
@@ -771,24 +824,38 @@ export class GameRenderer {
         const p = (seconds / 1.6) % 1;
         alert.wave.scale.set(0.55 + 0.75 * p);
         alert.wave.alpha = (1 - p) * 0.9 * strength;
-        // Two columns of smoke, rising from the towers.
-        alert.smoke.forEach((puff, i) => {
-          const q = (seconds * 0.45 + i / alert.smoke.length) % 1;
+        // Two columns of billowing smoke rising from the towers, drifting with the wind; flames
+        // lick at the walls while the assault is fresh.
+        alert.smoke.forEach(({ sprite, size, spin }, i) => {
+          const q = (seconds * 0.32 + i / alert.smoke.length) % 1;
           const side = i % 2 ? 1 : -1;
-          puff.position.set(
-            side * alert.radius * 0.55 + Math.sin(q * 5 + i) * 4 * u + q * 8 * u,
-            -alert.radius * 0.45 - q * 40 * u,
+          sprite.position.set(
+            side * alert.radius * 0.42 + Math.sin(q * 4 + i) * 3 * u + q * q * 16 * u,
+            -alert.radius * 0.35 - q * 46 * u,
           );
-          puff.scale.set(0.45 + q * 1.4);
-          puff.alpha = Math.min(1, Math.sin(q * Math.PI) * 1.4) * 0.85 * strength;
+          const grow = 0.55 + q * 1.1;
+          sprite.scale.set((grow * size) / (this.art.smoke[0]!.width - this.art.smoke[0]!.pad * 2));
+          sprite.rotation = q * spin * 3;
+          const fade = q < 0.15 ? q / 0.15 : 1 - (q - 0.15) / 0.85;
+          sprite.alpha = fade * 0.92 * strength;
+        });
+        alert.flames.forEach(({ sprite, size }, i) => {
+          const flicker = 0.85 + 0.15 * Math.sin(seconds * 13 + i * 2.1);
+          const base = size / (this.art.flame.width - this.art.flame.pad * 2);
+          sprite.scale.set(base * (2 - flicker), base * flicker * 1.1);
+          sprite.alpha = Math.max(0, fresh * 1.6 - 0.4);
         });
       }
     }
   }
 
-  /** Gold halo and a parchment tag with the main resource's icon and the total load. */
+  /**
+   * A parchment tag with the main resource's icon and the total load (beside the soldiers, or
+   * the claim flag while gathering); a small chest while the army brings one home.
+   */
   private drawCargo(sprite: ArmySprite, army: ArmyView, u: number): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
+    const gathering = army.status === 'gathering';
     if (army.chest) {
       const chest = artSprite(this.art.chest, 20 * u);
       chest.position.set(16 * u, -24 * u);
@@ -797,16 +864,13 @@ export class GameRenderer {
     if (!hasResources(army.cargo)) return;
     const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
     const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);
-    const halo = new Graphics()
-      .ellipse(0, 0, 20 * u, 6.5 * u)
-      .fill({ color: CARGO_GOLD, alpha: 0.3 })
-      .stroke({ width: 1.4 * u, color: CARGO_GOLD });
     const amount = this.label(`+${total}`, 10 * u, INK, true);
     const icon = artSprite(this.art.resources[main], 15 * u);
     const w = amount.width + 22 * u;
     const h = 14 * u;
     const tag = new Container();
-    tag.position.set(15 * u, -26 * u);
+    if (gathering) tag.position.set(13 * u, -9 * u);
+    else tag.position.set(15 * u, -26 * u);
     const plate = new Graphics()
       .roundRect(0, -h / 2, w, h, h / 2)
       .fill(PARCHMENT)
@@ -815,7 +879,7 @@ export class GameRenderer {
     amount.anchor.set(0, 0.5);
     amount.position.set(16 * u, 0);
     tag.addChild(plate, icon, amount);
-    sprite.cargo.addChild(halo, tag);
+    sprite.cargo.addChild(tag);
   }
 
   private drawSelection(selection: Selection | null): void {
@@ -869,9 +933,12 @@ export class GameRenderer {
     const seconds = performance.now() / 1000;
     const u = this.unit;
     const k = this.pieceScale;
-    for (const { container, figure, target, marching, stride } of this.armies.values()) {
+    for (const { container, figure, target, marching, stride, offset } of this.armies.values()) {
       container.x += (target.x - container.x) * t;
       container.y += (target.y - container.y) * t;
+      // Fanned-out stacks and flag slots slide into place instead of jumping.
+      container.pivot.x += (-offset.x - container.pivot.x) * t;
+      container.pivot.y += (-offset.y - container.pivot.y) * t;
       container.scale.set(k);
       figure.y = marching ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
     }
@@ -895,7 +962,13 @@ export class GameRenderer {
     const selection = useGameStore.getState().selection;
     if (selection?.kind === 'army') {
       const sprite = this.armies.get(selection.id);
-      if (sprite) this.selectionRing.position.copyFrom(sprite.container.position);
+      if (sprite) {
+        const { position, pivot, scale } = sprite.container;
+        this.selectionRing.position.set(
+          position.x - pivot.x * scale.x,
+          position.y - (pivot.y + 10 * u) * scale.y,
+        );
+      }
     }
   };
 }

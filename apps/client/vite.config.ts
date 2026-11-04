@@ -4,6 +4,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // `@/` → src (shadcn/ui convention, see components.json).
+  resolve: { alias: { '@': decodeURIComponent(new URL('./src', import.meta.url).pathname) } },
   server: {
     port: 5173,
     proxy: {

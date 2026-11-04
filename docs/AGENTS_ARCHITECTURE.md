@@ -41,7 +41,7 @@ flowchart LR
 
 ```
 apps/
-  client/          React + Vite + PixiJS + Tailwind  → AGENTS_APP.md
+  client/          React + Vite + PixiJS + Tailwind + shadcn/ui  → AGENTS_APP.md
   server/          Node + ws + Drizzle + ioredis     → AGENTS_SERVER.md
 packages/
   shared/src/      map.ts, entities.ts, rules.ts, messages.ts, pathfinding.ts

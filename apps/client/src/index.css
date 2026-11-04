@@ -1,18 +1,70 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
-/* Cartography theme. Keep in sync with the Pixi palette in src/game/palette.ts. */
+/* Cartography theme: mirrors src/theme/tokens.ts (`CSS_TOKENS`), the one colour source for map
+   and HUD. The design sheet (/?design) flags any value that drifts from the token. */
 @theme {
   --font-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   --color-parchment: #f6eedb;
-  --color-parchment-dark: #f1e3bd;
+  --color-parchment-dark: #efe2bf;
   --color-parchment-deep: #e3d2a4;
   --color-ink: #3b2a18;
   --color-ink-soft: #6b5434;
+  --color-ink-faint: #9b8664;
   --color-seal: #a3311f;
   --color-seal-light: #bf3d28;
-  --color-sea: #b8a27a; /* the map's brown sea (palette.ts SEA) */
-  --color-sea-dark: #2f5f86;
+  --color-sea: #b8a27a; /* the map's brown sea */
   --color-moss: #4f7a2a;
+  --color-fortify: #3b6ea5;
+  --color-gold: #f2c230;
+  --color-gold-deep: #c9951b;
+}
+
+/* shadcn/ui semantic colours, mapped onto the cartography tokens above. */
+:root {
+  --radius: 0.25rem;
+  --background: var(--color-parchment);
+  --foreground: var(--color-ink);
+  --card: var(--color-parchment);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-parchment);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-seal);
+  --primary-foreground: var(--color-parchment);
+  --secondary: color-mix(in srgb, var(--color-parchment-deep) 70%, var(--color-parchment));
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-parchment-dark);
+  --muted-foreground: var(--color-ink-soft);
+  --accent: var(--color-parchment-deep);
+  --accent-foreground: var(--color-ink);
+  --destructive: #6e1f14;
+  --border: color-mix(in srgb, var(--color-ink) 35%, transparent);
+  --input: color-mix(in srgb, var(--color-ink) 50%, transparent);
+  --ring: var(--color-seal);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
 }
 
 html,

@@ -1,31 +1,39 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { Button as UiButton } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
-/** Parchment sheet with a double ink rule. */
+// Game-facing wrappers over the shadcn/ui primitives (src/components/ui), so HUD code keeps one
+// small vocabulary: Panel, SectionLabel, Button.
+
+/** Parchment sheet with a double ink rule (shadcn Card). */
 export function Panel({
   title,
   icon,
   className = '',
+  contentClassName,
   children,
 }: {
   title?: ReactNode;
   icon?: ReactNode;
   className?: string;
+  /** Classes for the body inside the inner rule (padding goes here, not on the sheet). */
+  contentClassName?: string;
   children: ReactNode;
 }) {
   return (
-    <div
-      className={`pointer-events-auto border border-ink bg-parchment p-[3px] text-sm text-ink shadow-[2px_3px_0_rgba(59,42,24,0.35)] ${className}`}
-    >
-      <div className="border border-ink/40 px-3 py-2">
-        {title && (
-          <div className="mb-1.5 flex items-center gap-2 text-base italic">
+    <Card className={cn('pointer-events-auto', className)}>
+      {title && (
+        <CardHeader className="pb-0">
+          <CardTitle>
             {icon}
             {title}
-          </div>
-        )}
-        {children}
-      </div>
-    </div>
+          </CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={cn(title && 'pt-1.5', contentClassName)}>{children}</CardContent>
+    </Card>
   );
 }
 
@@ -38,24 +46,37 @@ export function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+const VARIANTS = {
+  default: 'default',
+  primary: 'primary',
+  danger: 'destructive',
+  selected: 'selected',
+  ghost: 'ghost',
+  outline: 'outline',
+  link: 'link',
+  plain: 'plain',
+} as const;
+
+/**
+ * shadcn Button with the game's variants (`danger` = destructive, `selected` = toggled on,
+ * `plain` = no chrome for illustrated buttons).
+ */
 export function Button({
   variant = 'default',
-  className = '',
+  size,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'default' | 'primary' | 'danger' | 'selected';
+}: Omit<ComponentProps<typeof UiButton>, 'variant'> & {
+  variant?: keyof typeof VARIANTS;
 }) {
-  const styles = {
-    default: 'border-ink/60 bg-parchment-deep/70 text-ink hover:bg-parchment-deep',
-    primary: 'border-ink bg-seal text-parchment hover:bg-seal-light',
-    danger: 'border-ink bg-[#6e1f14] text-parchment hover:bg-seal',
-    selected: 'border-ink bg-ink text-parchment',
-  }[variant];
+  return <UiButton variant={VARIANTS[variant]} size={size ?? 'compact'} {...props} />;
+}
+
+/** shadcn Tooltip around one element (which must accept a ref, e.g. Button or a span). */
+export function Tip({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      className={`border px-2.5 py-1 font-serif text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${styles} ${className}`}
-      {...props}
-    />
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }

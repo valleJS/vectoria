@@ -28,6 +28,10 @@ import { formatGameDuration, formatPercent, formatResources } from '../game/form
 import { useGameStore } from '../state/store';
 import { CardFace } from './CardFace';
 import { CardArt } from './icons';
+import { Button, Tip } from './Panel';
+import { Badge } from '@/components/ui/badge';
+import { ChevronLeftIcon, ChevronRightIcon, MenuIcon } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 const COMPASS_URL = dataUrl(compassRose());
 const INK = '#3b2a18';
@@ -411,38 +415,27 @@ function Book({
     setToc(false);
   };
 
+  // Escape and outside clicks close the dialog (radix); arrows turn the pages.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowRight') setIndex((i) => Math.min(CHAPTERS.length - 1, i + 1));
       if (e.key === 'ArrowLeft') setIndex((i) => Math.max(0, i - 1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   const page =
     'bg-parchment bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.35),transparent_70%)]';
 
   return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-ink/55 p-4 max-md:p-3"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-label="Handbuch"
-        onClick={(e) => e.stopPropagation()}
-        className="relative flex h-[min(44rem,90vh)] w-full max-w-5xl rounded-md border-2 border-ink bg-[#6e2618] p-2.5 text-ink shadow-[6px_8px_0_rgba(59,42,24,0.45)] max-md:h-[calc(100dvh-1.5rem)] max-md:flex-col max-md:p-1.5"
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent
+        bare
+        aria-describedby={undefined}
+        className="h-[min(44rem,90vh)] max-h-none w-[calc(100vw-2rem)] max-w-5xl flex-row rounded-md border-2 border-ink bg-[#6e2618] p-2.5 text-ink shadow-[6px_8px_0_rgba(59,42,24,0.45)] max-md:h-[calc(100dvh-1.5rem)] max-md:w-[calc(100vw-1.5rem)] max-md:flex-col max-md:p-1.5"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Handbuch schließen"
-          className="absolute -top-3 -right-3 z-10 h-8 w-8 rounded-full border-2 border-ink bg-parchment text-lg leading-none hover:bg-seal hover:text-parchment"
-        >
-          ×
-        </button>
+        <DialogTitle className="sr-only">Handbuch</DialogTitle>
 
         {/* Left page: contents */}
         <nav
@@ -457,11 +450,12 @@ function Book({
           <ol className="min-h-0 space-y-0.5 overflow-y-auto">
             {CHAPTERS.map((c, i) => (
               <li key={c.id}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   onClick={() => go(i)}
-                  className={`flex w-full items-baseline gap-1.5 px-1 py-0.5 text-left max-md:py-1.5 ${
-                    i === index ? 'bg-parchment-deep/70 font-bold text-seal' : 'hover:text-seal'
+                  aria-current={i === index ? 'page' : undefined}
+                  className={`h-auto w-full items-baseline justify-start gap-1.5 rounded-sm px-1 py-0.5 text-left text-base font-normal max-md:py-1.5 ${
+                    i === index ? 'bg-accent/70 font-bold text-seal' : 'hover:text-seal'
                   }`}
                 >
                   <span className="w-9 shrink-0 text-right text-ink-soft tabular-nums">
@@ -470,21 +464,22 @@ function Book({
                   <span className="shrink-0 italic">{c.title}</span>
                   <span className="min-w-2 flex-1 translate-y-[-3px] border-b border-dotted border-ink/50" />
                   <span className="shrink-0 text-xs text-ink-soft tabular-nums">{i * 2 + 3}</span>
-                </button>
+                </Button>
               </li>
             ))}
           </ol>
           <div className="mt-auto flex justify-center gap-1.5 pt-3">
             {CARD_TYPES.map((card) => (
-              <button
-                key={card}
-                type="button"
-                title={CARDS[card].name}
-                onClick={() => go(CHAPTERS.findIndex((c) => c.id === 'catalog'))}
-                className="w-10 border border-ink/60 bg-parchment p-[1px] hover:-translate-y-0.5"
-              >
-                <CardArt card={card} className="h-6 w-full" />
-              </button>
+              <Tip key={card} label={CARDS[card].name}>
+                <Button
+                  variant="plain"
+                  aria-label={CARDS[card].name}
+                  onClick={() => go(CHAPTERS.findIndex((c) => c.id === 'catalog'))}
+                  className="block w-10 rounded-[2px] border border-ink/60 bg-card p-[1px] hover:-translate-y-0.5"
+                >
+                  <CardArt card={card} className="h-6 w-full" />
+                </Button>
+              </Tip>
             ))}
           </div>
         </nav>
@@ -499,13 +494,9 @@ function Book({
           <div className="flex items-center justify-between text-xs text-ink-soft italic">
             <span>Kapitel {toRoman(index + 1)}</span>
             <span className="max-md:hidden">Handbuch von Vectoria</span>
-            <button
-              type="button"
-              onClick={() => setToc(true)}
-              className="border border-ink/50 bg-parchment-deep/60 px-2 py-1 not-italic text-ink md:hidden"
-            >
-              ☰ Inhalt
-            </button>
+            <Button size="sm" onClick={() => setToc(true)} className="not-italic md:hidden">
+              <MenuIcon /> Inhalt
+            </Button>
           </div>
           <h2 className="mt-1 mb-3 border-b border-ink/40 pb-1 text-2xl italic">{chapter.title}</h2>
           <div
@@ -515,29 +506,33 @@ function Book({
             {chapter.body({ victoryPointsToWin })}
           </div>
           <footer className="mt-3 flex items-center justify-between border-t border-ink/30 pt-2 text-sm">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={index === 0}
               onClick={() => setIndex(index - 1)}
-              className="italic hover:text-seal disabled:opacity-30"
+              className="text-sm italic hover:text-seal disabled:opacity-30"
             >
-              ← <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
+              <ChevronLeftIcon />
+              <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
               <span className="md:hidden">Zurück</span>
-            </button>
+            </Button>
             <span className="text-xs text-ink-soft tabular-nums">— {index * 2 + 3} —</span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={index === CHAPTERS.length - 1}
               onClick={() => setIndex(index + 1)}
-              className="italic hover:text-seal disabled:opacity-30"
+              className="text-sm italic hover:text-seal disabled:opacity-30"
             >
               <span className="max-md:hidden">{CHAPTERS[index + 1]?.title ?? ''}</span>
-              <span className="md:hidden">Weiter</span> →
-            </button>
+              <span className="md:hidden">Weiter</span>
+              <ChevronRightIcon />
+            </Button>
           </footer>
         </article>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -577,17 +572,17 @@ export function HandbookInvite({ victoryPointsToWin }: { victoryPointsToWin: num
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="plain"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-3 border-2 border-ink bg-parchment px-4 py-2 text-left shadow-[3px_4px_0_rgba(59,42,24,0.35)] transition-transform hover:-translate-y-0.5"
+        className="flex w-full items-center justify-start gap-3 rounded-sm border-2 border-ink bg-card px-4 py-2 text-left font-normal whitespace-normal shadow-[3px_4px_0_rgba(59,42,24,0.35)] transition-transform hover:-translate-y-0.5"
       >
         <BookGlyph size={40} />
         <span className="leading-tight">
           <b className="block italic">Handbuch lesen</b>
           <span className="text-sm text-ink-soft">Regeln, Kampf, Truhen & Karten</span>
         </span>
-      </button>
+      </Button>
       {open && <Book victoryPointsToWin={victoryPointsToWin} onClose={() => setOpen(false)} />}
     </>
   );
@@ -597,15 +592,16 @@ export function HandbookInvite({ victoryPointsToWin }: { victoryPointsToWin: num
 export function HandbookButton() {
   const setHandbook = useGameStore((s) => s.setHandbook);
   return (
-    <button
-      type="button"
-      onClick={() => setHandbook(true)}
-      title="Handbuch öffnen"
-      aria-label="Handbuch öffnen"
-      className="-my-1 shrink-0"
-    >
-      <BookGlyph size={32} />
-    </button>
+    <Tip label="Handbuch öffnen">
+      <Button
+        variant="plain"
+        onClick={() => setHandbook(true)}
+        aria-label="Handbuch öffnen"
+        className="-my-1 shrink-0"
+      >
+        <BookGlyph size={32} />
+      </Button>
+    </Tip>
   );
 }
 
@@ -615,26 +611,24 @@ export function HandbookCorner() {
   const open = () => setHandbook(true);
   return (
     <div className="pointer-events-auto flex items-end gap-1">
-      <button
-        type="button"
+      <Tip label="Handbuch öffnen">
+        <Button
+          variant="plain"
+          onClick={open}
+          aria-label="Handbuch öffnen"
+          className="transition-transform hover:-rotate-6"
+        >
+          <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />
+        </Button>
+      </Tip>
+      <Button
+        variant="plain"
         onClick={open}
-        title="Handbuch öffnen"
-        aria-label="Handbuch öffnen"
-        className="transition-transform hover:-rotate-6"
-      >
-        <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />
-      </button>
-      <button
-        type="button"
-        onClick={open}
-        title="Handbuch öffnen"
-        className="mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
+        className="mb-1 flex-col transition-transform hover:-translate-y-1"
       >
         <BookGlyph />
-        <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
-          Handbuch
-        </span>
-      </button>
+        <Badge variant="plate">Handbuch</Badge>
+      </Button>
     </div>
   );
 }

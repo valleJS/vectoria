@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { GameCanvas } from './game/GameCanvas';
 import { gameSocket } from './net/socket';
 import { useGameStore } from './state/store';
 import { AdminPanel } from './ui/AdminPanel';
+import { DesignSheet } from './ui/DesignSheet';
 import { Hud } from './ui/Hud';
 import { takeLoginLink } from './net/loginLink';
 import { JoinScreen, Lobby } from './ui/JoinScreen';
 
-const isAdminRoute = new URLSearchParams(window.location.search).has('admin');
+const params = new URLSearchParams(window.location.search);
+const isAdminRoute = params.has('admin');
+const isDesignRoute = params.has('design');
 const loginLink = isAdminRoute ? null : takeLoginLink();
 
 function PlayerApp() {
@@ -34,5 +38,9 @@ function PlayerApp() {
 }
 
 export function App() {
-  return isAdminRoute ? <AdminPanel /> : <PlayerApp />;
+  return (
+    <TooltipProvider>
+      {isDesignRoute ? <DesignSheet /> : isAdminRoute ? <AdminPanel /> : <PlayerApp />}
+    </TooltipProvider>
+  );
 }

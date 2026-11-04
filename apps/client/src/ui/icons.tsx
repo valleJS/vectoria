@@ -1,5 +1,5 @@
 import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
-import { alarm, castle, chest, dataUrl, resourceIcon, soldiers } from '../art/svg';
+import { alarm, castle, chest, dataUrl, outpost, resourceIcon, ruin, soldiers } from '../art/svg';
 import type { ReactNode } from 'react';
 import { cardColor } from '../game/format';
 
@@ -98,9 +98,30 @@ function ArtIcon({ id, size, make }: { id: string; size: number; make: () => str
   );
 }
 
-/** The map's castle art in the owner's colour. */
-export function CastleIcon({ size = 26, color }: { size?: number; color: string }) {
-  return <ArtIcon id={`castle${color}`} size={size} make={() => castle(color).svg} />;
+/** The map's castle art in the owner's colour and castle style (format.ts `playerHeraldry`). */
+export function CastleIcon({
+  size = 26,
+  color,
+  style = 0,
+}: {
+  size?: number;
+  color: string;
+  style?: number;
+}) {
+  return (
+    <ArtIcon id={`castle${style}${color}`} size={size} make={() => castle(color, style).svg} />
+  );
+}
+
+/** The map's outpost: a watchtower in the owner's colour, or a ruin when nobody holds it. */
+export function OutpostIcon({ size = 24, color }: { size?: number; color: string | null }) {
+  return (
+    <ArtIcon
+      id={`outpost${color}`}
+      size={size}
+      make={() => (color ? outpost(color) : ruin()).svg}
+    />
+  );
 }
 
 /** The map's soldier group (an army, or troops) in the owner's colour. */

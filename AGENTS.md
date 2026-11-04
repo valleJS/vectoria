@@ -19,7 +19,7 @@ Run from the repo root (npm workspaces; Node ≥ 22.12).
 
 ## Stack
 
-npm-workspace monorepo: `apps/client` (React 19, Vite, PixiJS 8, Tailwind 4, zustand),
+npm-workspace monorepo: `apps/client` (React 19, Vite, PixiJS 8, Tailwind 4, shadcn/ui on Radix, zustand),
 `apps/server` (Node, `ws`, Drizzle + `pg`, `ioredis`), `packages/shared` (protocol + game types).
 TypeScript 6 (pinned `~6.0` until `typescript-eslint` supports 7), ESLint flat config, Prettier.
 Shape and protocol: [`docs/AGENTS_ARCHITECTURE.md`](docs/AGENTS_ARCHITECTURE.md).

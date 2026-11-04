@@ -1,14 +1,16 @@
 import type { ResourceType } from '@vectoria/shared';
+import * as T from '../theme/tokens';
 
-/** Cartography palette for the Pixi map. The HUD uses the same values as CSS tokens (index.css). */
-export const INK = 0x3b2a18;
-export const PARCHMENT = 0xf6eedb;
+/** Pixi colours: the design tokens (theme/tokens.ts) as 0xrrggbb numbers. */
+export const INK = T.hex(T.INK);
+export const PARCHMENT = T.hex(T.PARCHMENT);
 /** Alarm red for attacks (the HUD's `seal` token). */
-export const SEAL = 0xa3311f;
-export const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif';
+export const SEAL = T.hex(T.SEAL);
+export const FORTIFY_BLUE = T.hex(T.FORTIFY);
+export const SERIF = T.SERIF;
 
 /** Open sea, also the canvas background (index.css `--color-sea`). */
-export const SEA = 0xb8a27a;
+export const SEA = T.hex(T.SEA);
 
 /**
  * The map backdrop is an old map in parchment and brown; only the pieces players act on (sites,
@@ -29,18 +31,15 @@ export function sepia(r: number, g: number, b: number): [number, number, number]
   return [tone(0, r), tone(1, g), tone(2, b)];
 }
 export const RESOURCE_COLORS: Record<ResourceType, number> = {
-  wood: 0xa0652e,
-  stone: 0x9aa0aa,
-  gold: 0xf4c430,
+  wood: T.hex(T.RESOURCE.wood),
+  stone: T.hex(T.RESOURCE.stone),
+  gold: T.hex(T.RESOURCE.gold),
 };
 
 /** The viewer is always red; everyone else takes a heraldic colour in join order. */
-export const SELF_COLOR = 0xd4472f;
+export const SELF_COLOR = T.hex(T.SELF_COLOR);
 /** Unowned outposts. */
-export const NEUTRAL_COLOR = 0x8c8577;
+export const NEUTRAL_COLOR = T.hex(T.NEUTRAL_COLOR);
 /** Routes and halos of armies carrying resources. */
-export const CARGO_GOLD = 0xe0a919;
-export const PLAYER_PALETTE = [
-  0x7a46b8, 0x1f8fa8, 0xd9a21b, 0x3f8f3a, 0x2f5fa8, 0xc0567f, 0xe07a2a, 0x8a5a2b, 0x4f6d7a,
-  0xa33b8f, 0x8a9a2a,
-];
+export const CARGO_GOLD = T.hex(T.CARGO_GOLD);
+export const PLAYER_PALETTE = T.HERALDRY.map(T.hex);

@@ -1,4 +1,6 @@
 import { CARDS, type CardType } from '@vectoria/shared';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { gameSocket } from '../net/socket';
 import { useGameStore } from '../state/store';
 import { cardColor } from '../game/format';
@@ -58,47 +60,45 @@ export function CardProfile() {
   const close = () => showCard(null);
 
   return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-20 flex items-center justify-center bg-ink/50"
-      onClick={close}
-    >
-      <div
-        className="flex flex-col items-center gap-3"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={`Karte ${info.name}`}
-      >
+    <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
+      <DialogContent bare showClose={false} className="items-center gap-3">
+        <DialogTitle className="sr-only">Karte {info.name}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {info.name}: aktivieren oder schließen
+        </DialogDescription>
         <CardFace card={card} />
-        <div className="flex w-60 flex-col gap-1.5 border border-ink bg-parchment p-2 text-sm">
-          <div className="flex justify-between text-ink-soft">
-            <span>Im Besitz: {count}</span>
-            {active && <b className="text-seal">aktiv</b>}
-          </div>
-          {count > 0 &&
-            (active ? (
-              <Button onClick={() => gameSocket.send({ type: 'activateCard', card: null })}>
-                Deaktivieren
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  gameSocket.send({ type: 'activateCard', card });
-                  if (info.use === 'instant') close();
-                }}
-              >
-                {info.use === 'instant' ? 'Aktivieren (wirkt sofort)' : 'Aktivieren'}
-              </Button>
-            ))}
-          {info.use === 'march' && (
-            <p className="text-xs text-ink-soft">
-              Es kann immer nur eine Karte aktiv sein. Die aktive Karte geht mit dem nächsten Zug,
-              den du losschickst, und ist danach verbraucht.
-            </p>
-          )}
-          <Button onClick={close}>Schließen</Button>
-        </div>
-      </div>
-    </div>
+        <Card className="w-60">
+          <CardContent className="flex flex-col gap-1.5 p-2">
+            <div className="flex justify-between text-ink-soft">
+              <span>Im Besitz: {count}</span>
+              {active && <b className="text-seal">aktiv</b>}
+            </div>
+            {count > 0 &&
+              (active ? (
+                <Button onClick={() => gameSocket.send({ type: 'activateCard', card: null })}>
+                  Deaktivieren
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    gameSocket.send({ type: 'activateCard', card });
+                    if (info.use === 'instant') close();
+                  }}
+                >
+                  {info.use === 'instant' ? 'Aktivieren (wirkt sofort)' : 'Aktivieren'}
+                </Button>
+              ))}
+            {info.use === 'march' && (
+              <p className="text-xs text-ink-soft">
+                Es kann immer nur eine Karte aktiv sein. Die aktive Karte geht mit dem nächsten Zug,
+                den du losschickst, und ist danach verbraucht.
+              </p>
+            )}
+            <Button onClick={close}>Schließen</Button>
+          </CardContent>
+        </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

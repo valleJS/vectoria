@@ -22,6 +22,7 @@ import {
   formatResources,
   ownBases,
   playerColor,
+  playerHeraldry,
   type BaseInfo,
 } from '../game/format';
 import { gameSocket } from '../net/socket';
@@ -31,6 +32,7 @@ import {
   SoldiersIcon,
   CardArt,
   CastleIcon,
+  OutpostIcon,
   ChestIcon,
   OnlineDot,
   ResourceIcon,
@@ -43,7 +45,14 @@ import { ChestOpening } from './ChestOpening';
 import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
 import { RuleChanges, RuleChangesButton } from './RuleChanges';
 import { compactQuery } from './layout';
-import { Button, SectionLabel } from './Panel';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button, SectionLabel, Tip } from './Panel';
+import { ChevronDownIcon, ChevronRightIcon, Undo2Icon } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Progress } from '@/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { SelectionContent } from './SelectionPanel';
 
 const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = {
@@ -53,8 +62,6 @@ const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = 
   closed: { label: 'Verbinde neu…', dot: 'bg-seal animate-pulse' },
 };
 const NOTICE_MS = 4_000;
-const BOX =
-  'pointer-events-auto border border-ink bg-parchment text-sm shadow-[2px_3px_0_rgba(59,42,24,0.35)]';
 
 /** Cost as resource icons with amounts. */
 function Cost({ cost }: { cost: Resources }) {
@@ -101,36 +108,42 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
           </span>
         </span>
       </span>
-      <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-soft" title={label}>
-        <span className={`h-2.5 w-2.5 rounded-full border border-ink/60 ${dot}`} />
-        {compact
-          ? null
-          : status === 'open' && latencyMs !== null
-            ? `${Math.round(latencyMs)} ms`
-            : label}
-      </span>
+      <Tip label={label}>
+        <span
+          className="ml-auto flex items-center gap-1.5 text-xs text-ink-soft"
+          aria-label={label}
+        >
+          <span className={`h-2.5 w-2.5 rounded-full border border-ink/60 ${dot}`} />
+          {compact
+            ? null
+            : status === 'open' && latencyMs !== null
+              ? `${Math.round(latencyMs)} ms`
+              : label}
+        </span>
+      </Tip>
       {compact && <RuleChangesButton compact />}
       {compact && <HandbookButton />}
     </header>
   );
 }
 
-/** ▾/▸ button that folds a box open or shut. */
+/** Chevron button that folds a box open or shut. */
 function FoldToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
-    <button
-      type="button"
-      className="px-1 text-ink-soft hover:text-seal"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-ink-soft"
       onClick={onToggle}
       aria-expanded={open}
       aria-label={open ? 'Einklappen' : 'Ausklappen'}
     >
-      {open ? '▾' : '▸'}
-    </button>
+      {open ? <ChevronDownIcon /> : <ChevronRightIcon />}
+    </Button>
   );
 }
 
-/** Icon + big number in a framed chip; the title doubles as tooltip and accessible label. */
+/** Icon + big number in a framed chip; the title is its tooltip and accessible label. */
 function Stat({
   title,
   icon,
@@ -143,15 +156,16 @@ function Stat({
   children: ReactNode;
 }) {
   return (
-    <span
-      title={title}
-      aria-label={title}
-      className="flex items-center justify-center gap-1 border border-ink/40 bg-parchment-dark/60 px-1.5 py-0.5 text-base font-bold tabular-nums"
-    >
-      {icon}
-      {children}
-      {extra && <span className="text-xs font-normal text-ink-soft">{extra}</span>}
-    </span>
+    <Tip label={title}>
+      <span
+        aria-label={title}
+        className="flex items-center justify-center gap-1 rounded-sm border border-ink/40 bg-muted/60 px-1.5 py-0.5 text-base font-bold tabular-nums"
+      >
+        {icon}
+        {children}
+        {extra && <span className="text-xs font-normal text-ink-soft">{extra}</span>}
+      </span>
+    </Tip>
   );
 }
 
@@ -169,32 +183,28 @@ function CardHand({ view }: { view: GameView }) {
         const info = CARDS[card];
         const active = view.self.activeCard === card;
         return (
-          <button
-            key={card}
-            type="button"
-            title={info.description}
-            onClick={() => showCard(card)}
-            className={`relative w-[4.6rem] border bg-parchment p-[2px] hover:-translate-y-0.5 hover:shadow-[1px_2px_0_rgba(59,42,24,0.35)] ${
-              active ? 'border-seal outline-2 outline-seal' : 'border-ink'
-            }`}
-          >
-            <CardArt card={card} className="h-8 w-full" />
-            <div className="text-center text-[11px] italic">{info.name}</div>
-            <div className="text-center text-[10px] leading-tight text-ink-soft">
-              {active ? (
-                <b className="text-seal">aktiv</b>
-              ) : info.use === 'instant' ? (
-                'sofort'
-              ) : (
-                'Marsch'
-              )}
-            </div>
-            {count > 1 && (
-              <span className="absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full border border-ink bg-seal px-1 text-[10px] text-parchment">
-                {count}
-              </span>
-            )}
-          </button>
+          <Tip key={card} label={info.description}>
+            <Button
+              variant="plain"
+              onClick={() => showCard(card)}
+              className={`relative block w-[4.6rem] rounded-sm border bg-card p-[2px] font-normal whitespace-normal hover:-translate-y-0.5 hover:shadow-[1px_2px_0_rgba(59,42,24,0.35)] ${
+                active ? 'border-seal outline-2 outline-seal' : 'border-ink'
+              }`}
+            >
+              <CardArt card={card} className="h-8 w-full" />
+              <div className="text-center text-[11px] italic">{info.name}</div>
+              <div className="text-center text-[10px] leading-tight text-ink-soft">
+                {active ? (
+                  <b className="text-seal">aktiv</b>
+                ) : info.use === 'instant' ? (
+                  'sofort'
+                ) : (
+                  'Marsch'
+                )}
+              </div>
+              {count > 1 && <Badge className="absolute -top-2 -right-2 border-ink">{count}</Badge>}
+            </Button>
+          </Tip>
         );
       })}
     </div>
@@ -318,32 +328,39 @@ function BaseFold({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const color = cssColor(playerColor(view, view.self.id));
+  const heraldry = playerHeraldry(view, view.self.id);
+  const color = cssColor(heraldry.color);
+  const style = heraldry.style;
   return (
-    <div className="mt-2 border border-ink/40">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 bg-parchment-dark/60 px-2 py-1 text-left hover:text-seal"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <CastleIcon color={color} size={18} />
-        <b className="min-w-0 flex-1 truncate italic">{base.name}</b>
-        <span className="text-xs text-ink-soft tabular-nums">
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="mt-2 rounded-sm border border-ink/40"
+    >
+      <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-1.5 bg-muted/60 px-2 py-1 text-left outline-none hover:text-seal focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
+        {base.id === null ? (
+          <CastleIcon color={color} style={style} size={18} />
+        ) : (
+          <OutpostIcon color={color} size={18} />
+        )}
+        <b className="shrink-0 italic">{base.name}</b>
+        <span className="min-w-0 flex-1 truncate text-right text-xs text-ink-soft tabular-nums">
           {base.troops} Tr. · {formatResources(base.resources, 'leer')}
         </span>
-        <span className="text-ink-soft">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="px-2 pt-1.5 pb-2">
-          {base.id === null ? (
-            <HomeBase view={view} base={base} />
-          ) : (
-            <OutpostBase view={view} base={base} />
-          )}
-        </div>
-      )}
-    </div>
+        {open ? (
+          <ChevronDownIcon className="size-4 text-ink-soft" />
+        ) : (
+          <ChevronRightIcon className="size-4 text-ink-soft" />
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-2 pt-1.5 pb-2">
+        {base.id === null ? (
+          <HomeBase view={view} base={base} />
+        ) : (
+          <OutpostBase view={view} base={base} />
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -362,27 +379,29 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
   const vp = me?.victoryPoints ?? 0;
 
   return (
-    <section className={`${BOX} flex min-h-0 flex-col`}>
-      <header className="flex items-center gap-2 border-b border-ink bg-parchment-dark px-3 py-1.5">
+    <Card className="pointer-events-auto min-h-0">
+      <CardHeader className="border-b border-ink/40 bg-muted py-1.5">
         <ShieldIcon color={cssColor(playerColor(view, self.id))} size={18} />
         <b className="min-w-0 flex-1 truncate italic">{self.name}</b>
-        <span className="flex items-center gap-1 tabular-nums" title="Siegpunkte">
-          <StarIcon size={18} />
-          <b>{vp}</b>
-          <span className="text-xs text-ink-soft">/ {view.victoryPointsToWin}</span>
-        </span>
+        <Tip label="Siegpunkte">
+          <span className="flex items-center gap-1 tabular-nums">
+            <StarIcon size={18} />
+            <b>{vp}</b>
+            <span className="text-xs text-ink-soft">/ {view.victoryPointsToWin}</span>
+          </span>
+        </Tip>
         {collapsible && <FoldToggle open={open} onToggle={() => setOpen(!open)} />}
-      </header>
+      </CardHeader>
       {open && (
         <div className="min-h-0 overflow-y-auto px-3 pt-2 pb-2.5">
           <div className="flex items-center justify-between text-xs text-ink-soft">
             <span>Fortschritt zum Sieg</span>
-            <span className="inline-block h-1.5 w-28 border border-ink/50 bg-parchment-deep">
-              <span
-                className="block h-full bg-seal"
-                style={{ width: `${Math.min(100, (vp / view.victoryPointsToWin) * 100)}%` }}
-              />
-            </span>
+            <Progress
+              value={(vp / view.victoryPointsToWin) * 100}
+              className="h-1.5 w-28"
+              indicatorClassName="bg-seal"
+              aria-label="Fortschritt zum Sieg"
+            />
           </div>
 
           {self.chests > 0 && (
@@ -438,9 +457,9 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
           )}
 
           <div className="mt-2 text-right">
-            <button
-              type="button"
-              className="text-xs text-ink-soft underline hover:text-seal"
+            <Button
+              variant="link"
+              className="text-xs"
               onClick={() => {
                 if (
                   window.confirm('Abmelden? Du kannst dich jederzeit per E-Mail wieder anmelden.')
@@ -450,11 +469,11 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
               }}
             >
               Abmelden
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -486,21 +505,24 @@ function ArmiesList({ view }: { view: GameView }) {
     <ul className="divide-y divide-ink/15">
       {mine.map((army) => (
         <li key={army.id} className="flex items-center justify-between gap-2 py-1.5">
-          <button
-            type="button"
-            className="min-w-0 text-left hover:text-seal"
+          <Button
+            variant="plain"
+            className="block min-w-0 shrink text-left font-normal whitespace-normal hover:text-seal"
             onClick={() => select({ kind: 'army', id: army.id })}
           >
             <b className="tabular-nums">{army.troops}</b> → {describeTarget(view, army.target)}
             <span className="block text-xs text-ink-soft">{armyStatusText(view, army)}</span>
-          </button>
+          </Button>
           {army.status !== 'returning' && (
-            <Button
-              title="Zurückrufen"
-              onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}
-            >
-              ↩
-            </Button>
+            <Tip label="Zurückrufen">
+              <Button
+                size="icon-sm"
+                aria-label="Zurückrufen"
+                onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}
+              >
+                <Undo2Icon />
+              </Button>
+            </Tip>
           )}
         </li>
       ))}
@@ -528,15 +550,12 @@ function Leaderboard({ view }: { view: GameView }) {
                 {p.name}
               </span>
               <OnlineDot online={p.online} />
-              <span className="h-1.5 w-16 border border-ink/50 bg-parchment-deep">
-                <span
-                  className="block h-full"
-                  style={{
-                    width: `${Math.min(100, (p.victoryPoints / view.victoryPointsToWin) * 100)}%`,
-                    background: color,
-                  }}
-                />
-              </span>
+              <Progress
+                value={(p.victoryPoints / view.victoryPointsToWin) * 100}
+                indicatorColor={color}
+                className="h-1.5 w-16"
+                aria-label={`Siegpunkte ${p.name}`}
+              />
               <b className="w-5 text-right">{p.victoryPoints}</b>
             </li>
           );
@@ -585,37 +604,34 @@ function Sidebar({ view }: { view: GameView }) {
     { id: 'log', label: 'Chronik' },
   ];
   return (
-    <div className={`${BOX} flex min-h-0 flex-col`}>
-      <nav className="flex shrink-0 border-b border-ink bg-parchment-dark" role="tablist">
-        {tabs.map(({ id, label, badge }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={`flex flex-1 items-center justify-center gap-1 border-r border-ink/30 px-1 py-1.5 last:border-r-0 ${
-              tab === id
-                ? '-mb-px border-b-2 border-b-seal bg-parchment font-bold'
-                : 'text-ink-soft hover:bg-parchment-deep/60 hover:text-ink'
-            }`}
-          >
-            {label}
-            {badge ? (
-              <span className="rounded-full bg-seal px-1.5 text-[11px] leading-4 text-parchment">
-                {badge}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </nav>
-      <div className="min-h-0 overflow-y-auto px-3 py-2">
-        {tab === 'selection' && <SelectionContent view={view} />}
-        {tab === 'armies' && <ArmiesList view={view} />}
-        {tab === 'ranking' && <Leaderboard view={view} />}
-        {tab === 'log' && <Chronicle view={view} />}
-      </div>
-    </div>
+    <Card className="pointer-events-auto min-h-0">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as SidebarTab)}
+        className="min-h-0 flex-1"
+      >
+        <TabsList>
+          {tabs.map(({ id, label, badge }) => (
+            <TabsTrigger key={id} value={id}>
+              {label}
+              {badge ? <Badge>{badge}</Badge> : null}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="selection" className="overflow-y-auto px-3 py-2">
+          <SelectionContent view={view} />
+        </TabsContent>
+        <TabsContent value="armies" className="overflow-y-auto px-3 py-2">
+          <ArmiesList view={view} />
+        </TabsContent>
+        <TabsContent value="ranking" className="overflow-y-auto px-3 py-2">
+          <Leaderboard view={view} />
+        </TabsContent>
+        <TabsContent value="log" className="overflow-y-auto px-3 py-2">
+          <Chronicle view={view} />
+        </TabsContent>
+      </Tabs>
+    </Card>
   );
 }
 
@@ -624,7 +640,7 @@ const FEED_MARKS: Record<FeedEntry['kind'], string> = {
   battle: 'bg-seal',
   gather: 'bg-[#e0a919]',
   chest: 'bg-[#b8702c]',
-  outpost: 'bg-sea-dark',
+  outpost: 'bg-fortify',
   day: 'bg-moss',
 };
 
@@ -653,23 +669,24 @@ function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: bo
   ];
 
   return (
-    <section className={`${BOX} flex min-h-0 flex-col`}>
-      <header className="flex items-center gap-2 border-b border-ink bg-parchment-dark px-3 py-1.5">
+    <Card className="pointer-events-auto min-h-0">
+      <CardHeader className="border-b border-ink/40 bg-muted py-1.5">
         <span className="h-2 w-2 animate-pulse rounded-full bg-seal" aria-hidden />
         <b className="flex-1 italic">Liveticker</b>
         <span className="text-xs text-ink-soft">{moving.length} Züge unterwegs</span>
         {collapsible && <FoldToggle open={open} onToggle={() => setOpen(!open)} />}
-      </header>
+      </CardHeader>
       <div className="grid grid-cols-4 gap-1 border-b border-ink/30 px-2 py-1.5">
         {summary.map(({ label, count, icon }) => (
-          <span
-            key={label}
-            title={label}
-            className={`flex items-center justify-center gap-1 tabular-nums ${count === 0 ? 'opacity-40' : 'font-bold'}`}
-          >
-            {icon}
-            {count}
-          </span>
+          <Tip key={label} label={label}>
+            <span
+              aria-label={`${label}: ${count}`}
+              className={`flex items-center justify-center gap-1 tabular-nums ${count === 0 ? 'opacity-40' : 'font-bold'}`}
+            >
+              {icon}
+              {count}
+            </span>
+          </Tip>
         ))}
       </div>
       {open && (
@@ -686,13 +703,13 @@ function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: bo
                   className={`h-2 w-2 shrink-0 translate-y-[-1px] rounded-full ${FEED_MARKS[entry.kind]}`}
                 />
                 {linked ? (
-                  <button
-                    type="button"
-                    className="text-left hover:text-seal hover:underline"
+                  <Button
+                    variant="plain"
+                    className="block min-w-0 shrink text-left font-normal whitespace-normal hover:text-seal hover:underline"
                     onClick={() => select({ kind: 'army', id: entry.armyId! })}
                   >
                     {entry.text}
-                  </button>
+                  </Button>
                 ) : (
                   <span>{entry.text}</span>
                 )}
@@ -701,7 +718,7 @@ function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: bo
           })}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -726,10 +743,10 @@ function EndBanner({ view }: { view: GameView }) {
   if (view.phase !== 'ended') return null;
   const winner = view.players.find((p) => p.id === view.winnerId);
   return (
-    <div className={`${BOX} px-4 py-2 text-center text-lg italic`}>
+    <Card className="pointer-events-auto px-4 py-2 text-center text-lg italic">
       Spielende —{' '}
       {winner ? `${winner.name} gewinnt mit ${winner.victoryPoints} Siegpunkten!` : 'kein Sieger.'}
-    </div>
+    </Card>
   );
 }
 
@@ -750,12 +767,12 @@ type SheetTab = 'ticker' | 'selection' | 'armies' | 'ranking' | 'realm';
 /** Content of one phone sheet; boxes with their own header come as they are. */
 function SheetContent({ view, tab }: { view: GameView; tab: SheetTab }) {
   const titled = (title: string, body: ReactNode) => (
-    <section className={`${BOX} flex min-h-0 flex-col`}>
-      <header className="border-b border-ink bg-parchment-dark px-3 py-1.5">
+    <Card className="pointer-events-auto min-h-0">
+      <CardHeader className="block border-b border-ink/40 bg-muted py-1.5">
         <b className="italic">{title}</b>
-      </header>
+      </CardHeader>
       <div className="min-h-0 overflow-y-auto px-3 py-2">{body}</div>
-    </section>
+    </Card>
   );
   switch (tab) {
     case 'ticker':
@@ -794,7 +811,11 @@ function CompactHud({ view }: { view: GameView }) {
   const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
   const tabs: { id: SheetTab; label: string; icon: ReactNode; badge?: number }[] = [
     { id: 'ticker', label: 'Ticker', icon: <AlarmIcon size={20} /> },
-    { id: 'selection', label: 'Auswahl', icon: <CastleIcon color={color} size={22} /> },
+    {
+      id: 'selection',
+      label: 'Auswahl',
+      icon: <CastleIcon color={color} style={playerHeraldry(view, view.self.id).style} size={22} />,
+    },
     { id: 'armies', label: 'Züge', icon: <SoldiersIcon color={color} size={22} />, badge: armies },
     { id: 'ranking', label: 'Rang', icon: <StarIcon size={20} /> },
     {
@@ -815,43 +836,37 @@ function CompactHud({ view }: { view: GameView }) {
         </div>
         {tab && (
           <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex max-h-[62dvh] flex-col px-1.5 pt-1">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setTab(null)}
               aria-label="Panel schließen"
-              className="mx-auto mb-1 flex items-center gap-1 rounded-full border border-ink/60 bg-parchment px-3 py-0.5 text-xs text-ink-soft shadow-[1px_2px_0_rgba(59,42,24,0.3)]"
+              className="mx-auto mb-1 rounded-full bg-background text-ink-soft shadow-[1px_2px_0_rgba(59,42,24,0.3)]"
             >
-              ▾ Karte zeigen
-            </button>
+              <ChevronDownIcon /> Karte zeigen
+            </Button>
             <SheetContent view={view} tab={tab} />
           </div>
         )}
       </div>
-      <nav
-        className="pointer-events-auto flex shrink-0 border-t-[3px] border-double border-ink bg-parchment-dark pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_0_rgba(59,42,24,0.2)]"
-        role="tablist"
+      {/* Toggle group, not tabs: tapping the open sheet's tab again closes it. */}
+      <ToggleGroup
+        type="single"
+        value={tab ?? ''}
+        onValueChange={(value) => setTab((value || null) as SheetTab | null)}
+        aria-label="Bereiche"
+        className="pointer-events-auto shrink-0 border-t-[3px] border-double border-ink bg-muted pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_0_rgba(59,42,24,0.2)]"
       >
         {tabs.map(({ id, label, icon, badge }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(tab === id ? null : id)}
-            className={`relative flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
-              tab === id ? 'bg-parchment font-bold text-seal' : 'text-ink-soft'
-            }`}
-          >
+          <ToggleGroupItem key={id} value={id} className="h-14 text-[11px]">
             {icon}
             {label}
             {badge ? (
-              <span className="absolute top-1 right-[calc(50%-1.4rem)] rounded-full bg-seal px-1.5 text-[10px] leading-4 text-parchment">
-                {badge}
-              </span>
+              <Badge className="absolute top-1 right-[calc(50%-1.4rem)] text-[10px]">{badge}</Badge>
             ) : null}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </nav>
+      </ToggleGroup>
     </div>
   );
 }
