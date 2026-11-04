@@ -882,6 +882,51 @@ export function claimFlag(color: string): Art {
   return { svg: svg(34, 52, body), width: 34, height: 52, anchor: { x: 8, y: 48 } };
 }
 
+// ---- Night camp ----
+
+/**
+ * Night camp of an army: an A-frame tent in the owner's colour, seen from the front left, with a
+ * warmly lit doorway and a little pennant. 56×46, standing at (26, 42).
+ */
+export function tent(color: string): Art {
+  const dark = shade(color, 0.62);
+  const light = shade(color, 1.3);
+  const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
+  const body = `
+    ${groundShadow(28, 42, 24, 3.4)}
+    <path d="M4 42L22 42M44 39L52 40" stroke="${INK}" stroke-width="1" opacity=".5"/>
+    <path d="M24 10L34 7L52 39L44 42Z" fill="${dark}" ${line}/>
+    <path d="M34 7L52 39" stroke="${shade(color, 0.5)}" stroke-width="1"/>
+    <path d="M6 42L24 10L44 42Z" fill="${color}" ${line}/>
+    <path d="M24 10L11 37" stroke="${light}" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+    <path d="M19 42L25 24L32 42Z" fill="#f2a144"/>
+    <path d="M22 42L25.5 30L29.5 42Z" fill="${GOLD_LIGHT}"/>
+    <path d="M19 42L25 24L15 40Z" fill="${light}" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M6 42L24 10L44 42Z" fill="none" ${line}/>
+    <path d="M24 10V2" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M24 2.4h8l-2 2.3 2 2.3h-8Z" fill="${color}" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/>`;
+  return { svg: svg(56, 46, body), width: 56, height: 46, anchor: { x: 26, y: 42 } };
+}
+
+/** Campfire base (stones and crossed logs) without flame, 30×18, standing at (15, 14). The
+ *  flame (`flame`) is drawn on top separately so it can flicker. */
+export function campfire(): Art {
+  const stones = [6, 11, 17, 23]
+    .map(
+      (x, i) =>
+        `<ellipse cx="${x + 1}" cy="${i % 3 ? 14.5 : 13.5}" rx="3.4" ry="2.4" fill="${GRANITE.base}" stroke="${INK}" stroke-width="1.1"/>`,
+    )
+    .join('');
+  const body = `
+    ${groundShadow(15, 14.5, 12, 2.2)}
+    <g stroke="${INK}" stroke-width="1.4" stroke-linejoin="round">
+      <path d="M5 13L23 6l1.6 3L6.6 16Z" fill="${TIMBER.base}"/>
+      <path d="M25 13L7 6l-1.6 3l17.8 7Z" fill="${TIMBER.shade}"/>
+    </g>
+    ${stones}`;
+  return { svg: svg(30, 18, body), width: 30, height: 18, anchor: { x: 15, y: 14 } };
+}
+
 // ---- Treasure ----
 
 /**

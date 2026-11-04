@@ -5,6 +5,7 @@ import {
   boat,
   boulder,
   broadleaf,
+  campfire,
   castle,
   CASTLE_STYLE_NAMES,
   chest,
@@ -22,6 +23,7 @@ import {
   smokePuff,
   soldiers,
   sparkle,
+  tent,
   type Art,
 } from '../art/svg';
 import { artCanvas, type RasterOptions } from '../art/textures';
@@ -408,6 +410,19 @@ export function DesignSheet() {
               <MapArt art={claimFlag(c)} options={{ outline: true }} height={60} />
             </Tile>
           ))}
+          {HERALDRY.slice(0, 5).map((c) => (
+            <Tile key={`t${c}`} label="Nachtlager" ground="#3d4568">
+              <MapArt art={tent(c)} options={{ outline: true }} height={52} />
+            </Tile>
+          ))}
+          <Tile label="Lagerfeuer" ground="#3d4568">
+            <span className="relative inline-block">
+              <MapArt art={campfire()} options={{ outline: true }} height={26} />
+              <span className="absolute -top-5 left-1/2 -translate-x-1/2">
+                <MapArt art={flame()} height={26} />
+              </span>
+            </span>
+          </Tile>
           <Tile label="Truhe">
             <MapArt art={chest()} options={{ outline: true }} height={60} />
           </Tile>

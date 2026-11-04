@@ -6,6 +6,7 @@ import {
   boat,
   boulder,
   broadleaf,
+  campfire,
   castle,
   chest,
   claimFlag,
@@ -23,6 +24,7 @@ import {
   smokePuff,
   soldiers,
   sparkle,
+  tent,
   type Art,
 } from './svg';
 
@@ -56,6 +58,8 @@ export interface PieceCache {
   outpost(color: number): ArtTexture | null;
   soldiers(color: number): ArtTexture | null;
   flag(color: number): ArtTexture | null;
+  /** Night camp of an army. */
+  tent(color: number): ArtTexture | null;
   /** Called (once per batch) when textures asked for earlier have become ready. */
   onReady: (() => void) | null;
 }
@@ -84,6 +88,10 @@ export interface MapArt {
   flame: ArtTexture;
   /** Unowned outpost. */
   ruin: ArtTexture;
+  /** Stones and logs of a night campfire (the flame is `flame`). */
+  campfire: ArtTexture;
+  /** Soft round light, white in the middle and fading out; tinted and added at night. */
+  glow: Texture;
   pieces: PieceCache;
 }
 
@@ -177,6 +185,7 @@ function pieceCache(): PieceCache {
     outpost: (color) => get(`outpost:${color}`, () => outpost(css(color))),
     soldiers: (color) => get(`soldiers:${color}`, () => soldiers(css(color))),
     flag: (color) => get(`flag:${color}`, () => claimFlag(css(color))),
+    tent: (color) => get(`tent:${color}`, () => tent(css(color))),
   };
   function get(key: string, make: () => Art): ArtTexture | null {
     const hit = ready.get(key);
@@ -212,6 +221,7 @@ async function preload(pieces: PieceCache): Promise<void> {
       pieces.outpost(c),
       pieces.soldiers(c),
       pieces.flag(c),
+      pieces.tent(c),
     ]);
   asks();
   await new Promise<void>((resolve) => {
@@ -220,6 +230,22 @@ async function preload(pieces: PieceCache): Promise<void> {
     check();
   });
   pieces.onReady = null;
+}
+
+/** A 128 px radial light: opaque white centre, smooth falloff to transparent at the rim. */
+function glowTexture(): Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  gradient.addColorStop(0.7, 'rgba(255,255,255,0.15)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  return new Texture({ source: new CanvasSource({ resource: canvas }) });
 }
 
 let loading: Promise<MapArt> | null = null;
@@ -240,7 +266,7 @@ export function loadMapArt(): Promise<MapArt> {
       deposits,
       icons,
       smoke,
-      [tuft, shipArt, boatArt, chestArt, sparkleArt, alarmArt, flameArt, ruinArt],
+      [tuft, shipArt, boatArt, chestArt, sparkleArt, alarmArt, flameArt, ruinArt, campfireArt],
     ] = await Promise.all([
       all(
         FOLIAGE.slice(0, 3).map((f, i) => broadleaf(f, i * 0.7)),
@@ -272,6 +298,7 @@ export function loadMapArt(): Promise<MapArt> {
         rasterise(alarm(), { outline: true }),
         rasterise(flame()),
         rasterise(ruin(), { outline: true }),
+        rasterise(campfire(), { outline: true }),
       ]),
       preload(pieces),
     ]);
@@ -295,6 +322,8 @@ export function loadMapArt(): Promise<MapArt> {
       smoke,
       flame: flameArt,
       ruin: ruinArt,
+      campfire: campfireArt,
+      glow: glowTexture(),
       deposits: byResource(deposits),
       resources: byResource(icons),
       pieces,

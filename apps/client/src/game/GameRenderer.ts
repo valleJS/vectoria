@@ -33,6 +33,7 @@ import {
   SEAL,
   SERIF,
 } from './palette';
+import { FIRELIGHT, NightScene, type NightLight } from './night';
 import { buildTerrain, type Clearing, type Terrain } from './terrain';
 
 /** Time constant for easing armies toward their latest server position. */
@@ -64,6 +65,11 @@ const GATHER_FLAG_STEP = 10;
 const STACK_RADIUS_TILES = 0.7;
 /** Horizontal spacing (glyph units) of fanned-out armies. */
 const STACK_STEP = 27;
+/** `?night` shows the night rest regardless of the clock (design review, screenshots). */
+const FORCE_NIGHT = new URLSearchParams(window.location.search).has('night');
+/** Selection ring: ink by day, pale moonlight at night. */
+const RING_DAY = INK;
+const RING_NIGHT = 0xf3e6c4;
 /** On load the camera starts this much closer than the whole-map fit, framed on the own castle. */
 const START_ZOOM_IN = 1.6;
 
@@ -107,6 +113,8 @@ interface ArmySprite {
   stride: number;
   /** Display offset (world px at piece scale 1) the container eases toward: fan-out or flag slot. */
   offset: PointData;
+  /** At night: the campfire's flame and light, flickered in `animate`. */
+  fire: { flame: Sprite; light: Sprite; scale: number } | null;
 }
 
 /** A route drawn with marching dashes; redrawn every frame. */
@@ -158,6 +166,8 @@ export class GameRenderer {
   private readonly selectionRing = new Graphics();
   private readonly armyLayer = new Container();
   private readonly armies = new Map<string, ArmySprite>();
+  /** Night rest: darkness, lights, fireflies, stars (see night.ts). */
+  private readonly night: NightScene;
   private readonly unsubscribe: () => void;
   private map: MapData | null = null;
   private built: Terrain | null = null;
@@ -193,15 +203,21 @@ export class GameRenderer {
   private constructor(app: Application, art: MapArt) {
     this.app = app;
     this.art = art;
+    this.night = new NightScene(art);
     this.world.addChild(
       this.terrain,
+      this.night.darkness,
+      this.night.stars,
       this.routes,
       this.routeMarks,
       this.alertUnderLayer,
+      this.night.glowUnder,
       this.siteLayer,
+      this.night.glowOver,
       this.alertLayer,
       this.selectionRing,
       this.armyLayer,
+      this.night.fireflies,
     );
     app.stage.addChild(this.world);
 
@@ -321,6 +337,7 @@ export class GameRenderer {
     for (const child of this.terrain.removeChildren()) child.destroy({ children: true });
     this.built = null;
     this.clearingsKey = '';
+    this.night.setMap(map);
     if (!map) return;
     this.buildGround(this.view);
     this.frame(null);
@@ -377,6 +394,14 @@ export class GameRenderer {
     if (view) {
       const { clock, running, timeScale } = view.clock;
       this.clockSync = { clock, at: performance.now(), rate: running ? timeScale : 0 };
+    }
+    // Night rest: the game runs but its clock stands still outside gameday hours (not an admin
+    // pause).
+    // Only once a view is there, so a game opened at night starts dark instead of fading in.
+    if (view) {
+      this.night.setNight(
+        FORCE_NIGHT || (view.phase === 'running' && !view.clock.running && !view.clock.paused),
+      );
     }
     this.drawSites(view, selfId);
     this.drawArmies(view);
@@ -489,6 +514,22 @@ export class GameRenderer {
       if (!player.online) castle.alpha = 0.85;
       this.siteLayer.addChild(castle);
     }
+
+    // Lamp light for the night: castles and held outposts glow, chests shimmer.
+    const lights: NightLight[] = [
+      ...view.players.flatMap((p) =>
+        p.castle ? [{ ...this.px(p.castle), radius: 30 * u, kind: 'castle' as const }] : [],
+      ),
+      ...view.outposts
+        .filter((o) => o.ownerId)
+        .map((o) => ({ ...this.px(o.position), radius: 20 * u, kind: 'outpost' as const })),
+      ...view.chests.map((c) => ({
+        ...this.px(c.position),
+        radius: 14 * u,
+        kind: 'chest' as const,
+      })),
+    ];
+    this.night.setLights(lights);
   }
 
   /**
@@ -603,11 +644,14 @@ export class GameRenderer {
           marching: false,
           stride: Math.random() * Math.PI * 2,
           offset,
+          fire: null,
         };
         this.armies.set(army.id, sprite);
       }
       sprite.target = target;
-      sprite.marching = !gathering;
+      // At night marching armies pitch camp: a tent with a campfire instead of soldiers.
+      const camp = this.night.night && !gathering;
+      sprite.marching = !gathering && !camp;
       sprite.offset = offsets.get(army.id) ?? { x: 0, y: 0 };
       sprite.motion =
         !gathering && army.route && army.route.length > 1 && army.arriveClock > view.clock.clock
@@ -617,13 +661,26 @@ export class GameRenderer {
               to: army.arriveClock,
             }
           : null;
-      const look = `${color}:${gathering}`;
+      const look = `${color}:${gathering}:${camp}:${this.night.night}`;
       if (look !== sprite.look) {
         // At a deposit the resource stays in view: the army is shown as its planted claim flag.
-        const art = gathering ? this.art.pieces.flag(color) : this.art.pieces.soldiers(color);
+        const art = camp
+          ? this.art.pieces.tent(color)
+          : gathering
+            ? this.art.pieces.flag(color)
+            : this.art.pieces.soldiers(color);
         sprite.look = art ? look : '';
         for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
-        if (art) sprite.figure.addChild(artSprite(art, gathering ? 17 * u : 38 * u));
+        sprite.fire = null;
+        if (art && camp) {
+          sprite.fire = this.campfire(sprite.figure, u, { x: 12 * u, y: 2 * u }, 0.9);
+          sprite.figure.addChildAt(artSprite(art, 28 * u), 1);
+        } else if (art) {
+          // A lantern-like glow keeps gatherers visible at night, too.
+          if (this.night.night)
+            sprite.fire = this.campfire(sprite.figure, u, { x: 7 * u, y: 1 * u }, 0.6);
+          sprite.figure.addChild(artSprite(art, gathering ? 17 * u : 38 * u));
+        }
         // The plate's position depends on the look.
         sprite.text = '';
       }
@@ -697,6 +754,30 @@ export class GameRenderer {
       });
     }
     return offsets;
+  }
+
+  /**
+   * A campfire at `at` in `figure`: a warm light pool behind everything, stones and logs, and a
+   * flame that `animate` flickers. Returns the parts to animate.
+   */
+  private campfire(
+    figure: Container,
+    u: number,
+    at: PointData,
+    size: number,
+  ): { flame: Sprite; light: Sprite; scale: number } {
+    const light = new Sprite(this.art.glow);
+    light.anchor.set(0.5);
+    light.tint = FIRELIGHT;
+    light.blendMode = 'add';
+    light.scale.set((52 * u * size) / this.art.glow.width);
+    light.position.set(at.x, at.y - 5 * u * size);
+    const base = artSprite(this.art.campfire, 13 * u * size);
+    base.position.set(at.x, at.y);
+    const flame = artSprite(this.art.flame, 8 * u * size);
+    flame.position.set(at.x, at.y - 1.5 * u * size);
+    figure.addChild(light, base, flame);
+    return { flame, light, scale: flame.scale.x };
   }
 
   /** Route dashes, shifted by `routePhase` so they march toward the target. */
@@ -905,9 +986,10 @@ export class GameRenderer {
     this.selectionRing.position.copyFrom(this.px(position));
     const radius = selection.kind === 'castle' ? 38 : selection.kind === 'outpost' ? 30 : 22;
     const scaled = radius * this.unit;
+    // Drawn white and tinted in `animate`: ink by day, moonlight at night.
     dashedCircle(this.selectionRing, scaled, 14).stroke({
       width: 2.5 * this.unit,
-      color: INK,
+      color: 0xffffff,
       cap: 'round',
     });
   }
@@ -969,6 +1051,16 @@ export class GameRenderer {
       alert.over.scale.set(k);
     }
     this.selectionRing.scale.set(k);
+    // Night: moonlit pieces, flickering campfires, ring in moonlight.
+    this.siteLayer.tint = this.night.update(ticker.deltaMS, seconds, k);
+    this.selectionRing.tint = mix(RING_DAY, RING_NIGHT, this.night.amount);
+    for (const { fire } of this.armies.values()) {
+      if (!fire) continue;
+      const flicker =
+        0.85 + 0.15 * Math.sin(seconds * 13 + fire.scale * 7) * Math.sin(seconds * 7.3);
+      fire.flame.scale.set(fire.scale * (2 - flicker), fire.scale * flicker * 1.1);
+      fire.light.alpha = 0.35 + 0.4 * flicker;
+    }
     for (const { sprite, phase, size } of this.sparkles) {
       const twinkle = Math.max(0, Math.sin(seconds * 2.2 + phase));
       sprite.alpha = twinkle;
@@ -992,4 +1084,14 @@ export class GameRenderer {
       }
     }
   };
+}
+
+/** Blends two 0xrrggbb colours, `t` = 0 → a, 1 → b. */
+function mix(a: number, b: number, t: number): number {
+  const ch = (shift: number) => {
+    const x = (a >> shift) & 255;
+    const y = (b >> shift) & 255;
+    return Math.round(x + (y - x) * t) << shift;
+  };
+  return ch(16) | ch(8) | ch(0);
 }
