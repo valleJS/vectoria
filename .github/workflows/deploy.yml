@@ -60,5 +60,17 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       # The deploy key is pinned to /opt/vectoria/deploy.sh on the server; the "command" is the tag.
+      # sshd sometimes drops new connections (bot load, packet loss), so connecting is retried.
+      # Exit 255 is ssh's own failure; any other code is deploy.sh's verdict and ends the job.
+      # deploy.sh is safe to repeat for the same tag, should a dropped link interrupt it.
       - name: Roll out
-        run: ssh deploy@${{ secrets.DEPLOY_HOST }} "${{ github.sha }}"
+        run: |
+          for attempt in 1 2 3 4 5; do
+            ssh -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+              deploy@${{ secrets.DEPLOY_HOST }} "${{ github.sha }}" && exit 0
+            code=$?
+            [ "$code" -ne 255 ] && exit "$code"
+            echo "SSH attempt $attempt failed, retrying in $((attempt * 15)) s"
+            sleep $((attempt * 15))
+          done
+          exit 1

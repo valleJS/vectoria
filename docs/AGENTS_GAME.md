@@ -20,8 +20,9 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 `VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
 registration (closed system). Admin tools while running: kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
-stays with each player; armies heading for either castle re-route from where they stand). The map is generated at start,
-sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset" returns to registration, keeping registrations.
+stays with each player; armies heading for either castle re-route from where they stand). The
+map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
+returns to registration, keeping registrations.
 
 ## Map scaling
 
