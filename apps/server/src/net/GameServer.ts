@@ -13,6 +13,8 @@ import { RuleError, type GameState } from '../game/GameState';
 import { log } from '../logger';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+/** Full state goes out at least this often; events and commands push it sooner. */
+const STATE_INTERVAL_MS = 1_000;
 const MAX_PAYLOAD_BYTES = 16 * 1024;
 const RATE_LIMIT_PER_SECOND = 30;
 
@@ -42,6 +44,10 @@ export class GameServer {
   private readonly options: GameServerOptions;
   private readonly clients = new Map<WebSocket, Client>();
   private readonly heartbeat: NodeJS.Timeout;
+  /** A command was handled since the last push; send fresh state on the next tick. */
+  private pushSoon = false;
+  private sentRevision = -1;
+  private lastPushAt = 0;
 
   constructor(server: HttpServer, state: GameState, options: GameServerOptions) {
     this.state = state;
@@ -63,8 +69,26 @@ export class GameServer {
     return this.clients.size;
   }
 
+  /**
+   * Called every simulation tick: pushes state once per `STATE_INTERVAL_MS`, and right away after
+   * a game event or a player command, so actions feel instant while idle traffic stays low.
+   */
+  tick(): void {
+    const now = Date.now();
+    if (
+      this.pushSoon ||
+      this.state.revision !== this.sentRevision ||
+      now - this.lastPushAt >= STATE_INTERVAL_MS
+    ) {
+      this.broadcastState();
+    }
+  }
+
   /** Sends every client its current view; drops clients whose player was kicked. */
   broadcastState(): void {
+    this.pushSoon = false;
+    this.sentRevision = this.state.revision;
+    this.lastPushAt = Date.now();
     for (const [ws, client] of this.clients) {
       if (ws.readyState !== WebSocket.OPEN) continue;
       const view = this.state.viewFor(client.playerId);
@@ -138,10 +162,14 @@ export class GameServer {
       tickRate: this.options.tickRate,
       map: this.state.map,
     });
+    // Everyone sees the new online dot with the next tick; the newcomer gets state with it.
+    this.pushSoon = true;
   }
 
   private handleMessage(ws: WebSocket, client: Client, message: ClientMessage): void {
     const { playerId } = client;
+    // Every message but ping is a command; its effect goes out with the next tick.
+    if (message.type !== 'ping') this.pushSoon = true;
     try {
       switch (message.type) {
         case 'ping':

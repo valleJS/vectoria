@@ -10,6 +10,11 @@ import { useGameStore } from '../state/store';
 
 const PING_INTERVAL_MS = 2_000;
 const MAX_RECONNECT_DELAY_MS = 10_000;
+/**
+ * The server pushes state at least once a second and answers pings; this long without any
+ * message, the connection is taken as dead (e.g. a half-open TCP link on a lossy network).
+ */
+const SILENCE_TIMEOUT_MS = 8_000;
 
 /** WebSocket client with auto-reconnect and RTT measurement. Writes inbound state to the store. */
 export class GameSocket {
@@ -21,9 +26,17 @@ export class GameSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
   private nextPingId = 1;
+  private lastMessageAt = 0;
+  /** A welcome arrived before, so the next one is a reconnect (maybe after a deploy). */
+  private wasOpen = false;
 
   constructor(url: string) {
     this.url = url;
+    // Back online or back in the foreground: retry now instead of waiting out the backoff.
+    window.addEventListener('online', () => this.reconnectNow());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.reconnectNow();
+    });
   }
 
   connect(token: string): void {
@@ -48,6 +61,13 @@ export class GameSocket {
     return true;
   }
 
+  private reconnectNow(): void {
+    if (!this.shouldReconnect || this.ws) return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectAttempts = 0;
+    this.open();
+  }
+
   private open(): void {
     useGameStore.getState().setStatus('connecting');
     const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(this.token)}`);
@@ -55,12 +75,20 @@ export class GameSocket {
 
     ws.onopen = () => {
       this.reconnectAttempts = 0;
+      this.lastMessageAt = performance.now();
       useGameStore.getState().setStatus('open');
       this.sendPing();
-      this.pingTimer = setInterval(() => this.sendPing(), PING_INTERVAL_MS);
+      this.pingTimer = setInterval(() => {
+        if (performance.now() - this.lastMessageAt > SILENCE_TIMEOUT_MS) {
+          ws.close(4000, 'No messages');
+          return;
+        }
+        this.sendPing();
+      }, PING_INTERVAL_MS);
     };
 
     ws.onmessage = (event) => {
+      this.lastMessageAt = performance.now();
       if (typeof event.data !== 'string') return;
       const message = parseServerMessage(event.data);
       if (message) this.handleMessage(message);
@@ -105,6 +133,9 @@ export class GameSocket {
           if (reloadOnceFor(message.protocolVersion)) return;
         }
         store.applyWelcome(message);
+        // Reconnected, perhaps because a deploy restarted the server: pick up a new client.
+        if (this.wasOpen) void reloadIfNewBuild();
+        this.wasOpen = true;
         break;
       case 'map':
         store.setMap(message.map);
@@ -126,13 +157,36 @@ export class GameSocket {
   }
 }
 
+/** Entry bundle named in an HTML page (`/assets/index-<hash>.js`), or null in dev. */
+function entryBundle(html: string): string | null {
+  return /\/assets\/index-[\w-]+\.js/.exec(html)?.[0] ?? null;
+}
+
+/** Reloads once when the server now serves a different build than this page runs. */
+async function reloadIfNewBuild(): Promise<void> {
+  const own = entryBundle(document.documentElement.outerHTML);
+  if (!own) return;
+  try {
+    const response = await fetch('/', { cache: 'no-store' });
+    const served = entryBundle(await response.text());
+    if (served && served !== own) reloadOnce(`build:${served}`);
+  } catch {
+    // Offline again or the page is unreachable; the next reconnect tries again.
+  }
+}
+
 const RELOAD_KEY = 'vectoria.reloadedFor';
 
-/** Reloads the page unless it already did for `version`; true if a reload was started. */
+/** Reloads the page unless it already did for protocol `version`; true if a reload was started. */
 function reloadOnceFor(version: number): boolean {
+  return reloadOnce(String(version));
+}
+
+/** Reloads the page unless it already did for `key` (stops reload loops); true if started. */
+function reloadOnce(key: string): boolean {
   try {
-    if (sessionStorage.getItem(RELOAD_KEY) === String(version)) return false;
-    sessionStorage.setItem(RELOAD_KEY, String(version));
+    if (sessionStorage.getItem(RELOAD_KEY) === key) return false;
+    sessionStorage.setItem(RELOAD_KEY, key);
   } catch {
     return false;
   }
