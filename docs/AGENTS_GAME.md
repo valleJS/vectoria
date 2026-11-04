@@ -57,7 +57,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 ## Bases and outposts
 
 - A player's **bases** are the home castle plus owned outposts. Armies leave from a base
-  (`sendArmy.from`, null = home) and return to it; if that outpost was lost meanwhile, they go home.
+  (`sendArmy.from`, null = home) and return to it. When an outpost falls, `recallFromLostOutpost`
+  turns the former owner's armies heading there (returners and transfers, cargo kept) home on the
+  spot; armies elsewhere that left from it return home later.
 - **Outposts** (`OUTPOSTS_PER_PLAYER`, min `MIN_OUTPOSTS`) start as empty, unowned **ruins**,
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving
