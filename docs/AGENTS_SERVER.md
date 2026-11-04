@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 4da8946e2d64a0dfb1a125a3ffcce8949ae02e0f
+sources_stamp: f400dda4a7f43c84163934d8ecda0531559e2be9
 ---
 
 # Server codemap (`apps/server`)
