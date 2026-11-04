@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 033985adf2c8280bd3d4b34ecff0e09b55d429a8
+sources_stamp: fd964998d2b0e14ec346917b33e696a52e2e8a72
 ---
 
 # Architecture
@@ -74,7 +74,7 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
-| C→S | `activateCard` | Instant card: takes effect; march card: armed for the next army; `null` disarms |
+| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id or player id, for cards that aim); march card: armed for the next army; `null` disarms |
 | C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
 | S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
 | S→C | `map` | Map changed (game start / reset) |

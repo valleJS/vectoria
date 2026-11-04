@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  BAREFOOT_DURATION_MS,
+  BAREFOOT_SPEED,
   battleLosses,
   canAfford,
-  CARD_TYPES,
   CARDS,
   CASTLE_PLUNDER_SHARE,
   CHESTS_PER_GAMEDAY,
@@ -11,6 +12,7 @@ import {
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
+  drawCard,
   emptyResources,
   findPath,
   FORTIFY_DURATION_MS,
@@ -18,6 +20,8 @@ import {
   GAMEDAY_MS,
   GATHER_DURATION_MS,
   gatherYield,
+  HARVEST_BONUS,
+  HARVEST_GAMEDAYS,
   hasResources,
   HOUR_MS,
   isRaidable,
@@ -98,6 +102,10 @@ interface PlayerRecord {
   /** Chests brought home, not yet opened; absent in older saves. */
   chests?: number;
   fortifiedUntil: number | null;
+  /** Gameday starts still paying the Füllhorn bonus; absent in older saves. */
+  harvestDays?: number;
+  /** Shoes stolen: marches started before this clock go barefoot. Absent in older saves. */
+  barefootUntil?: number | null;
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
@@ -121,6 +129,8 @@ interface ArmyRecord {
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
+  /** Seeweg: this leg runs straight, over water too; absent in older saves. */
+  sea?: boolean;
   /** Gathered resources, plunder, or goods moved between bases. */
   cargo: Resources;
   /** Carrying an opened chest home (cannot be raided); absent in older saves. */
@@ -341,9 +351,13 @@ export class GameState {
       throw new RuleError('Die Truppen sind schon dort.');
     }
     const forcedMarch = cards.includes('forcedMarch');
+    const sea = cards.includes('sea');
+    if (sea && target.kind === 'army') {
+      throw new RuleError('Mit dem Seeweg lässt sich kein Zug überfallen.');
+    }
     // Resource cargo slows the march, like convoys heading home from a spot.
-    const speed = hasResources(cargo) ? LOADED_SPEED : 1;
-    const destination = this.destination(player, base.position, target, forcedMarch, speed);
+    const speed = (hasResources(cargo) ? LOADED_SPEED : 1) * this.marchSpeed(player);
+    const destination = this.destination(player, base.position, target, forcedMarch, speed, sea);
     this.checkChestTroops(target, troops);
     if (hasResources(cargo)) {
       if (!destination.ownBase) {
@@ -372,6 +386,7 @@ export class GameState {
       fog: cards.includes('fog'),
       stealth: cards.includes('stealth'),
       forcedMarch,
+      sea,
       cargo: { ...cargo },
       chest: false,
     };
@@ -395,9 +410,16 @@ export class GameState {
       throw new RuleError('Ein Zug mit Ladung kann nicht umgeleitet werden.');
     }
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
-    const destination = this.destination(player, this.armyPosition(army), target, army.forcedMarch);
+    const destination = this.destination(
+      player,
+      this.armyPosition(army),
+      target,
+      army.forcedMarch,
+      this.marchSpeed(player),
+    );
     this.checkChestTroops(target, army.troops);
     army.status = 'outbound';
+    army.sea = false;
     army.path = destination.path;
     army.target = target;
     army.departClock = this.data.clock;
@@ -420,8 +442,11 @@ export class GameState {
     this.dirty = true;
   }
 
-  /** Instant cards take effect now; march cards are armed for the next army. Null disarms. */
-  activateCard(playerId: string, card: CardType | null): void {
+  /**
+   * Instant cards take effect now; march cards are armed for the next army. Null disarms.
+   * `target` is the own outpost (Hofumzug) or the other player (Schuhe klauen).
+   */
+  activateCard(playerId: string, card: CardType | null, target?: string): void {
     const player = this.requirePlaying(playerId);
     if (card === null) {
       player.activeCard = null;
@@ -435,14 +460,95 @@ export class GameState {
       this.dirty = true;
       return;
     }
+    // Validate before the card is spent.
+    const apply = this.instantCard(player, card, target);
     player.cards.splice(index, 1);
     if (player.activeCard && !player.cards.includes(player.activeCard)) player.activeCard = null;
-    // card === 'fortify' is the only instant card.
-    player.fortifiedUntil =
-      Math.max(player.fortifiedUntil ?? 0, this.data.clock) + FORTIFY_DURATION_MS;
-    this.addLog(player, 'Bollwerk aktiv: deine Burg verteidigt mit +50 %.');
-    this.addFeed('battle', `${player.name} verstärkt die Burg mit einem Bollwerk.`);
+    apply();
+    this.revision++;
     this.dirty = true;
+  }
+
+  /** Checks an instant card's target and returns its effect. */
+  private instantCard(player: PlayerRecord, card: CardType, target?: string): () => void {
+    switch (card) {
+      case 'fortify':
+        return () => {
+          player.fortifiedUntil =
+            Math.max(player.fortifiedUntil ?? 0, this.data.clock) + FORTIFY_DURATION_MS;
+          this.addLog(player, 'Bollwerk aktiv: deine Burg verteidigt mit +50 %.');
+          this.addFeed('battle', `${player.name} verstärkt die Burg mit einem Bollwerk.`);
+        };
+      case 'harvest':
+        return () => {
+          player.harvestDays = (player.harvestDays ?? 0) + HARVEST_GAMEDAYS;
+          this.addLog(
+            player,
+            `Füllhorn: die nächsten ${player.harvestDays} Spieltage je +${HARVEST_BONUS} Holz, Stein und Gold extra.`,
+          );
+          this.addFeed('day', `${player.name} öffnet ein Füllhorn.`);
+        };
+      case 'stealShoes': {
+        const victim = target ? this.player(target) : undefined;
+        if (!victim || !victim.castle) throw new RuleError('Wähle jemanden aus.');
+        if (victim === player) throw new RuleError('Deine eigenen Schuhe brauchst du noch.');
+        return () => {
+          victim.barefootUntil =
+            Math.max(victim.barefootUntil ?? 0, this.data.clock) + BAREFOOT_DURATION_MS;
+          this.addLog(
+            victim,
+            `${player.name} hat dir die Schuhe geklaut: deine Züge laufen einen Spieltag lang langsamer.`,
+          );
+          this.addLog(player, `Du hast ${victim.name} die Schuhe geklaut.`);
+          this.addFeed('march', `${player.name} klaut ${victim.name} die Schuhe.`);
+        };
+      }
+      case 'relocate': {
+        const outpost = this.data.outposts.find((o) => o.id === target);
+        if (!outpost || outpost.ownerId !== player.id) {
+          throw new RuleError('Wähle einen deiner Stützpunkte.');
+        }
+        if (!player.castle) throw new RuleError('Du hast keine Burg.');
+        return () => this.relocate(player, outpost);
+      }
+      default:
+        throw new RuleError('Diese Karte wirkt nicht sofort.');
+    }
+  }
+
+  /**
+   * Hofumzug: the home castle and one of the player's outposts swap places; troops and stores stay
+   * with their base. Armies heading for either re-route from where they stand.
+   */
+  private relocate(player: PlayerRecord, outpost: Outpost): void {
+    [player.castle, outpost.position] = [outpost.position, player.castle!];
+    this.rerouteToMoved(
+      (army) =>
+        (army.target.kind === 'castle' && army.target.id === player.id) ||
+        (army.target.kind === 'outpost' && army.target.id === outpost.id),
+    );
+    this.addLog(player, 'Hofumzug: deine Burg und dein Stützpunkt haben die Plätze getauscht.');
+    this.addFeed('outpost', `${player.name} verlegt den Hof — Burg und Stützpunkt tauschen.`);
+  }
+
+  /**
+   * After bases moved: armies whose march `heads` for a moved base re-route from where they stand
+   * (returners to their base, everyone else to the target's new place).
+   */
+  private rerouteToMoved(heads: (army: ArmyRecord) => boolean): void {
+    for (const army of this.data.armies) {
+      if (army.status === 'gathering' || !heads(army)) continue;
+      const position = this.armyPosition(army);
+      if (army.status === 'returning') {
+        this.startReturn(army, position);
+        continue;
+      }
+      const to =
+        army.target.kind === 'castle'
+          ? this.player(army.target.id)?.castle
+          : this.data.outposts.find((o) => o.id === army.target.id)?.position;
+      if (to) this.reroute(army, position, to);
+    }
   }
 
   /** Opens a chest the player brought home and returns the card inside. */
@@ -450,7 +556,7 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     if (!player.chests) throw new RuleError('Du hast keine ungeöffnete Truhe.');
     player.chests--;
-    const card = CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)]!;
+    const card = drawCard();
     player.cards.push(card);
     this.addLog(player, `Truhe geöffnet: Karte „${CARDS[card].name}“ erhalten.`);
     this.dirty = true;
@@ -964,8 +1070,10 @@ export class GameState {
     for (const player of this.data.players) {
       player.activity = player.pendingActivity ?? player.activity;
       const income = emptyResources();
+      const harvest = (player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0;
+      if (harvest) player.harvestDays! -= 1;
       for (const r of RESOURCES) {
-        income[r] = r === player.activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME;
+        income[r] = (r === player.activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) + harvest;
         player.resources[r] += income[r];
       }
       this.addLog(player, `Gameday ${this.data.gameday} beginnt: +${formatResources(income)}.`);
@@ -1064,23 +1172,10 @@ export class GameState {
     if (!a || !b || a === b) throw new RuleError('Unbekannter Spieler.');
     if (!a.castle || !b.castle) throw new RuleError('Beide brauchen eine Burg.');
     [a.castle, b.castle] = [b.castle, a.castle];
-    for (const army of this.data.armies) {
-      const owner = this.player(army.ownerId);
-      if (!owner) continue;
-      const position = this.armyPosition(army);
-      if (army.status === 'returning') {
-        // Heading for its own home castle (not an outpost) of one of the two.
-        if (army.baseId === null && (owner === a || owner === b)) {
-          this.startReturn(army, position);
-        }
-      } else if (
-        army.status === 'outbound' &&
-        army.target.kind === 'castle' &&
-        (army.target.id === a.id || army.target.id === b.id)
-      ) {
-        this.reroute(army, position, this.player(army.target.id)!.castle!);
-      }
-    }
+    this.rerouteToMoved(
+      (army) =>
+        army.target.kind === 'castle' && (army.target.id === a.id || army.target.id === b.id),
+    );
     this.addFeed('march', `Die Burgen von ${a.name} und ${b.name} tauschen die Plätze.`);
     for (const p of [a, b]) this.addLog(p, 'Deine Burg steht jetzt an einem neuen Ort.');
     this.revision++;
@@ -1091,8 +1186,11 @@ export class GameState {
   private reroute(army: ArmyRecord, from: Vec2, to: Vec2): void {
     const map = this.map!;
     army.path = findPath(map, from, to) ?? [from, to];
+    army.sea = false;
     army.departClock = this.data.clock;
-    const speed = hasResources(army.cargo) ? LOADED_SPEED : 1;
+    const owner = this.player(army.ownerId);
+    const speed =
+      (hasResources(army.cargo) ? LOADED_SPEED : 1) * (owner ? this.marchSpeed(owner) : 1);
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), map.width, army.forcedMarch, speed);
   }
@@ -1142,6 +1240,7 @@ export class GameState {
         victoryPoints: p.victoryPoints,
         homeTroops: p.homeTroops,
         fortified: (p.fortifiedUntil ?? 0) > clock,
+        barefoot: (p.barefootUntil ?? 0) > clock,
         routed: p.routed ?? false,
         attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
@@ -1161,6 +1260,8 @@ export class GameState {
         activeCard: self.activeCard ?? null,
         chests: self.chests ?? 0,
         fortifiedUntil: self.fortifiedUntil,
+        harvestDays: self.harvestDays ?? 0,
+        barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
         log: self.log,
       },
     };
@@ -1224,6 +1325,7 @@ export class GameState {
       fog: army.fog,
       stealth: army.stealth,
       forcedMarch: army.forcedMarch,
+      sea: army.sea ?? false,
       chest: army.chest ?? false,
     };
   }
@@ -1391,6 +1493,8 @@ export class GameState {
     target: ArmyTarget,
     forcedMarch: boolean,
     speed = 1,
+    /** Seeweg: a straight line to the target, water or not. */
+    straight = false,
   ): Destination {
     const map = this.map!;
     const now = this.data.clock;
@@ -1426,17 +1530,17 @@ export class GameState {
         if (!isRaidable(convoy, false)) {
           throw new RuleError('Überfallen lassen sich nur Züge, die Ressourcen tragen.');
         }
-        const meeting = planIntercept(map, from, convoy, now, forcedMarch);
+        const meeting = planIntercept(map, from, convoy, now, forcedMarch, speed);
         const path = meeting && findPath(map, from, meeting.position);
         if (!meeting || !path) {
           throw new RuleError('Zu weit weg — der Zug erreicht seine Burg vorher.');
         }
-        const earliest = now + travelMs(pathLength(path), map.width, forcedMarch);
+        const earliest = now + travelMs(pathLength(path), map.width, forcedMarch, speed);
         return { path, arriveClock: Math.max(meeting.clock, earliest), ownBase: false };
       }
     }
     if (!to) throw new RuleError('Ziel existiert nicht.');
-    const path = findPath(map, from, to);
+    const path = straight ? [from, to] : findPath(map, from, to);
     if (!path) throw new RuleError('Dorthin führt kein Landweg.');
     return {
       path,
@@ -1478,12 +1582,18 @@ export class GameState {
     army.target = base.id ? { kind: 'outpost', id: base.id } : { kind: 'castle', id: owner.id };
     army.departClock = this.data.clock;
     // Resource cargo slows the march home; chests and empty hands do not.
-    const speed = hasResources(army.cargo) ? LOADED_SPEED : 1;
+    const speed = (hasResources(army.cargo) ? LOADED_SPEED : 1) * this.marchSpeed(owner);
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
+    army.sea = false;
     // The way home is open for everyone to see (and to ambush).
     army.stealth = false;
     army.forcedMarch = false;
+  }
+
+  /** Pace of marches the player starts now: slowed while barefoot (Schuhe klauen). */
+  private marchSpeed(player: PlayerRecord): number {
+    return (player.barefootUntil ?? 0) > this.data.clock ? BAREFOOT_SPEED : 1;
   }
 
   /** Ends an army; the last one of a routed player home lifts the rout. */

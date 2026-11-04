@@ -277,6 +277,7 @@ export function planIntercept(
   track: Track,
   now: number,
   forcedMarch = false,
+  speed = 1,
 ): { position: Vec2; clock: number } | null {
   const span = track.arriveClock - track.departClock;
   const total = pathLength(track.path);
@@ -292,7 +293,7 @@ export function planIntercept(
     const tile = tileOf(map, position);
     const reach = field[tile]! + distance(position, centreOf(map, tile));
     if (!Number.isFinite(reach)) continue;
-    if (now + travelMs(reach, map.width, forcedMarch) <= clock) return { position, clock };
+    if (now + travelMs(reach, map.width, forcedMarch, speed) <= clock) return { position, clock };
   }
   return null;
 }

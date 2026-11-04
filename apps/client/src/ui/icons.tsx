@@ -180,6 +180,38 @@ const CARD_ART: Record<CardType, ReactNode> = {
       strokeWidth={0.8}
     />
   ),
+  // Sail over waves.
+  sea: (
+    <g fill="none" stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M-1-11V3M-1-10q9 5 9 12H-1" fill="#fff" fillOpacity={0.85} />
+      <path d="M-9 4h16l-3 4h-10z" />
+      <path d="M-14 10q3-3 6 0q3-3 6 0q3-3 6 0q3-3 6 0q3-3 6 0" />
+    </g>
+  ),
+  // Horn of plenty spilling round fruit.
+  harvest: (
+    <g stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M-12-6q4 14 20 12q-2-6 0-12q-10 4-20 0z" fill="none" />
+      <circle cx={11} cy={-4} r={2.4} fill="#fff" />
+      <circle cx={13} cy={3} r={2.4} fill="#fff" />
+      <circle cx={8} cy={8} r={2.4} fill="#fff" />
+    </g>
+  ),
+  // A boot, crossed out.
+  stealShoes: (
+    <g fill="none" stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M-6-10h7v10q7 1 9 5v3h-16z" fill="#fff" fillOpacity={0.85} />
+      <path d="M-12-10l24 22" />
+    </g>
+  ),
+  // Two towers with arrows swapping them.
+  relocate: (
+    <g fill="none" stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M-14 9v-11h2v2h2v-2h2v2h2v-2h2v11z" fill="#fff" fillOpacity={0.85} />
+      <path d="M6 9v-8l3-3l3 3v8z" fill="#fff" fillOpacity={0.85} />
+      <path d="M-9-5q8-9 17 0M5-5.5h3.2v-3.2M-6-5.5h-3.2v-3.2" />
+    </g>
+  ),
 };
 
 export function CardArt({ card, className = '' }: { card: CardType; className?: string }) {

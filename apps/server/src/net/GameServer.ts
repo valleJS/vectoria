@@ -198,7 +198,7 @@ export class GameServer {
         case 'redirectArmy':
           return this.state.redirectArmy(playerId, message.armyId, message.target);
         case 'activateCard':
-          return this.state.activateCard(playerId, message.card);
+          return this.state.activateCard(playerId, message.card, message.target);
         case 'openChest':
           this.send(ws, { type: 'chestOpened', card: this.state.openChest(playerId) });
           return;

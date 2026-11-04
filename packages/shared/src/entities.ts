@@ -35,6 +35,8 @@ export interface PlayerPublic {
   /** Troops at home — the castle's defence. Public, as everything on the map is visible. */
   homeTroops: number;
   fortified: boolean;
+  /** Shoes stolen (card): marches started now go at `BAREFOOT_SPEED`. */
+  barefoot: boolean;
   /**
    * The home castle fell: every army and outpost garrison is retreating home, and the player
    * cannot act until all of them are back.
@@ -104,6 +106,8 @@ export interface ArmyView {
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
+  /** Seeweg card: this leg runs straight to the target, over water too. */
+  sea: boolean;
 }
 
 /**
@@ -147,6 +151,10 @@ export interface SelfState {
   /** Chests brought home but not yet opened; opened by the player via `openChest`. */
   chests: number;
   fortifiedUntil: number | null;
+  /** Gameday starts still paying the Füllhorn bonus. */
+  harvestDays: number;
+  /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
+  barefootUntil: number | null;
   log: LogEntry[];
 }
 

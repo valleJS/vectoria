@@ -90,7 +90,16 @@ export function rollChestTroops(random: () => number = Math.random): number {
   return CHEST_TROOPS_MIN + Math.floor(random() * (steps + 1)) * CHEST_TROOPS_STEP;
 }
 
-export const CARD_TYPES = ['fog', 'stealth', 'forcedMarch', 'fortify'] as const;
+export const CARD_TYPES = [
+  'fog',
+  'stealth',
+  'forcedMarch',
+  'fortify',
+  'sea',
+  'harvest',
+  'stealShoes',
+  'relocate',
+] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 
 export interface CardInfo {
@@ -103,6 +112,10 @@ export interface CardInfo {
    * effect as soon as they are activated.
    */
   use: 'march' | 'instant';
+  /** Instant cards aimed at something: one of the player's outposts, or another player. */
+  target?: 'ownOutpost' | 'player';
+  /** Relative chance to be in a chest (1 = usual). */
+  weight: number;
 }
 
 export const CARDS: Record<CardType, CardInfo> = {
@@ -111,26 +124,85 @@ export const CARDS: Record<CardType, CardInfo> = {
     description: 'Andere sehen die Truppenstärke dieses Zuges nicht.',
     flavor: 'Wer zählt, was er nicht sieht?',
     use: 'march',
+    weight: 1,
   },
   stealth: {
     name: 'Tarnung',
     description: 'Andere sehen das Ziel dieses Zuges nicht.',
     flavor: 'Kein Späher weiß, wohin der Weg führt.',
     use: 'march',
+    weight: 1,
   },
   forcedMarch: {
     name: 'Eilmarsch',
     description: 'Der Hinweg dauert nur halb so lang.',
     flavor: 'Schlaf ist für die Daheimgebliebenen.',
     use: 'march',
+    weight: 1,
   },
   fortify: {
     name: 'Bollwerk',
     description: 'Deine Burg verteidigt einen Gameday lang mit +50 % Stärke.',
     flavor: 'Stein auf Stein, und kein Tor gibt nach.',
     use: 'instant',
+    weight: 1,
+  },
+  sea: {
+    name: 'Seeweg',
+    description: 'Der Hinweg führt schnurgerade zum Ziel, auch übers Wasser.',
+    flavor: 'Wo andere ein Ufer sehen, sieht der Kapitän eine Abkürzung.',
+    use: 'march',
+    weight: 1,
+  },
+  harvest: {
+    name: 'Füllhorn',
+    description: 'Deine Burg bringt 3 Spieltage lang je +1 Holz, Stein und Gold zusätzlich.',
+    flavor: 'Die Speicher laufen über, die Schreiber kommen kaum hinterher.',
+    use: 'instant',
+    weight: 1,
+  },
+  stealShoes: {
+    name: 'Schuhe klauen',
+    description:
+      'Wähle jemanden: Dessen Züge, die einen Spieltag lang losziehen, laufen nur mit 75 % Tempo.',
+    flavor: 'Barfuß marschiert es sich schlecht.',
+    use: 'instant',
+    target: 'player',
+    weight: 1,
+  },
+  relocate: {
+    name: 'Hofumzug',
+    description: 'Deine Burg und einer deiner Stützpunkte tauschen die Plätze.',
+    flavor: 'Der König packt die Krone ein, der Hauptmann seinen Spieß.',
+    use: 'instant',
+    target: 'ownOutpost',
+    weight: 0.4,
   },
 };
+
+/** A card drawn from a chest, weighted by `CardInfo.weight`. */
+export function drawCard(random: () => number = Math.random): CardType {
+  const total = CARD_TYPES.reduce((sum, c) => sum + CARDS[c].weight, 0);
+  let roll = random() * total;
+  for (const card of CARD_TYPES) {
+    roll -= CARDS[card].weight;
+    if (roll < 0) return card;
+  }
+  return CARD_TYPES[CARD_TYPES.length - 1]!;
+}
+
+/** Chance (0..1) to draw `card` from a chest. */
+export function cardChance(card: CardType): number {
+  return CARDS[card].weight / CARD_TYPES.reduce((sum, c) => sum + CARDS[c].weight, 0);
+}
+
+/** Füllhorn: extra income of every resource at each of the next gameday starts. */
+export const HARVEST_BONUS = 1;
+export const HARVEST_GAMEDAYS = 3;
+
+/** Schuhe klauen: marches the victim starts within the duration go at this pace. */
+export const BAREFOOT_SPEED = 0.75;
+export const BAREFOOT_DURATION_MS = GAMEDAY_MS;
 
 export const FORTIFY_MULTIPLIER = 1.5;
 export const FORTIFY_DURATION_MS = GAMEDAY_MS;

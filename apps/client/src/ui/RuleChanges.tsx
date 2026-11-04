@@ -1,4 +1,5 @@
 import {
+  BAREFOOT_SPEED,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
   SPOT_BALANCE_TOLERANCE_HOURS,
@@ -31,6 +32,20 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'cards-sea-harvest-shoes-relocate',
+    date: '2026-11-05',
+    title: 'Vier neue Karten',
+    body: (
+      <>
+        In Truhen liegen jetzt auch: <b>Seeweg</b> (der nächste Zug läuft schnurgerade, auch übers
+        Wasser), <b>Füllhorn</b> (3 Spieltage lang je +1 Holz, Stein und Gold extra),{' '}
+        <b>Schuhe klauen</b> (die Züge einer gewählten Person laufen einen Spieltag lang mit{' '}
+        {formatPercent(BAREFOOT_SPEED)} Tempo) und — seltener — <b>Hofumzug</b> (Burg und ein
+        Stützpunkt tauschen die Plätze). Details im Handbuch unter „Karten“.
+      </>
+    ),
+  },
   {
     id: 'raidable-transfers',
     date: '2026-11-05',

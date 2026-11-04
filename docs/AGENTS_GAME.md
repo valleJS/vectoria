@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: f400dda4a7f43c84163934d8ecda0531559e2be9
+sources_stamp: fd964998d2b0e14ec346917b33e696a52e2e8a72
 ---
 
 # Game rules (prototype)
@@ -130,10 +130,13 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
   the map. The army carries it home (`ArmyView.chest`); on arrival `self.chests` counts up.
   Storming a home castle also puts a chest on the winning army.
 - The card is rolled only when the player opens the chest (`openChest` → `chestOpened`), so the
-  reveal happens when they are online.
+  reveal happens when they are online. `drawCard` weighs by `CardInfo.weight` (Hofumzug 0.4,
+  all others 1; `cardChance` for the handbook).
 - Cards belong to the player, not to a base. One card can be active (`self.activeCard`): an
   instant card takes effect on activation; a march card is armed and goes with the next army
-  sent (`sendArmy.useActiveCard`), then is used up.
+  sent (`sendArmy.useActiveCard`), then is used up. Instant cards with a `CardInfo.target`
+  (`ownOutpost` / `player`) need `activateCard.target`; it is checked before the card is spent
+  (`GameState.instantCard`).
 
 | Card | Use | Effect |
 | ---- | --- | ------ |
@@ -141,6 +144,10 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
 | Tarnung (`stealth`) | on send | others don't see the target |
 | Eilmarsch (`forcedMarch`) | on send | outbound trip takes half as long |
 | Bollwerk (`fortify`) | instant | castle defends ×1.5 for one gameday |
+| Seeweg (`sea`) | on send | outbound path is the straight line `[from, to]`, over water too (`ArmyView.sea`); home, redirects and reroutes go by land again; refused for raids, and armies on water cannot be intercepted (no land path to the meeting point) |
+| Füllhorn (`harvest`) | instant | `harvestDays += HARVEST_GAMEDAYS` (3): each gameday start pays `HARVEST_BONUS` (+1) of every resource extra |
+| Schuhe klauen (`stealShoes`) | instant, target player | victim's `barefootUntil` = clock + `BAREFOOT_DURATION_MS` (one gameday); every leg the victim starts meanwhile (send, redirect, return, reroute, raid intercept) runs at `BAREFOOT_SPEED` (0.75, stacks with `LOADED_SPEED`); legs already under way keep their pace. `PlayerPublic.barefoot` |
+| Hofumzug (`relocate`) | instant, target own outpost | home castle and that outpost swap positions; troops and stores stay with their base; armies heading for either re-route (`rerouteToMoved`, shared with the admin castle swap) |
 
 ## Rule changes notice
 

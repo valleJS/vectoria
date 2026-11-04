@@ -3,6 +3,7 @@ import {
   emptyResources,
   findPath,
   GATHER_DURATION_MS,
+  BAREFOOT_SPEED,
   LOADED_SPEED,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
@@ -79,15 +80,23 @@ function eta(
   target: ArmyTarget,
   position: Vec2,
   forcedMarch: boolean,
+  /** Seeweg: straight over water, not along land. */
+  sea = false,
 ): number | null {
+  // Marches started barefoot (Schuhe klauen) go slower, as on the server.
+  const speed = barefoot(view) ? BAREFOOT_SPEED : 1;
   if (target.kind === 'army') {
     const convoy = view.armies.find((a) => a.id === target.id);
     const track = convoy && trackOf(view, convoy);
-    const meeting = track && planIntercept(map, from, track, view.clock.clock, forcedMarch);
+    const meeting = track && planIntercept(map, from, track, view.clock.clock, forcedMarch, speed);
     return meeting ? meeting.clock - view.clock.clock : null;
   }
-  const path = findPath(map, from, position);
-  return path ? travelMs(pathLength(path), map.width, forcedMarch) : null;
+  const path = sea ? [from, position] : findPath(map, from, position);
+  return path ? travelMs(pathLength(path), map.width, forcedMarch, speed) : null;
+}
+
+function barefoot(view: GameView): boolean {
+  return (view.self.barefootUntil ?? 0) > view.clock.clock;
 }
 
 function SendForm({
@@ -121,8 +130,11 @@ function SendForm({
   const [useCard, setUseCard] = useState(true);
   const [cargo, setCargo] = useState<Resources>(emptyResources);
   const activeCard = view.self.activeCard;
-  const withCard = useCard && activeCard !== null;
+  // A Seeweg cannot be used for a raid (the server refuses it): it stays armed for later.
+  const cardUsable = activeCard !== null && !(activeCard === 'sea' && target.kind === 'army');
+  const withCard = useCard && cardUsable;
   const forced = withCard && activeCard === 'forcedMarch';
+  const sea = withCard && activeCard === 'sea' && target.kind !== 'army';
   const nearest = [...bases].sort(
     (a, b) =>
       Number(b.troops > 0) - Number(a.troops > 0) ||
@@ -130,10 +142,10 @@ function SendForm({
   )[0];
   const base = bases.find((b) => b.id === fromId) ?? nearest;
   const travel = useMemo(
-    () => (map && base ? eta(map, view, base.position, target, position, forced) : null),
+    () => (map && base ? eta(map, view, base.position, target, position, forced, sea) : null),
     // Raids move with the convoy; recompute on every state update for those.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [map, base?.position, position, forced, target.kind === 'army' ? view.clock.clock : 0],
+    [map, base?.position, position, forced, sea, target.kind === 'army' ? view.clock.clock : 0],
   );
   if (!base || !map) return null;
 
@@ -248,7 +260,7 @@ function SendForm({
           </div>
         </div>
       )}
-      {activeCard && (
+      {activeCard && cardUsable && (
         <Tip label={CARDS[activeCard].description}>
           <Label className="gap-1.5 leading-snug">
             <Checkbox
@@ -269,7 +281,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${loaded ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${loaded ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -323,7 +335,7 @@ function FieldRedirect({
                     ? 'Kein Landweg dorthin.'
                     : !enough
                       ? `Zu wenige Truppen (mind. ${minTroops}).`
-                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch))}`}
+                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, barefoot(view) ? BAREFOOT_SPEED : 1))}`}
                 </span>
               </span>
               <Button
@@ -376,6 +388,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
               track,
               view.clock.clock,
               army.forcedMarch,
+              barefoot(view) ? BAREFOOT_SPEED : 1,
             );
             return (
               <li key={army.id} className="flex items-center justify-between gap-2 py-1">
@@ -456,9 +469,14 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
           <ChestIcon size={18} /> Bringt eine Truhe heim — die Truhe kann niemand rauben.
         </div>
       )}
-      {(army.fog || army.stealth || army.forcedMarch) && (
+      {(army.fog || army.stealth || army.forcedMarch || army.sea) && (
         <div className="text-xs text-fortify italic">
-          {[army.fog && 'Nebel', army.stealth && 'Tarnung', army.forcedMarch && 'Eilmarsch']
+          {[
+            army.fog && 'Nebel',
+            army.stealth && 'Tarnung',
+            army.forcedMarch && 'Eilmarsch',
+            army.sea && 'Seeweg',
+          ]
             .filter(Boolean)
             .join(' · ')}
         </div>
@@ -508,6 +526,17 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             {player.homeTroops} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
           {player.fortified && <div className="text-fortify italic">Bollwerk aktiv (+50 %)</div>}
+          {player.barefoot && (
+            <div className="text-seal italic">
+              Barfuß — neue Züge laufen mit {formatPercent(BAREFOOT_SPEED)} Tempo
+            </div>
+          )}
+          {own && view.self.harvestDays > 0 && (
+            <div className="text-gold-deep italic">
+              Füllhorn: noch {view.self.harvestDays}{' '}
+              {view.self.harvestDays === 1 ? 'Spieltag' : 'Spieltage'} +1 auf alles
+            </div>
+          )}
           {player.routed && (
             <div className="text-seal italic">Gefallen — alle Truppen ziehen sich zurück</div>
           )}

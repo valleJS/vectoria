@@ -153,6 +153,10 @@ const CARD_COLORS: Record<CardType, string> = {
   stealth: '#6b5a8e',
   forcedMarch: '#e08a3c',
   fortify: '#5f9a55',
+  sea: '#3f7f9e',
+  harvest: '#c9951b',
+  stealShoes: '#9a5a3a',
+  relocate: '#a3311f',
 };
 
 /** Frame colour of a card, shared by the card art, the hand and the card profile. */
