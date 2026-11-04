@@ -4,7 +4,7 @@ import type { MapArt } from '../art/textures';
 import { hash2 } from './fields';
 
 // Night rest ("Nachtruhe": the game clock stands still outside gameday hours). The map sinks into
-// moonlit blue, castles and outposts glow warm, chests shimmer, fireflies drift over the forests
+// moonlit blue, castles and outposts glow warm from their windows, chests shimmer, fireflies drift over the forests
 // and stars twinkle on the water. Everything fades in and out with `amount`.
 
 /** Moonlight multiplied over the map at full night: deep blue that keeps the map's contrast. */
@@ -31,13 +31,19 @@ export function isNightRest(view: GameView): boolean {
   return FORCE_NIGHT || (view.phase === 'running' && !view.clock.running && !view.clock.paused);
 }
 
-/** A light source standing on the map, in world px at piece scale 1. */
+/**
+ * A light on the map: a lit window of a castle or outpost, or a shimmering chest. `x`, `y` is the
+ * site (the light scales with the pieces around it), `dx`, `dy` the light's offset from it, all in
+ * world px at piece scale 1.
+ */
 export interface NightLight {
   x: number;
   y: number;
-  /** Radius of the light pool, world px. */
+  dx?: number;
+  dy?: number;
+  /** Radius of the light, world px. */
   radius: number;
-  kind: 'castle' | 'outpost' | 'chest';
+  kind: 'window' | 'chest';
 }
 
 interface Glow {
@@ -151,28 +157,25 @@ export class NightScene {
     }
   }
 
-  /** Rebuilds the light pools for the current sites. */
+  /**
+   * Rebuilds the lights for the current sites: chests shimmer in a pool on the ground, castles and
+   * outposts only glow from their windows (over the building, no pool around it).
+   */
   setLights(lights: NightLight[]): void {
     for (const layer of [this.glowUnder, this.glowOver]) {
       for (const child of layer.removeChildren()) child.destroy({ children: true });
     }
     this.glows = [];
     for (const [i, light] of lights.entries()) {
-      const tint = light.kind === 'chest' ? TREASURE_LIGHT : FIRELIGHT;
-      const pool = this.glowSprite(light, light.radius * 3.4, tint);
-      this.glowUnder.addChild(pool.container);
-      this.glows.push({
-        sprite: pool.sprite,
-        alpha: light.kind === 'chest' ? 0.6 : 0.85,
-        phase: i * 1.7,
-        flicker: light.kind === 'chest' ? 0.3 : 0.12,
-      });
-      if (light.kind !== 'chest') {
-        // A softer wash over the building itself: lit windows and walls.
-        const wash = this.glowSprite(light, light.radius * 1.8, FIRELIGHT);
-        this.glowOver.addChild(wash.container);
-        this.glows.push({ sprite: wash.sprite, alpha: 0.3, phase: i * 1.7 + 0.6, flicker: 0.1 });
+      if (light.kind === 'chest') {
+        const pool = this.glowSprite(light, light.radius * 3.4, TREASURE_LIGHT);
+        this.glowUnder.addChild(pool.container);
+        this.glows.push({ sprite: pool.sprite, alpha: 0.6, phase: i * 1.7, flicker: 0.3 });
+        continue;
       }
+      const lamp = this.glowSprite(light, light.radius * 6, FIRELIGHT);
+      this.glowOver.addChild(lamp.container);
+      this.glows.push({ sprite: lamp.sprite, alpha: 0.95, phase: i * 1.7, flicker: 0.18 });
     }
   }
 
@@ -180,6 +183,7 @@ export class NightScene {
     const container = new Container();
     container.position.set(light.x, light.y);
     const sprite = new Sprite(this.art.glow);
+    sprite.position.set(light.dx ?? 0, light.dy ?? 0);
     sprite.anchor.set(0.5);
     sprite.tint = tint;
     sprite.blendMode = 'add';

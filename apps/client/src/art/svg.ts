@@ -695,6 +695,27 @@ function block(x: number, w: number, top: number, bottom: number, fill = MASONRY
     <rect x="${x}" y="${top}" width="${w}" height="${bottom - top}" fill="none" ${LINE}/>`;
 }
 
+/** A window that is lit at night: centre and size in art px (night.ts puts a small glow there). */
+export interface LitWindow {
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Slit window of `roundTower(x, w, top, …)`. */
+const slit = (x: number, w: number, top: number): LitWindow => ({
+  x: x + w / 2,
+  y: top + 19.5,
+  size: 4,
+});
+
+/** Lit windows per castle style, matching the drawings in `castle` (the gate stays dark). */
+export const CASTLE_WINDOWS: readonly (readonly LitWindow[])[] = [
+  [{ x: 60, y: 47, size: 8 }, slit(4, 26, 50), slit(90, 26, 50)],
+  [{ x: 60, y: 54, size: 11 }],
+  [{ x: 60, y: 57, size: 10 }, slit(12, 16, 44), slit(92, 16, 44)],
+];
+
 /** Number of castle designs; format.ts assigns one per player. */
 export const CASTLE_STYLE_NAMES = ['Burg', 'Bergfried', 'Zitadelle'] as const;
 
@@ -760,6 +781,9 @@ export function castle(color: string, style = 0): Art {
     centreY: 66,
   };
 }
+
+/** Lit window of the outpost watchtower, matching `outpost`. */
+export const OUTPOST_WINDOWS: readonly LitWindow[] = [{ x: 42, y: 37, size: 5 }];
 
 /** Outpost ("Stützpunkt") in the owner's colour: a watchtower behind a palisade. 84×80, standing
  *  at (42, 72), centred at y 50. */

@@ -18,6 +18,7 @@ import {
   type Ticker,
 } from 'pixi.js';
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
+import { CASTLE_WINDOWS, OUTPOST_WINDOWS, type LitWindow } from '../art/svg';
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
@@ -83,6 +84,28 @@ function artSprite(art: ArtTexture, width: number, centred = false): Sprite {
   sprite.anchor.set(art.anchor.x / art.width, y / art.height);
   sprite.scale.set(width / (art.width - art.pad * 2));
   return sprite;
+}
+
+/**
+ * Night lights in the windows of a site drawn with `artSprite(art, width, true)` at `at`; none
+ * until the coloured art is rasterised (`onReady` redraws then).
+ */
+function windowLights(
+  at: PointData,
+  art: ArtTexture | null,
+  width: number,
+  windows: readonly LitWindow[],
+): NightLight[] {
+  if (!art) return [];
+  const k = width / (art.width - art.pad * 2);
+  return windows.map((w) => ({
+    x: at.x,
+    y: at.y,
+    dx: (w.x + art.pad - art.anchor.x) * k,
+    dy: (w.y + art.pad - art.centreY) * k,
+    radius: (w.size / 2) * k,
+    kind: 'window' as const,
+  }));
 }
 
 interface ArmySprite {
@@ -509,14 +532,19 @@ export class GameRenderer {
       this.siteLayer.addChild(castle);
     }
 
-    // Lamp light for the night: castles and held outposts glow, chests shimmer.
+    // Lamp light for the night: castles and held outposts glow from their windows, chests shimmer.
     const lights: NightLight[] = [
-      ...view.players.flatMap((p) =>
-        p.castle ? [{ ...this.px(p.castle), radius: 30 * u, kind: 'castle' as const }] : [],
-      ),
-      ...view.outposts
-        .filter((o) => o.ownerId)
-        .map((o) => ({ ...this.px(o.position), radius: 20 * u, kind: 'outpost' as const })),
+      ...view.players.flatMap((p) => {
+        if (!p.castle) return [];
+        const { color, style } = playerHeraldry(view, p.id);
+        const art = this.art.pieces.castle(color, style);
+        return windowLights(this.px(p.castle), art, 58 * u, CASTLE_WINDOWS[style] ?? []);
+      }),
+      ...view.outposts.flatMap((o) => {
+        if (!o.ownerId) return [];
+        const art = this.art.pieces.outpost(playerColor(view, o.ownerId));
+        return windowLights(this.px(o.position), art, 40 * u, OUTPOST_WINDOWS);
+      }),
       ...view.chests.map((c) => ({
         ...this.px(c.position),
         radius: 14 * u,
