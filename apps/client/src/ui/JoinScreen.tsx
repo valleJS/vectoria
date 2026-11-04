@@ -5,6 +5,8 @@ import type { LoginLink } from '../net/loginLink';
 import { useGameStore } from '../state/store';
 import { HandbookInvite } from './Handbook';
 import { Button, Panel } from './Panel';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const LOBBY_POLL_MS = 3_000;
 
@@ -46,9 +48,6 @@ function Centered({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-const INPUT =
-  'w-full border border-ink/50 bg-parchment-dark px-2 py-1.5 outline-none focus:border-seal';
 
 type Step = 'email' | 'name' | 'code';
 
@@ -103,17 +102,17 @@ export function JoinScreen({ link, onDone }: { link?: LoginLink | null; onDone?:
   const open = lobby?.phase === 'registration';
   return (
     <Centered>
-      <Panel className="px-5 py-4">
+      <Panel contentClassName="px-5 py-4">
         <h1 className="text-2xl font-bold italic">Vectoria</h1>
         {step === 'code' ? (
           <form onSubmit={submitCode} className="mt-3 space-y-2">
             <p className="text-ink">
               Wir haben dir einen Code an <b>{email}</b> geschickt.
             </p>
-            <label className="block text-ink" htmlFor="code">
+            <Label className="block text-ink" htmlFor="code">
               Anmeldecode
-            </label>
-            <input
+            </Label>
+            <Input
               id="code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -121,16 +120,15 @@ export function JoinScreen({ link, onDone }: { link?: LoginLink | null; onDone?:
               autoComplete="one-time-code"
               maxLength={8}
               autoFocus
-              className={`${INPUT} text-center text-xl tracking-[0.4em] tabular-nums`}
+              className="h-11 text-center text-xl tracking-[0.4em] tabular-nums"
             />
             {error && <p className="text-seal">{error}</p>}
             <div className="flex items-center justify-between gap-2">
               <Button type="submit" variant="primary" disabled={busy || code.trim().length < 6}>
                 Anmelden
               </Button>
-              <button
-                type="button"
-                className="text-ink-soft underline hover:text-seal"
+              <Button
+                variant="link"
                 onClick={() => {
                   setStep('email');
                   setCode('');
@@ -138,15 +136,15 @@ export function JoinScreen({ link, onDone }: { link?: LoginLink | null; onDone?:
                 }}
               >
                 Andere E-Mail / neuer Code
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
           <form onSubmit={requestCode} className="mt-3 space-y-2">
-            <label className="block text-ink" htmlFor="email">
+            <Label className="block text-ink" htmlFor="email">
               Deine E-Mail
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               type="email"
               value={email}
@@ -156,21 +154,21 @@ export function JoinScreen({ link, onDone }: { link?: LoginLink | null; onDone?:
               }}
               autoComplete="email"
               autoFocus={step === 'email'}
-              className={INPUT}
+              className="h-9"
             />
             {step === 'name' && (
               <>
                 <p className="text-ink-soft">Neu hier? Wähle einen Namen für dein Reich.</p>
-                <label className="block text-ink" htmlFor="name">
+                <Label className="block text-ink" htmlFor="name">
                   Dein Name
-                </label>
-                <input
+                </Label>
+                <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={24}
                   autoFocus
-                  className={INPUT}
+                  className="h-9"
                 />
               </>
             )}
@@ -213,7 +211,7 @@ export function Lobby() {
   }
   return (
     <Centered>
-      <Panel className="px-5 py-4">
+      <Panel contentClassName="px-5 py-4">
         <h1 className="text-2xl font-bold italic">Willkommen, {view.self.name}</h1>
         <p className="mt-2 text-ink">
           Du bist angemeldet. Sobald die Anmeldung schließt, wird die Karte für alle Teilnehmenden

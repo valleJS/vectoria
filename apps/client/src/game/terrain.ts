@@ -11,12 +11,13 @@ import {
   smooth,
   type Field,
 } from './fields';
-import { INK, SEA } from './palette';
+import { COAST, FOREST, GRASS, ROCK, SEA, SHALLOW, hex } from '../theme/tokens';
+import { INK } from './palette';
 
 // Draws the static map once per MapData. The tile grid is resampled into slightly blurred
 // fields whose iso-lines follow the tile edges but round the corners; those outlines are filled
 // as flat vector regions (deep sea, shallow band, land, forest, rock) and the coast is inked.
-// Trees, mountains and other details are sprites of the shared SVG art. All randomness is
+// Trees, rocks and other details are sprites of the shared SVG art. All randomness is
 // hashed from positions, so every client draws the same map.
 
 /** Sea margin around the map, in tiles. */
@@ -24,14 +25,11 @@ export const SEA_MARGIN_TILES = 3;
 /** Field samples per tile. */
 const K = 8;
 /** Width of the light shallow-water band along coasts, in tiles. */
-const SHALLOW_TILES = 0.55;
+const SHALLOW_TILES = 0.5;
 
-// Old-map tones: parchment land, brown sea (palette.ts SEA), so the pieces in colour stand out.
-const DEEP = SEA;
-const SHALLOW = 0xcdb98e;
-const GRASS = 0xecdcae;
-const FOREST = 0xdcc68e;
-const ROCK = 0xe4d6b2;
+// Old-map tones from the design tokens: parchment land, brown sea, so the pieces in colour
+// stand out.
+const DEEP = hex(SEA);
 
 export interface Terrain {
   root: Container;
@@ -165,9 +163,6 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
     }
     return out;
   };
-  // Shallow band as "nearness": above the level within SHALLOW_TILES of land.
-  const near = createField(gw, gh);
-  for (let k = 0; k < near.data.length; k++) near.data[k] = SHALLOW_TILES - distance.data[k]!;
 
   const root = new Container();
   const origin = -SEA_MARGIN_TILES * T;
@@ -176,14 +171,22 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   const toWorld = (v: number) => (v + 0.5) * (T / K) + origin;
 
   const ground = new Graphics().rect(origin, origin, worldW, worldH).fill(DEEP);
-  fillRegions(ground, outlines(near, 0, toWorld), SHALLOW);
   const coast = outlines(landField, 0.5, toWorld);
-  fillRegions(ground, coast, GRASS);
-  fillRegions(ground, outlines(withinLand(forestField), 0.5, toWorld), FOREST);
-  fillRegions(ground, outlines(withinLand(rockField), 0.5, toWorld), ROCK);
-  for (const region of coast) {
-    ground.poly(region.points).stroke({ width: 2.6, color: INK, join: 'round' });
-  }
+  // The light shallow band along every coast is a wide stroke centred on the coastline; the land
+  // fill then covers its inner half. Lakes and straits get an even band this way, with no
+  // polygon holes to triangulate.
+  const band = SHALLOW_TILES * T;
+  const along = (width: number, color: number, alpha = 1) => {
+    for (const region of coast) {
+      ground.poly(region.points).stroke({ width, color, alpha, join: 'round' });
+    }
+  };
+  along(band * 2, hex(SHALLOW));
+  fillRegions(ground, coast, hex(GRASS));
+  fillRegions(ground, outlines(withinLand(forestField), 0.5, toWorld), hex(FOREST));
+  fillRegions(ground, outlines(withinLand(rockField), 0.5, toWorld), hex(ROCK));
+  // A soft brown coastline instead of hard black ink.
+  along(2.2, hex(COAST), 0.9);
   root.addChild(ground);
 
   // Details, painted back to front.
@@ -208,6 +211,16 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
     });
   };
   const pick = <T>(items: T[], r: number): T => items[Math.floor(r * items.length) % items.length]!;
+  /** Mountain tiles among the eight neighbours: 8 deep inside a rock area, few at its rim. */
+  const mountainsAround = (tx: number, ty: number) => {
+    let count = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if ((dx || dy) && typeAt(tx + dx, ty + dy) === TileType.Mountain) count++;
+      }
+    }
+    return count;
+  };
 
   for (let ty = 0; ty < height; ty++) {
     for (let tx = 0; tx < width; tx++) {
@@ -225,38 +238,87 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
           else place(pick(art.broadleaves, r * 3), x, y, size, hash2(tx, ty, 50 + n) > 0.5);
         }
       } else if (type === TileType.Mountain) {
-        const x = (tx + 0.5 + (hash2(tx, ty, 60) - 0.5) * 0.2) * T;
-        const y = (ty + 0.8 + (hash2(tx, ty, 61) - 0.5) * 0.1) * T;
-        if (distanceAt(x, y) > -0.3 || sample(rockField, x, y - T * 0.3, 0) < 0.5) continue;
+        // Big crags stand in the heart of a rock area, loose boulders along its rim; positions,
+        // sizes and the odd gap vary, so the rocks never line up tile by tile.
+        const depth = mountainsAround(tx, ty);
         const r = hash2(tx, ty, 63);
-        const snowy = fbm(tx / 4, ty / 4, 64) > 0.55;
-        const size = T * (1.4 + hash2(tx, ty, 65) * 0.25);
-        place(pick(snowy ? art.snowyMountains : art.mountains, r), x, y, size, r > 0.5);
+        if (r < 0.1) continue;
+        // Crags get likelier and bigger towards the interior; the rim keeps smaller ones.
+        const inner = Math.min(1, depth / 7);
+        const crag = hash2(tx, ty, 64) < 0.25 + inner * 0.6;
+        if (crag) {
+          const x = (tx + 0.5 + (hash2(tx, ty, 60) - 0.5) * 0.6) * T;
+          const y = (ty + 0.75 + (hash2(tx, ty, 61) - 0.5) * 0.45) * T;
+          if (distanceAt(x, y) > -0.3 || sample(rockField, x, y - T * 0.3, 0) < 0.5) continue;
+          const size = T * (0.75 + inner * 0.55 + hash2(tx, ty, 65) * 0.4);
+          place(pick(art.rocks, hash2(tx, ty, 66)), x, y, size, hash2(tx, ty, 67) > 0.5);
+        } else {
+          for (let n = 0; n < (r > 0.45 ? 2 : 1); n++) {
+            const x = (tx + 0.5 + (hash2(tx, ty, 160 + n) - 0.5) * 0.8) * T;
+            const y = (ty + 0.6 + (hash2(tx, ty, 170 + n) - 0.5) * 0.7) * T;
+            if (distanceAt(x, y) > -0.25 || sample(rockField, x, y - T * 0.15, 0) < 0.45) continue;
+            const size = T * (0.5 + hash2(tx, ty, 180 + n) * 0.4);
+            place(
+              pick(art.boulders, hash2(tx, ty, 190 + n)),
+              x,
+              y,
+              size,
+              hash2(tx, ty, 195 + n) > 0.5,
+            );
+          }
+        }
       } else if (type === TileType.Grass) {
+        // A stray boulder now and then on the meadow next to a rock area.
+        if (mountainsAround(tx, ty) > 0 && hash2(tx, ty, 200) < 0.3) {
+          const x = (tx + 0.5 + (hash2(tx, ty, 201) - 0.5) * 0.7) * T;
+          const y = (ty + 0.5 + (hash2(tx, ty, 202) - 0.5) * 0.7) * T;
+          if (distanceAt(x, y) < -0.3) {
+            const size = T * (0.38 + hash2(tx, ty, 203) * 0.25);
+            place(pick(art.boulders, hash2(tx, ty, 204)), x, y, size, hash2(tx, ty, 205) > 0.5);
+          }
+        }
         for (let n = 0; n < 2; n++) {
           const x = (tx + 0.5 + (hash2(tx, ty, 70 + n) - 0.5) * 0.9) * T;
           const y = (ty + 0.5 + (hash2(tx, ty, 80 + n) - 0.5) * 0.9) * T;
           if (distanceAt(x, y) > -0.25) continue;
           const r = hash2(tx, ty, 90 + n);
-          if (r > 0.88) place(art.tuft, x, y, T * 0.6, r > 0.94);
-          else if (r > 0.84) place(pick(art.flowers, hash2(tx, ty, 95 + n)), x, y, T * 0.55);
+          if (r > 0.88) place(art.tuft, x, y, T * 0.55, r > 0.94);
           else if (r < 0.03) place(pick(art.broadleaves, r * 33), x, y, T * 1.05);
         }
       }
     }
   }
-  // The odd ship on open water, including the margin.
-  let ships = 0;
+  // Boats on the water: cogs where the sea is open, small fishing boats on lakes and straits.
+  // Candidates are ranked by a positional hash, so the picks spread over the whole map and stay
+  // the same on every client; boats keep their distance from each other.
+  const area = width * height;
+  const limits = {
+    cog: Math.max(2, Math.round(area / 260)),
+    boat: Math.max(2, Math.round(area / 180)),
+  };
+  const candidates: { x: number; y: number; kind: 'cog' | 'boat'; rank: number; flip: boolean }[] =
+    [];
   for (let ty = -SEA_MARGIN_TILES; ty < height + SEA_MARGIN_TILES; ty++) {
     for (let tx = -SEA_MARGIN_TILES; tx < width + SEA_MARGIN_TILES; tx++) {
-      const x = (tx + 0.5 + (hash2(tx, ty, 100) - 0.5) * 0.7) * T;
-      const y = (ty + 0.5 + (hash2(tx, ty, 101) - 0.5) * 0.7) * T;
+      const x = (tx + 0.5 + (hash2(tx, ty, 100) - 0.5) * 0.5) * T;
+      const y = (ty + 0.5 + (hash2(tx, ty, 101) - 0.5) * 0.5) * T;
       const d = distanceAt(x, y);
-      if (d > 2.8 && ships < 3 && hash2(tx, ty, 102) < 0.012) {
-        ships++;
-        place(art.ship, x, y, T * 2.2, hash2(tx, ty, 103) > 0.5);
-      }
+      const inland = tx >= 0 && ty >= 0 && tx < width && ty < height;
+      const kind = d > 2.4 ? 'cog' : d > 0.95 && inland ? 'boat' : null;
+      if (!kind) continue;
+      candidates.push({ x, y, kind, rank: hash2(tx, ty, 102), flip: hash2(tx, ty, 103) > 0.5 });
     }
+  }
+  candidates.sort((a, b) => a.rank - b.rank);
+  const boats: { x: number; y: number }[] = [];
+  const count = { cog: 0, boat: 0 };
+  for (const c of candidates) {
+    if (count[c.kind] >= limits[c.kind]) continue;
+    if (boats.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < T * 5)) continue;
+    count[c.kind]++;
+    boats.push(c);
+    if (c.kind === 'cog') place(art.ship, c.x, c.y, T * 2.1, c.flip);
+    else place(art.boat, c.x, c.y, T * 1.15, c.flip);
   }
   details.sort((a, b) => a.sprite.y - b.sprite.y);
   const detailLayer = new Container();

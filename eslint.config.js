@@ -28,5 +28,10 @@ export default defineConfig([
     extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     languageOptions: { globals: globals.browser },
   },
+  {
+    // shadcn/ui components export their variant helpers (`buttonVariants`) beside the component.
+    files: ['apps/client/src/components/ui/**/*.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
   prettier,
 ]);

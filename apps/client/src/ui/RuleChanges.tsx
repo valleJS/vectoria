@@ -5,6 +5,15 @@ import {
   SPOT_FAR_HOURS,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button, Tip } from './Panel';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { formatGameDuration, formatPercent } from '../game/format';
 import { useGameStore } from '../state/store';
 
@@ -125,9 +134,9 @@ function ScrollGlyph({ size = 40 }: { size?: number }) {
 function UnseenBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
-    <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-ink bg-seal px-1 text-xs font-bold text-parchment not-italic">
+    <Badge className="absolute -top-1 -right-1 h-5 min-w-5 border-ink text-xs font-bold not-italic">
       {count}
-    </span>
+    </Badge>
   );
 }
 
@@ -138,31 +147,30 @@ export function RuleChangesButton({ compact = false }: { compact?: boolean }) {
   const label = unseen > 0 ? `Regeländerungen (${unseen} neu)` : 'Regeländerungen';
   if (compact) {
     return (
-      <button
-        type="button"
-        onClick={() => setRuleChanges(true)}
-        title={label}
-        aria-label={label}
-        className="relative -my-1 shrink-0"
-      >
-        <ScrollGlyph size={30} />
-        <UnseenBadge count={unseen} />
-      </button>
+      <Tip label={label}>
+        <Button
+          variant="plain"
+          onClick={() => setRuleChanges(true)}
+          aria-label={label}
+          className="relative -my-1 shrink-0"
+        >
+          <ScrollGlyph size={30} />
+          <UnseenBadge count={unseen} />
+        </Button>
+      </Tip>
     );
   }
   return (
-    <button
-      type="button"
+    <Button
+      variant="plain"
       onClick={() => setRuleChanges(true)}
-      title={label}
-      className="pointer-events-auto relative mb-1 flex flex-col items-center transition-transform hover:-translate-y-1"
+      aria-label={label}
+      className="pointer-events-auto relative mb-1 flex-col transition-transform hover:-translate-y-1"
     >
       <ScrollGlyph />
-      <span className="border border-ink bg-parchment px-1.5 text-xs italic shadow-[1px_2px_0_rgba(59,42,24,0.35)]">
-        Neuerungen
-      </span>
+      <Badge variant="plate">Neuerungen</Badge>
       <UnseenBadge count={unseen} />
-    </button>
+    </Button>
   );
 }
 
@@ -183,70 +191,38 @@ export function RuleChanges() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
-  if (!open) return null;
   function close() {
     markSeen(RULE_CHANGES.map((c) => c.id));
     setRuleChanges(false);
   }
 
   return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-ink/55 p-4 max-md:p-3"
-      onClick={close}
-    >
-      <div
-        role="dialog"
-        aria-label="Regeländerungen"
-        onClick={(e) => e.stopPropagation()}
-        className="relative flex max-h-[min(36rem,85dvh)] w-full max-w-md flex-col border-2 border-ink bg-parchment p-[3px] text-ink shadow-[6px_8px_0_rgba(59,42,24,0.45)]"
-      >
-        <button
-          type="button"
-          onClick={close}
-          aria-label="Regeländerungen schließen"
-          className="absolute -top-3 -right-3 z-10 h-8 w-8 rounded-full border-2 border-ink bg-parchment text-lg leading-none hover:bg-seal hover:text-parchment"
-        >
-          ×
-        </button>
-        <div className="flex min-h-0 flex-col border border-ink/40 px-4 py-3">
-          <div className="flex items-center gap-3 border-b-[3px] border-double border-ink pb-2">
-            <ScrollGlyph size={36} />
-            <div>
-              <h2 className="text-xl leading-tight italic">Regeländerungen</h2>
-              <p className="text-xs text-ink-soft">
-                Was sich an den Spielregeln geändert hat — das Neueste zuerst.
-              </p>
-            </div>
+    <Dialog open={open} onOpenChange={(next) => (next ? setRuleChanges(true) : close())}>
+      <DialogContent className="max-h-[min(36rem,85dvh)] max-w-md">
+        <DialogHeader className="flex-row items-center gap-3">
+          <ScrollGlyph size={36} />
+          <div>
+            <DialogTitle>Regeländerungen</DialogTitle>
+            <DialogDescription>
+              Was sich an den Spielregeln geändert hat — das Neueste zuerst.
+            </DialogDescription>
           </div>
-          <ol className="min-h-0 flex-1 divide-y divide-ink/20 overflow-y-auto">
-            {RULE_CHANGES.map((change) => (
-              <li key={change.id} className="py-2.5">
-                <div className="flex items-baseline gap-2">
-                  <b className="italic">{change.title}</b>
-                  {!seen.includes(change.id) && (
-                    <span className="border border-seal px-1 text-[10px] font-bold tracking-wider text-seal uppercase">
-                      Neu
-                    </span>
-                  )}
-                  <span className="ml-auto shrink-0 text-xs text-ink-soft tabular-nums">
-                    {formatDate(change.date)}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-sm leading-snug">{change.body}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </div>
+        </DialogHeader>
+        <ol className="min-h-0 flex-1 divide-y divide-ink/20 overflow-y-auto px-4">
+          {RULE_CHANGES.map((change) => (
+            <li key={change.id} className="py-2.5">
+              <div className="flex items-baseline gap-2">
+                <b className="italic">{change.title}</b>
+                {!seen.includes(change.id) && <Badge variant="outline">Neu</Badge>}
+                <span className="ml-auto shrink-0 text-xs text-ink-soft tabular-nums">
+                  {formatDate(change.date)}
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm leading-snug">{change.body}</p>
+            </li>
+          ))}
+        </ol>
+      </DialogContent>
+    </Dialog>
   );
 }

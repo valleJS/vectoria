@@ -24,14 +24,40 @@ export function formatGameDuration(ms: number): string {
  * order (stable, since players are listed in registration order).
  */
 export function playerColor(view: Pick<GameView, 'players' | 'self'>, playerId: string): number {
-  if (playerId === view.self.id) return SELF_COLOR;
+  return playerHeraldry(view, playerId).color;
+}
+
+/** Number of castle styles (`art/svg.ts` `castle`). */
+export const CASTLE_STYLES = 3;
+
+export interface Heraldry {
+  color: number;
+  /** Castle style, 0 … CASTLE_STYLES - 1. */
+  style: number;
+}
+
+/**
+ * Colour + castle style per player. The style follows the join order, so every client shows a
+ * player's castle alike; it shifts once per lap of the palette. Colours run through the palette in
+ * join order of the other players (the viewer is always red), so the first
+ * `PLAYER_PALETTE.length × CASTLE_STYLES` players never share both colour and style.
+ */
+export function playerHeraldry(
+  view: Pick<GameView, 'players' | 'self'>,
+  playerId: string,
+): Heraldry {
+  const n = PLAYER_PALETTE.length;
+  const joined = view.players.findIndex((p) => p.id === playerId);
+  let hash = 0;
+  for (const char of playerId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  hash = Math.abs(hash);
+  const style = (joined >= 0 ? joined + Math.floor(joined / n) : hash) % CASTLE_STYLES;
+  if (playerId === view.self.id) return { color: SELF_COLOR, style };
   const index = view.players
     .filter((p) => p.id !== view.self.id)
     .findIndex((p) => p.id === playerId);
-  if (index >= 0 && index < PLAYER_PALETTE.length) return PLAYER_PALETTE[index]!;
-  let hash = 0;
-  for (const char of playerId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-  return hslToHex(Math.abs(hash) % 360, 0.55, 0.45);
+  if (index >= 0 && index < n * CASTLE_STYLES) return { color: PLAYER_PALETTE[index % n]!, style };
+  return { color: hslToHex(hash % 360, 0.55, 0.45), style };
 }
 
 export function cssColor(hex: number): string {

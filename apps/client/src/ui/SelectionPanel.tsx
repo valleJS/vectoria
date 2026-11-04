@@ -30,15 +30,31 @@ import {
   outpostLabel,
   ownBases,
   playerColor,
+  playerHeraldry,
   playerName,
   type BaseInfo,
 } from '../game/format';
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { SoldiersIcon, CastleIcon, ChestIcon, ResourceIcon } from './icons';
-import { Button } from './Panel';
+import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon } from './icons';
+import { Button, Tip } from './Panel';
 import { Locked } from './Routed';
+import { XIcon } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
+
+/** Select value for the home castle (base id null). */
+const HOME = 'home';
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -157,38 +173,47 @@ function SendForm({
         />
       )}
       {bases.length > 1 && (
-        <label className="flex items-center gap-2">
-          <span className="text-ink-soft">Von</span>
-          <select
-            value={base.id ?? ''}
-            onChange={(e) => setFromId(e.target.value || null)}
-            className="min-w-0 flex-1 border border-ink/50 bg-parchment-dark px-1 py-0.5"
+        <div className="flex items-center gap-2">
+          <Label htmlFor="send-from" className="text-ink-soft">
+            Von
+          </Label>
+          {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
+          <Select
+            value={base.id ?? HOME}
+            onValueChange={(value) => setFromId(value === HOME ? null : value)}
           >
-            {bases.map((b) => (
-              <option key={b.id ?? 'home'} value={b.id ?? ''}>
-                {b.name} ({b.troops} Truppen)
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="send-from" className="h-7 flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {bases.map((b) => (
+                <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
+                  {b.name} ({b.troops} Truppen)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
-      <input
-        type="range"
+      <Slider
         min={available > 0 ? 1 : 0}
-        max={available}
-        value={troops}
-        onChange={(e) => setTroops(Number(e.target.value))}
-        className="w-full accent-seal"
+        max={Math.max(available, 1)}
+        step={1}
+        value={[troops]}
+        onValueChange={([value]) => setTroops(value ?? 0)}
+        disabled={available === 0}
+        className="py-1"
         aria-label="Truppen"
       />
       <div className="flex items-center gap-2">
-        <input
+        <Input
           type="number"
           min={1}
           max={available}
           value={troops}
           onChange={(e) => setTroops(Math.floor(Number(e.target.value)))}
-          className="w-20 border border-ink/50 bg-parchment-dark px-2 py-1 tabular-nums"
+          className="h-7 w-20 tabular-nums"
+          aria-label="Anzahl Truppen"
         />
         <span className="text-ink-soft">
           / {available} {base.id === null ? 'zu Hause' : 'vor Ort'}
@@ -200,11 +225,11 @@ function SendForm({
       {allowCargo && hasResources(base.resources) && (
         <div>
           <div className="text-ink-soft">Mitnehmen:</div>
-          <div className="mt-0.5 flex gap-2">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {RESOURCES.map((r) => (
-              <label key={r} className="flex items-center gap-1" title={RESOURCE_NAMES[r]}>
-                <ResourceIcon resource={r} size={16} />
-                <input
+              <Label key={r} className="gap-1">
+                <ResourceIcon resource={r} size={16} title={RESOURCE_NAMES[r]} />
+                <Input
                   type="number"
                   min={0}
                   max={base.resources[r]}
@@ -212,29 +237,29 @@ function SendForm({
                   onChange={(e) =>
                     setCargo({ ...cargo, [r]: Math.max(0, Math.floor(Number(e.target.value))) })
                   }
-                  className="w-12 border border-ink/50 bg-parchment-dark px-1 py-0.5 tabular-nums"
+                  className="h-7 w-12 px-1.5 tabular-nums"
+                  aria-label={RESOURCE_NAMES[r]}
                 />
-              </label>
+              </Label>
             ))}
-            <Button
-              className="px-1.5 py-0.5 text-xs"
-              onClick={() => setCargo({ ...base.resources })}
-            >
+            <Button size="sm" onClick={() => setCargo({ ...base.resources })}>
               Alles
             </Button>
           </div>
         </div>
       )}
       {activeCard && (
-        <label className="flex items-center gap-1" title={CARDS[activeCard].description}>
-          <input
-            type="checkbox"
-            checked={useCard}
-            className="accent-seal"
-            onChange={(e) => setUseCard(e.target.checked)}
-          />
-          Aktive Karte mitschicken: <b>{CARDS[activeCard].name}</b>
-        </label>
+        <Tip label={CARDS[activeCard].description}>
+          <Label className="gap-1.5 leading-snug">
+            <Checkbox
+              checked={useCard}
+              onCheckedChange={(checked) => setUseCard(checked === true)}
+            />
+            <span>
+              Aktive Karte mitschicken: <b>{CARDS[activeCard].name}</b>
+            </span>
+          </Label>
+        </Tip>
       )}
       {troops < minTroops && <div className="text-seal">Mindestens {minTroops} Truppen nötig.</div>}
       {preview && <div className="text-ink-soft">{preview(troops)}</div>}
@@ -303,7 +328,7 @@ function FieldRedirect({
               </span>
               <Button
                 disabled={!path || !enough}
-                title={verb}
+                aria-label={`Umleiten: ${verb}`}
                 onClick={() => gameSocket.send({ type: 'redirectArmy', armyId: army.id, target })}
               >
                 Umleiten
@@ -432,7 +457,7 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         </div>
       )}
       {(army.fog || army.stealth || army.forcedMarch) && (
-        <div className="text-xs text-sea-dark italic">
+        <div className="text-xs text-fortify italic">
           {[army.fog && 'Nebel', army.stealth && 'Tarnung', army.forcedMarch && 'Eilmarsch']
             .filter(Boolean)
             .join(' · ')}
@@ -469,13 +494,20 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       const outposts = bases.filter((b) => b.id !== null);
       return (
         <>
-          <Title icon={<CastleIcon color={cssColor(playerColor(view, player.id))} />}>
+          <Title
+            icon={
+              <CastleIcon
+                color={cssColor(playerColor(view, player.id))}
+                style={playerHeraldry(view, player.id).style}
+              />
+            }
+          >
             {own ? 'Deine Burg' : `Burg von ${player.name}`}
           </Title>
           <div>
             {player.homeTroops} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
-          {player.fortified && <div className="text-sea-dark italic">Bollwerk aktiv (+50 %)</div>}
+          {player.fortified && <div className="text-fortify italic">Bollwerk aktiv (+50 %)</div>}
           {player.routed && (
             <div className="text-seal italic">Gefallen — alle Truppen ziehen sich zurück</div>
           )}
@@ -523,7 +555,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       const color = outpost.ownerId ? playerColor(view, outpost.ownerId) : NEUTRAL_COLOR;
       return (
         <>
-          <Title icon={<CastleIcon color={cssColor(color)} size={22} />}>
+          <Title icon={<OutpostIcon color={outpost.ownerId ? cssColor(color) : null} size={24} />}>
             {own ? 'Dein Stützpunkt' : outpostLabel(view, outpost)}
           </Title>
           <div>
@@ -642,14 +674,15 @@ export function SelectionContent({ view }: { view: GameView }) {
   }
   return (
     <div>
-      <button
-        type="button"
-        className="float-right -mt-0.5 text-lg leading-none text-ink-soft hover:text-seal"
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="float-right -mt-0.5"
         onClick={() => select(null)}
         aria-label="Auswahl schließen"
       >
-        ×
-      </button>
+        <XIcon />
+      </Button>
       <SelectionBody view={view} selection={selection} />
     </div>
   );
