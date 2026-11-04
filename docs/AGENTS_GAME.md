@@ -3,10 +3,10 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-02
+last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 1fc696e3815157a746b47679820bf0398e7c3e6a
+sources_stamp: 2354bfcef1b9f940491ab0b486eaa391d1d59367
 ---
 
 # Game rules (prototype)
@@ -48,7 +48,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Resources | wood, stone, gold (`Holz`, `Stein`, `Gold`) |
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
-| Victory point | 1 wood + 2 stone + 1 gold |
+| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from |

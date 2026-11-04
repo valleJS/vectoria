@@ -28,7 +28,9 @@ export const STARTING_RESOURCES: Resources = { wood: 2, stone: 2, gold: 2 };
 /** Troops come in batches; one batch costs this. */
 export const TROOP_BATCH_SIZE = 10;
 export const TROOP_BATCH_COST: Resources = { wood: 1, stone: 0, gold: 1 };
-export const VICTORY_POINT_COST: Resources = { wood: 1, stone: 2, gold: 1 };
+/** Price of the first victory point; each further one costs 1 more of one resource, in turn. */
+export const VICTORY_POINT_BASE_COST: Resources = { wood: 1, stone: 2, gold: 1 };
+export const VICTORY_POINT_STEP_ORDER: readonly ResourceType[] = ['stone', 'wood', 'gold'];
 
 /** Travelling the full map width (along land) takes this many gameday hours. */
 export const CROSS_MAP_HOURS = 10;
@@ -146,6 +148,29 @@ export function battleLosses(
 /** Resources a gathering party of `troops` brings back. */
 export function gatherYield(troops: number): number {
   return Math.floor((troops * GATHER_YIELD_PER_100_TROOPS) / 100);
+}
+
+/**
+ * Price of the next victory point for a player who owns `owned`: the base cost plus `owned`
+ * single steps spread over `VICTORY_POINT_STEP_ORDER` (2nd VP +1 stone, 3rd +1 wood, 4th +1 gold, …).
+ */
+export function victoryPointCost(owned: number): Resources {
+  const cost = { ...VICTORY_POINT_BASE_COST };
+  const steps = VICTORY_POINT_STEP_ORDER.length;
+  VICTORY_POINT_STEP_ORDER.forEach((r, i) => {
+    cost[r] += Math.floor((owned + steps - 1 - i) / steps);
+  });
+  return cost;
+}
+
+/** Total price of the next `count` victory points for a player who owns `owned`. */
+export function victoryPointsCost(owned: number, count: number): Resources {
+  const total: Resources = { wood: 0, stone: 0, gold: 0 };
+  for (let i = 0; i < count; i++) {
+    const cost = victoryPointCost(owned + i);
+    for (const r of RESOURCES) total[r] += cost[r];
+  }
+  return total;
 }
 
 export function canAfford(have: Resources, cost: Resources, times = 1): boolean {

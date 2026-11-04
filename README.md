@@ -14,7 +14,8 @@ Live: <https://vectoria.vgies.de>
 - **Ressourcen:** Holz, Stein und Gold. Zu Beginn jedes Gamedays bekommt jede:r von jeder
   Ressource 1. Für die gewählte **Basisaktivität** gibt es stattdessen 3. Eine neue Wahl gilt ab
   dem nächsten Gameday.
-- **Kaufen:** 10 Truppen kosten 1 Holz + 1 Gold, ein Siegpunkt kostet 1 Holz + 2 Stein + 1 Gold.
+- **Kaufen:** 10 Truppen kosten 1 Holz + 1 Gold, der erste Siegpunkt kostet 1 Holz + 2 Stein + 1 Gold, jeder
+  weitere 1 Ressource mehr (abwechselnd Stein, Holz, Gold) – der zehnte also 4 Holz + 5 Stein + 4 Gold.
 - **Truppen schicken:** an Ressourcenvorkommen (100 Truppen bauen 10 Ressourcen pro Gameday ab), zu
   Truhen, Ruinen oder gegnerischen Burgen. Einmal quer über die Karte dauert es etwa 10
   Spielstunden. Unterwegs lassen sich Truppen jederzeit zurückrufen oder umleiten.

@@ -19,7 +19,7 @@ import {
   STARTING_TROOPS,
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
-  VICTORY_POINT_COST,
+  VICTORY_POINT_BASE_COST,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { compassRose, dataUrl } from '../art/svg';
@@ -126,7 +126,9 @@ const CHAPTERS: Chapter[] = [
           gewinnt. Beendet der Admin das Spiel vorher, gewinnt, wer die meisten hat.
         </P>
         <P>
-          Siegpunkte kauft man in der eigenen Burg für {formatResources(VICTORY_POINT_COST)}. Sie
+          Siegpunkte kauft man in der eigenen Burg. Der erste kostet{' '}
+          {formatResources(VICTORY_POINT_BASE_COST)}, jeder weitere 1 Ressource mehr als der vorige
+          — abwechselnd Stein, Holz, Gold. Der aktuelle Preis steht im Laden deiner Burg. Siegpunkte
           können nie gestohlen werden — Ressourcen und Truppen dagegen schon.
         </P>
         <P>
