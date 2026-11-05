@@ -132,9 +132,13 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
               : label}
         </span>
       </Tip>
-      <RoutedBadge view={view} compact={compact} />
-      {compact && <RuleChangesButton compact />}
-      {compact && <HandbookButton />}
+      {!compact && <RoutedBadge view={view} compact={false} />}
+      {compact && (
+        <span className="flex shrink-0 items-center gap-1">
+          <RuleChangesButton compact />
+          <HandbookButton />
+        </span>
+      )}
     </header>
   );
 }
@@ -148,9 +152,14 @@ function RoutedBadge({ view, compact }: { view: GameView; compact: boolean }) {
   const detail = `Burg gefallen — noch ${away} Truppen auf dem Rückzug`;
   return (
     <Tip label={detail}>
-      <span className="shrink-0 animate-pulse border-2 border-seal bg-parchment px-2 py-0.5 text-xs font-bold tracking-wider text-seal uppercase">
+      {/* Top bar: may shrink and truncate. Phone banner: full detail, wrapping. */}
+      <span
+        className={`pointer-events-auto animate-pulse border-2 border-seal bg-parchment px-2 py-0.5 text-xs font-bold tracking-wider text-seal uppercase ${
+          compact ? 'max-w-full text-center' : 'min-w-0 truncate'
+        }`}
+      >
         Handlungsunfähig
-        {!compact && <span className="ml-2 font-normal tracking-normal normal-case">{detail}</span>}
+        <span className="ml-2 font-normal tracking-normal normal-case">{detail}</span>
       </span>
     </Tip>
   );
@@ -328,7 +337,8 @@ function OutpostBase({ view, base }: { view: GameView; base: BaseInfo }) {
     <>
       <BaseStats view={view} base={base} />
       <p className="mt-1 text-xs text-ink-soft">
-        Ausgeben lässt sich nur, was in der Basis lagert.
+        Ausgeben lässt sich nur, was in der Basis lagert. Das Lager hier bringt die Karawane nachts
+        heim.
       </p>
       <div className="mt-1.5 flex gap-1.5">
         <Button className="flex-1 px-1" onClick={() => select({ kind: 'outpost', id: base.id! })}>
@@ -903,11 +913,11 @@ function CompactHud({ view }: { view: GameView }) {
     <div className="pointer-events-none absolute inset-0 flex flex-col">
       <TopBar view={view} compact />
       <div className="relative min-h-0 flex-1">
-        {night && !nightDismissed && (
-          <div className="absolute inset-x-2 top-2 flex justify-center">
-            <NightBanner onClose={() => setNightDismissed(true)} />
-          </div>
-        )}
+        {/* Banners sit under the top bar, never in it: the menu buttons there must stay reachable. */}
+        <div className="absolute inset-x-2 top-2 flex flex-col items-center gap-1.5">
+          <RoutedBadge view={view} compact />
+          {night && !nightDismissed && <NightBanner onClose={() => setNightDismissed(true)} />}
+        </div>
         <Notice className="top-2" />
         <div className="absolute inset-x-2 bottom-2 flex flex-col items-center">
           {!tab && <EndBanner view={view} />}

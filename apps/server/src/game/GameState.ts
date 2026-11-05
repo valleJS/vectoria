@@ -12,6 +12,7 @@ import {
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
+  OUTPOST_DAILY_INCOME,
   drawCard,
   emptyResources,
   findPath,
@@ -369,12 +370,11 @@ export class GameState {
     const speed = (hasResources(cargo) ? LOADED_SPEED : 1) * this.marchSpeed(player);
     const destination = this.destination(player, base.position, target, forcedMarch, speed, sea);
     this.checkChestTroops(target, troops);
+    // Stock moves between own bases only with the nightly caravan (`startGameday`).
     if (hasResources(cargo)) {
-      if (!destination.ownBase) {
-        throw new RuleError('Ressourcen lassen sich nur zu eigenen Burgen bringen.');
-      }
-      if (!canAfford(base.resources, cargo))
-        throw new RuleError('So viele Ressourcen lagern dort nicht.');
+      throw new RuleError(
+        'Ressourcen bleiben im Lager — die Karawane bringt sie nachts in die Burg.',
+      );
     }
 
     if (card) {
@@ -1109,19 +1109,48 @@ export class GameState {
     if (convoy.troops <= 0) this.removeArmy(convoy);
   }
 
+  /**
+   * A new gameday (after the night): the overnight caravans bring every outpost's stock into the
+   * home castle, then the daily income is paid there — the activity, the Füllhorn and
+   * `OUTPOST_DAILY_INCOME` per owned outpost.
+   */
   private startGameday(): void {
     this.revision++;
     this.data.gameday++;
     for (const player of this.data.players) {
+      const outposts = this.data.outposts.filter((o) => o.ownerId === player.id);
+      const caravan = emptyResources();
+      for (const outpost of outposts) {
+        addResources(caravan, outpost.resources);
+        outpost.resources = emptyResources();
+      }
+      addResources(player.resources, caravan);
+      if (hasResources(caravan)) {
+        this.addLog(
+          player,
+          `Die Karawane hat über Nacht ${formatResources(caravan)} aus deinen Stützpunkten in die Burg gebracht.`,
+        );
+      }
+
       player.activity = player.pendingActivity ?? player.activity;
       const income = emptyResources();
       const harvest = (player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0;
       if (harvest) player.harvestDays! -= 1;
+      const fromOutposts = outposts.length * OUTPOST_DAILY_INCOME;
       for (const r of RESOURCES) {
-        income[r] = (r === player.activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) + harvest;
+        income[r] =
+          (r === player.activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) +
+          harvest +
+          fromOutposts;
         player.resources[r] += income[r];
       }
-      this.addLog(player, `Gameday ${this.data.gameday} beginnt: +${formatResources(income)}.`);
+      this.addLog(
+        player,
+        `Gameday ${this.data.gameday} beginnt: +${formatResources(income)}` +
+          (outposts.length > 0
+            ? ` (davon +${fromOutposts} je Rohstoff von ${outposts.length} Stützpunkt(en)).`
+            : '.'),
+      );
     }
     this.addFeed('day', `Spieltag ${this.data.gameday} beginnt.`);
     const chestCap = maxChestsOnMap(this.data.players.length);
@@ -1256,6 +1285,17 @@ export class GameState {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
     player.resources[resource] = Math.max(0, player.resources[resource] + amount);
+    this.dirty = true;
+  }
+
+  grantAll(playerId: string, amount: number): void {
+    for (const r of RESOURCES) this.grant(playerId, r, amount);
+  }
+
+  grantTroops(playerId: string, amount: number): void {
+    const player = this.player(playerId);
+    if (!player) throw new RuleError('Unbekannter Spieler.');
+    player.homeTroops = Math.max(0, player.homeTroops + amount);
     this.dirty = true;
   }
 

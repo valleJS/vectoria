@@ -10,6 +10,7 @@ import {
   CROSS_MAP_HOURS,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
+  OUTPOST_DAILY_INCOME,
   FORTIFY_MULTIPLIER,
   GAMEDAY_HOURS,
   GATHER_DURATION_MS,
@@ -177,7 +178,8 @@ const CHAPTERS: Chapter[] = [
         <P>Jeder Spieltag ({GAMEDAY_HOURS} Stunden) beginnt mit:</P>
         <List
           items={[
-            `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität.`,
+            `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität, dazu +${OUTPOST_DAILY_INCOME} jeder Ressource pro eigenem Stützpunkt — alles direkt in die Basis.`,
+            'Über Nacht bringt eine Karawane das ganze Lager deiner Stützpunkte in die Basis.',
             'Die tags zuvor gewählte Basisaktivität tritt in Kraft.',
             `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen auf der Karte.`,
           ]}
@@ -255,13 +257,14 @@ const CHAPTERS: Chapter[] = [
         <P>
           Zwischen den Burgen liegen <b>Ruinen</b>. Wer eine Ruine mit Truppen einnimmt, baut sie
           wieder auf — sie heißt dann „Stützpunkt“ mit deinem Namen. Ein Stützpunkt ist ein
-          vorgeschobenes Lager: Truppen können dort stehen, von dort losziehen und Ressourcen
-          lagern.
+          vorgeschobenes Lager: Truppen können dort stehen und von dort losziehen; was Sammler
+          dorthin bringen, lagert dort. Jeder Stützpunkt bringt täglich +{OUTPOST_DAILY_INCOME}{' '}
+          jeder Ressource direkt in die Basis.
         </P>
         <List
           items={[
-            'Ressourcen im Stützpunkt kannst du nicht ausgeben; bring sie erst heim („Heimholen“).',
-            `Zwischen eigenen Burgen lassen sich beliebig viele Ressourcen mitnehmen — beladen aber nur mit ${formatPercent(LOADED_SPEED)} Tempo.`,
+            'Ressourcen im Stützpunkt kannst du nicht ausgeben. Tagsüber lassen sie sich nicht zwischen deinen Burgen verlagern — über Nacht bringt eine Karawane das ganze Lager in die Basis, am Morgen kannst du es ausgeben.',
+            'Truppen kannst du auch tagsüber abziehen („Heimholen“), die Ressourcen bleiben dann im Stützpunkt zurück.',
             'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort zur Burg um — mit ihrer Ladung.',
             'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
           ]}
@@ -273,7 +276,7 @@ const CHAPTERS: Chapter[] = [
             'Wer einen Stützpunkt erobert, bleibt mit allen überlebenden Truppen als Besatzung dort; der Zug kehrt nicht heim.',
             'Das Bollwerk schützt nur die Basis, nie einen Stützpunkt.',
             'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Absprungpunkt, sonst nichts.',
-            'Ressourcen mitnehmen geht nur zu einer eigenen Burg. Solche Transporte (z. B. „Heimholen“) sind beladen langsamer und können unterwegs überfallen werden.',
+            'Die Karawane braucht keine Truppen und kann nicht überfallen werden: Nachts ruht die Spieluhr. Was bis dahin erobert wird, gehört aber dem Eroberer.',
             'Truppen zu der Burg schicken, in der sie schon stehen, geht nicht.',
             'Fällt ein Stützpunkt, laufen deine Züge, die von dort aufgebrochen sind, später zur Basis statt dorthin zurück.',
           ]}
@@ -424,10 +427,10 @@ const CHAPTERS: Chapter[] = [
     body: () => (
       <>
         <P>
-          Ein Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen — auf dem Heimweg ebenso wie als
-          Transport zwischen eigenen Burgen. Wähle ihn auf der Karte an und schicke Truppen aus
-          einer Burg los oder leite einen Zug im Feld um. Der Treffpunkt wird vorausberechnet —
-          erreicht der Zug sein Ziel vorher, geht es nicht. Beladene Züge laufen nur mit{' '}
+          Ein Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen — etwa auf dem Heimweg vom
+          Vorkommen oder mit Beute. Wähle ihn auf der Karte an und schicke Truppen aus einer Burg
+          los oder leite einen Zug im Feld um. Der Treffpunkt wird vorausberechnet — erreicht der
+          Zug sein Ziel vorher, geht es nicht. Beladene Züge laufen nur mit{' '}
           {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter einzuholen; nach einem
           verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell weiter.
         </P>
@@ -442,9 +445,9 @@ const CHAPTERS: Chapter[] = [
         </P>
         <Details
           items={[
-            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute, Transporte zwischen eigenen Burgen. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
+            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
             'Ausnahme Rückzug: Ist die Burg eines Spielers gefallen, sind alle seine Züge unantastbar, bis alle daheim sind. Ein Überfall, der schon unterwegs ist, geht dann ins Leere.',
-            'Ein ausgeraubter Transport läuft leer und wieder normal schnell zu seinem Ziel weiter.',
+            'Ein ausgeraubter Zug läuft leer und wieder normal schnell zu seinem Ziel weiter.',
             'Gewinnt der Überfall, nimmt der Räuber die ganze Ladung und trägt sie selbst heim — beladen, also langsamer und seinerseits überfallbar.',
             'Der Überfallene zieht danach ohne Ladung weiter, wieder in normalem Tempo und mit seinen Verlusten.',
             'Scheitert der Überfall, fällt der ganze Räuberzug; der Überfallene verliert nur ein Viertel.',

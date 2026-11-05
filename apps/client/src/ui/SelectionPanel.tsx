@@ -5,6 +5,7 @@ import {
   GATHER_DURATION_MS,
   BAREFOOT_SPEED,
   LOADED_SPEED,
+  OUTPOST_DAILY_INCOME,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
@@ -12,13 +13,11 @@ import {
   pathLength,
   planIntercept,
   RESOURCE_NAMES,
-  RESOURCES,
   travelMs,
   type ArmyTarget,
   type ArmyView,
   type GameView,
   type MapData,
-  type Resources,
   type Vec2,
 } from '@vectoria/shared';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -105,7 +104,6 @@ function SendForm({
   position,
   verb,
   bases,
-  allowCargo = false,
   defaultTroops = 50,
   minTroops = 1,
   preview,
@@ -116,8 +114,6 @@ function SendForm({
   verb: string;
   /** Bases the troops may leave from; the nearest one with troops is preselected. */
   bases: BaseInfo[];
-  /** Target is an own base: offer to carry resources along. */
-  allowCargo?: boolean;
   defaultTroops?: number;
   /** Fewer troops than this cannot be sent (e.g. a chest's requirement). */
   minTroops?: number;
@@ -128,7 +124,6 @@ function SendForm({
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
   const [chosen, setTroops] = useState(defaultTroops);
   const [useCard, setUseCard] = useState(true);
-  const [cargo, setCargo] = useState<Resources>(emptyResources);
   const activeCard = view.self.activeCard;
   // A Seeweg cannot be used for a raid (the server refuses it): it stays armed for later.
   const cardUsable = activeCard !== null && !(activeCard === 'sea' && target.kind === 'army');
@@ -152,12 +147,6 @@ function SendForm({
   // Troops shrink as armies leave; never offer more than are there.
   const available = base.troops;
   const troops = Math.min(chosen, available);
-  const load = Object.fromEntries(
-    RESOURCES.map((r) => [r, Math.min(cargo[r], base.resources[r])]),
-  ) as Resources;
-  // Carrying resources slows the march (same rule as the server).
-  const loaded = allowCargo && hasResources(load);
-  const arrival = travel !== null && loaded ? Math.round(travel / LOADED_SPEED) : travel;
   const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
 
   const send = () => {
@@ -167,9 +156,9 @@ function SendForm({
       troops,
       target,
       useActiveCard: withCard,
-      cargo: allowCargo ? load : emptyResources(),
+      // Stock moves between bases only with the nightly caravan.
+      cargo: emptyResources(),
     });
-    setCargo(emptyResources());
   };
 
   return (
@@ -234,32 +223,6 @@ function SendForm({
           Alle
         </Button>
       </div>
-      {allowCargo && hasResources(base.resources) && (
-        <div>
-          <div className="text-ink-soft">Mitnehmen:</div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {RESOURCES.map((r) => (
-              <Label key={r} className="gap-1">
-                <ResourceIcon resource={r} size={16} title={RESOURCE_NAMES[r]} />
-                <Input
-                  type="number"
-                  min={0}
-                  max={base.resources[r]}
-                  value={load[r]}
-                  onChange={(e) =>
-                    setCargo({ ...cargo, [r]: Math.max(0, Math.floor(Number(e.target.value))) })
-                  }
-                  className="h-7 w-12 px-1.5 tabular-nums"
-                  aria-label={RESOURCE_NAMES[r]}
-                />
-              </Label>
-            ))}
-            <Button size="sm" onClick={() => setCargo({ ...base.resources })}>
-              Alles
-            </Button>
-          </div>
-        </div>
-      )}
       {activeCard && cardUsable && (
         <Tip label={CARDS[activeCard].description}>
           <Label className="gap-1.5 leading-snug">
@@ -281,7 +244,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${loaded ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(travel)}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -544,7 +507,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             outposts.length > 0 && (
               <>
                 <p className="mt-1 text-xs text-ink-soft">
-                  Nur Ressourcen in der Burg sind sicher und können ausgegeben werden.
+                  Truppen heimholen geht jederzeit, Ressourcen bleiben im Stützpunkt. Die Karawane
+                  bringt sie nachts in die Burg.
                 </p>
                 <SendForm
                   key={selection.id}
@@ -553,7 +517,6 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
                   position={player.castle}
                   verb="Heimholen"
                   bases={outposts}
-                  allowCargo
                 />
               </>
             )
@@ -594,7 +557,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
           <p className="mt-1 text-xs text-ink-soft">
             {own
-              ? 'Truppen und Ressourcen lassen sich hier sammeln. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.'
+              ? `Bringt täglich +${OUTPOST_DAILY_INCOME} jedes Rohstoffs in die Burg. Das Lager zieht nachts per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.`
               : outpost.ownerId
                 ? 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'
                 : 'Wer die Ruine einnimmt, baut sie als eigenen Stützpunkt wieder auf.'}
@@ -606,7 +569,6 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             position={outpost.position}
             verb={own ? 'Verlegen' : outpost.ownerId ? 'Angreifen' : 'Einnehmen'}
             bases={bases.filter((b) => b.id !== outpost.id)}
-            allowCargo={own}
           />
         </>
       );

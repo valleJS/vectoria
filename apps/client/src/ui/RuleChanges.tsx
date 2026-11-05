@@ -5,6 +5,7 @@ import {
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
   SPOT_NEAR_HOURS,
+  OUTPOST_DAILY_INCOME,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,21 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'outpost-income-night-caravan',
+    date: '2026-11-05',
+    title: 'Stützpunkte: Einkommen und Nachtkarawane',
+    body: (
+      <>
+        Jeder eigene Stützpunkt bringt zu Beginn jedes Spieltags{' '}
+        <b>+{OUTPOST_DAILY_INCOME} Holz, Stein und Gold</b> direkt in deine Basis. Ressourcen lassen
+        sich <b>tagsüber nicht mehr</b> zwischen deinen Burgen verlagern. Dafür bringt{' '}
+        <b>über Nacht eine Karawane</b> das ganze Lager aller Stützpunkte in die Basis, am Morgen
+        kannst du es ausgeben. Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann
+        im Stützpunkt. Sammler bringen ihre Ladung wie bisher zu ihrer Burg.
+      </>
+    ),
+  },
   {
     id: 'spots-min-distance',
     date: '2026-11-05',

@@ -6,10 +6,10 @@ import {
   type AdminState,
   type ResourceType,
 } from '@vectoria/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
-import { OnlineDot } from './icons';
+import { OnlineDot, ResourceIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
 import { Input } from '@/components/ui/input';
 import {
@@ -35,6 +35,31 @@ function storedToken(): string {
   } catch {
     return '';
   }
+}
+
+/** A value with − and + buttons that change it by `step`. */
+function AdjustRow({
+  label,
+  step,
+  onAdjust,
+}: {
+  label: ReactNode;
+  step: number;
+  onAdjust: (amount: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0">{label}</span>
+      <span className="flex shrink-0 gap-1">
+        <Button size="sm" className="min-w-11" onClick={() => onAdjust(-step)}>
+          −{step}
+        </Button>
+        <Button size="sm" className="min-w-11" onClick={() => onAdjust(step)}>
+          +{step}
+        </Button>
+      </span>
+    </div>
+  );
 }
 
 /** Admin panel at `/?admin`: close registration, control the clock, manage players. */
@@ -117,9 +142,9 @@ export function AdminPanel() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl space-y-3 overflow-y-auto p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold italic">Vectoria · Admin</h1>
+    <div className="mx-auto h-full max-w-5xl space-y-3 overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold italic sm:text-2xl">Vectoria · Admin</h1>
         <Button
           onClick={() => {
             localStorage.removeItem(TOKEN_KEY);
@@ -208,7 +233,7 @@ export function AdminPanel() {
           </Panel>
 
           <Panel title="Spieler:innen">
-            <div className="mb-2 flex items-center gap-2 text-ink-soft">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-ink-soft">
               Gutschrift:
               <Input
                 type="number"
@@ -273,69 +298,75 @@ export function AdminPanel() {
                 </Button>
               </div>
             )}
-            <table className="w-full text-left tabular-nums">
-              <thead className="text-ink-soft">
-                <tr>
-                  <th className="py-1">Name</th>
-                  <th>E-Mail</th>
-                  <th>SP</th>
-                  <th>Truppen (Burg / weg)</th>
-                  <th>Ressourcen</th>
-                  <th>Karten</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.players.map((p) => (
-                  <tr key={p.id} className="border-t border-ink/20">
-                    <td className="py-1">
-                      <span className="inline-flex items-center gap-1.5">
-                        <OnlineDot online={p.online} />
-                        {p.name}
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {state.players.map((p) => (
+                <div key={p.id} className="space-y-1.5 border border-ink/30 p-2 tabular-nums">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 font-bold">
+                      <OnlineDot online={p.online} />
+                      <span className="truncate">{p.name}</span>
+                    </span>
+                    <span className="shrink-0">{p.victoryPoints} SP</span>
+                  </div>
+                  <Tip label="E-Mail für den Login ändern">
+                    <Button
+                      variant="link"
+                      className="max-w-full truncate text-left text-xs decoration-dotted"
+                      onClick={() => {
+                        const email = window.prompt(`Login-E-Mail für ${p.name}:`, p.email ?? '');
+                        if (email) run({ action: 'setEmail', playerId: p.id, email });
+                      }}
+                    >
+                      {p.email ?? 'keine E-Mail — setzen'}
+                    </Button>
+                  </Tip>
+                  <AdjustRow
+                    label={
+                      <>
+                        Truppen <b>{p.homeTroops}</b>
+                        <span className="text-ink-soft"> · {p.troopsAway} unterwegs</span>
+                      </>
+                    }
+                    step={10}
+                    onAdjust={(amount) => run({ action: 'grantTroops', playerId: p.id, amount })}
+                  />
+                  <AdjustRow
+                    label={
+                      <span className="inline-flex flex-wrap items-center gap-x-2">
+                        {RESOURCES.map((r) => (
+                          <span key={r} className="inline-flex items-center gap-0.5">
+                            <ResourceIcon resource={r} size={16} title={RESOURCE_NAMES[r]} />
+                            <b>{p.resources[r]}</b>
+                          </span>
+                        ))}
                       </span>
-                    </td>
-                    <td className="text-xs">
-                      <Tip label="E-Mail für den Login ändern">
-                        <Button
-                          variant="link"
-                          className="text-left text-xs decoration-dotted"
-                          onClick={() => {
-                            const email = window.prompt(
-                              `Login-E-Mail für ${p.name}:`,
-                              p.email ?? '',
-                            );
-                            if (email) run({ action: 'setEmail', playerId: p.id, email });
-                          }}
-                        >
-                          {p.email ?? 'keine — setzen'}
-                        </Button>
-                      </Tip>
-                    </td>
-                    <td>{p.victoryPoints}</td>
-                    <td>
-                      {p.homeTroops} / {p.troopsAway}
-                    </td>
-                    <td>{RESOURCES.map((r) => p.resources[r]).join(' / ')}</td>
-                    <td className="text-xs">
-                      {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
-                    </td>
-                    <td className="space-x-1 text-right">
-                      <Button onClick={() => run({ action: 'grant', playerId: p.id, ...grant })}>
-                        +{grant.amount} {RESOURCE_NAMES[grant.resource]}
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={() =>
-                          run({ action: 'kick', playerId: p.id }, `${p.name} entfernen?`)
-                        }
-                      >
-                        Entfernen
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    }
+                    step={1}
+                    onAdjust={(amount) => run({ action: 'grantAll', playerId: p.id, amount })}
+                  />
+                  <div className="text-xs text-ink-soft">
+                    Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    <Button
+                      size="sm"
+                      onClick={() => run({ action: 'grant', playerId: p.id, ...grant })}
+                    >
+                      +{grant.amount} {RESOURCE_NAMES[grant.resource]}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() =>
+                        run({ action: 'kick', playerId: p.id }, `${p.name} entfernen?`)
+                      }
+                    >
+                      Entfernen
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Panel>
         </>
       )}

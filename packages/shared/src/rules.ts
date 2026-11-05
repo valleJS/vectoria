@@ -21,6 +21,11 @@ export const GAMEDAY_MS = GAMEDAY_HOURS * HOUR_MS;
 /** Daily payout: every resource +1, the chosen base activity pays this amount instead. */
 export const DAILY_BASE_INCOME = 1;
 export const DAILY_ACTIVITY_INCOME = 3;
+/**
+ * Each owned outpost adds this much of every resource to the home castle at each gameday start
+ * (straight into the castle, not the outpost's own stock).
+ */
+export const OUTPOST_DAILY_INCOME = 1;
 
 export const STARTING_TROOPS = 50;
 export const STARTING_RESOURCES: Resources = { wood: 2, stone: 2, gold: 2 };

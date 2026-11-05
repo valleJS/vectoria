@@ -41,8 +41,10 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - After downtime the server catches the clock up (`calendar.gameTimeBetween`); only one daily
   payout is granted for missed days.
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
-  (always). Then: pending activity becomes active, every player gets 1 of each resource and 3 of
-  the active one, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
+  (always). Then: the **night caravan** moves every owned outpost's whole stock into the home
+  castle (instant, troop-free, not raidable — the clock is frozen at night), pending activity
+  becomes active, every player gets 1 of each resource and 3 of the active one plus
+  `OUTPOST_DAILY_INCOME` (1) of each per owned outpost, all straight into the home castle, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
   (one per player, at least `CHESTS_PER_GAMEDAY`).
 
 ## Economy
@@ -53,7 +55,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
-| Spending | only resources stored in the home castle; outpost stock must be carried home first |
+| Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (gameday start) |
 | Start | 50 troops, 2 of each resource |
 | Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`, no spot within `SPOT_NEAR_HOURS` of any castle (hard rule: candidates pre-filtered on the grid, heavy penalty on real routes, polish never breaks it, a layout keeping it always wins); the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
@@ -68,8 +70,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving
   at an own outpost deposits troops and cargo; at a foreign one (or a ruin) it is an assault.
-- Moving troops between own bases may carry `cargo` (no capacity limit). Cargo is only allowed
-  when the target is an own base.
+- Moving troops between own bases never carries `cargo`: `sendArmy` refuses any cargo, so stock
+  is not moved between bases by day (troops withdrawn from an outpost leave it behind). Gatherers
+  still deposit their yield at the base they left from.
 
 ## Armies
 
@@ -85,8 +88,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
 - Heading home with resource cargo is slower: `startReturn` passes `LOADED_SPEED` (0.75)
   to `travelMs`. Chest bearers and empty armies march at normal speed; a convoy robbed of all
-  cargo is re-timed from where it stands and walks on at normal speed. Transfers between own
-  bases with cargo (`sendArmy`, e.g. "Heimholen") march at `LOADED_SPEED` too.
+  cargo is re-timed from where it stands and walks on at normal speed.
 - Everything is visible to everyone. Fog/stealth null out fields in `GameState.armyView`.
 
 ## Combat
@@ -108,14 +110,14 @@ in the field → no lockout. The client greys out every action (`ui/Routed.tsx` 
 and shows a "Handlungsunfähig" stamp in the top bar.
 
 **Raids**: any marching army carrying resource cargo (`isRaidable` in `shared/entities.ts`: home
-from a spot or a win, or a transfer between own bases) can be ambushed — except while its owner
-is routed (all their armies are immune; raids already underway go empty). A robbed transfer walks
+from a spot or a win; base-to-base transfers no longer exist) can be ambushed — except while its owner
+is routed (all their armies are immune; raids already underway go empty). A robbed army walks
 on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
 A convoy cannot raid in turn: returning armies and armies with cargo cannot be redirected
-(`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen,
+(`redirectArmy`), and `sendArmy` takes no cargo at all. VP are never stolen,
 and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and
 always keeps at least one troop (`raid`), so the chest always gets home.
 

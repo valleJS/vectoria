@@ -200,7 +200,11 @@ export type AdminAction =
   /** Swaps the two players' home castle positions; everything else stays with each player. */
   | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
-  | { action: 'grant'; playerId: string; resource: ResourceType; amount: number };
+  | { action: 'grant'; playerId: string; resource: ResourceType; amount: number }
+  /** Adds `amount` (may be negative) of every resource to the home castle. */
+  | { action: 'grantAll'; playerId: string; amount: number }
+  /** Adds `amount` (may be negative) troops to the home castle. */
+  | { action: 'grantTroops'; playerId: string; amount: number };
 
 // ---- Codec ----
 
@@ -374,6 +378,13 @@ export function parseAdminAction(value: unknown): AdminAction | null {
             resource: msg.resource,
             amount: msg.amount as number,
           }
+        : null;
+    case 'grantAll':
+    case 'grantTroops':
+      return isId(msg.playerId) &&
+        Number.isInteger(msg.amount) &&
+        Math.abs(msg.amount as number) <= 10_000
+        ? { action: msg.action, playerId: msg.playerId, amount: msg.amount as number }
         : null;
     default:
       return null;
