@@ -80,8 +80,8 @@ const GATHER_RING = 28;
 const GATHER_RING_STEP = 20;
 const GATHER_BADGE = 9;
 const GATHER_START_ANGLE = -Math.PI / 3;
-/** Height (glyph units) of the cargo tag on an army carrying resources home. */
-const CARGO_TAG = 10;
+/** Diameter (glyph units) of the cargo roundel on an army or wagon carrying resources home. */
+const CARGO_SIZE = 15;
 /** Foam rings behind a ship: one every WAKE_EVERY_S, fading over WAKE_LIFE_S. */
 const WAKE_EVERY_S = 0.3;
 const WAKE_LIFE_S = 1.8;
@@ -589,7 +589,7 @@ export class GameRenderer {
 
   /**
    * The own night caravan: one wagon per outpost it set out from, on the land route to the home
-   * castle, with its load as a cargo tag. Rebuilt only when the trip (or the colour) changes.
+   * castle, with its load beside it (`cargoPile`). Rebuilt only when the trip (or the colour) changes.
    */
   private drawCaravan(view: GameView | null, selfId: string | null): void {
     const trip = view?.self.caravanTrip ?? null;
@@ -621,9 +621,9 @@ export class GameRenderer {
         (CARAVAN_LANTERN.y + art.pad - art.anchor.y) * k,
       );
       figure.addChild(light, sprite);
-      const tag = this.cargoTag(wagon.load, u);
-      tag.position.set(10 * u, -26 * u);
-      container.addChild(tag, figure);
+      const tag = this.cargoPile(wagon.load, u);
+      tag.position.set(14 * u, -22 * u);
+      container.addChild(figure, tag);
       this.armyLayer.addChild(container);
       this.caravans.push({
         container,
@@ -970,7 +970,7 @@ export class GameRenderer {
         const figure = new Container();
         const plate = new Container();
         const cargo = new Container();
-        container.addChild(cargo, figure, plate);
+        container.addChild(figure, cargo, plate);
         container.position.copyFrom(target);
         const offset = offsets.get(army.id) ?? { x: 0, y: 0 };
         container.pivot.set(-offset.x, -offset.y);
@@ -1408,8 +1408,8 @@ export class GameRenderer {
   }
 
   /**
-   * A parchment tag with the main resource's icon and the total load (beside the soldiers, the
-   * ship or the badge while gathering); a small chest while the army brings one home.
+   * The load beside the soldiers, the tent, the ship or the badge while gathering (`cargoPile`);
+   * a small chest while the army brings one home.
    */
   private drawCargo(sprite: ArmySprite, army: ArmyView, u: number, mode: FigureMode): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
@@ -1419,38 +1419,61 @@ export class GameRenderer {
       sprite.cargo.addChild(chest);
     }
     if (!hasResources(army.cargo)) return;
-    const tag = this.cargoTag(army.cargo, u);
-    // Just off the figure's right edge (tucked behind it): beside the soldiers, on the tent's
-    // right slope, at the ship's stern, or beside a gather shield. The icon sits at the origin.
-    if (mode === 'badge') tag.position.set(10 * u, -6 * u);
-    else if (mode === 'tent') tag.position.set(13 * u, -9 * u);
-    else if (mode === 'ship') tag.position.set(21 * u, -18 * u);
-    else tag.position.set(20 * u, -13 * u);
+    const tag = this.cargoPile(army.cargo, u);
+    // In front of the figure at its upper right shoulder, like a badge: beside the soldiers, at
+    // the tent's right slope, over the ship's stern, or beside a gather shield.
+    if (mode === 'badge') tag.position.set(11 * u, -8 * u);
+    else if (mode === 'tent') tag.position.set(15 * u, -15 * u);
+    else if (mode === 'ship') tag.position.set(21 * u, -24 * u);
+    else tag.position.set(17 * u, -22 * u);
     sprite.cargo.addChild(tag);
   }
 
   /**
-   * A small tag in the nameplate style (parchment, solid ink rim, italic ink figure) with the main
-   * resource and the total load: tells a convoy at a glance without outweighing the troops. The
-   * icon sits at (0, 0).
+   * What a convoy carries, as a roundel in the nameplate style (parchment disc, ink rim, a thin
+   * inner ring) centred at (0, 0), holding one icon per resource it has: one centred, two side by
+   * side, three in a triangle. No amounts: the selection panel lists them.
    */
-  private cargoTag(cargo: Resources, u: number): Container {
-    const main = RESOURCES.reduce((a, b) => (cargo[b] > cargo[a] ? b : a));
-    const total = RESOURCES.reduce((sum, r) => sum + cargo[r], 0);
-    const h = CARGO_TAG * u;
-    const tag = new Container();
-    const icon = artSprite(this.art.resources[main], h * 0.78, true);
-    const amount = this.label(String(total), h * 0.72, INK, true);
-    amount.anchor.set(0, 0.5);
-    amount.position.set(h * 0.5, 0.3 * u);
-    const left = -h * 0.55;
-    const right = amount.x + amount.width + h * 0.32;
-    const pill = new Graphics()
-      .roundRect(left, -h / 2, right - left, h, h / 2)
-      .fill(PARCHMENT)
-      .stroke({ width: Math.max(0.7 * u, h * 0.08), color: INK });
-    tag.addChild(pill, icon, amount);
-    return tag;
+  private cargoPile(cargo: Resources, u: number): Container {
+    const r = (CARGO_SIZE / 2) * u;
+    const carried = RESOURCES.filter((res) => cargo[res] > 0);
+    const roundel = new Container();
+    roundel.addChild(
+      new Graphics()
+        .circle(0, 0, r)
+        .fill(PARCHMENT)
+        .stroke({ width: 1.3 * u, color: INK })
+        .circle(0, 0, r - 1.7 * u)
+        .stroke({ width: 0.5 * u, color: INK, alpha: 0.45 }),
+    );
+    const layouts: Record<number, { size: number; at: [number, number][] }> = {
+      1: { size: 1.25, at: [[0, 0]] },
+      2: {
+        size: 0.95,
+        at: [
+          [-0.4, 0.04],
+          [0.4, -0.04],
+        ],
+      },
+      3: {
+        size: 0.78,
+        at: [
+          [0, -0.38],
+          [-0.4, 0.3],
+          [0.4, 0.3],
+        ],
+      },
+    };
+    const layout = layouts[carried.length];
+    if (layout) {
+      carried.forEach((res, i) => {
+        const [x, y] = layout.at[i]!;
+        const icon = artSprite(this.art.cargo[res], layout.size * r, true);
+        icon.position.set(x * r, y * r);
+        roundel.addChild(icon);
+      });
+    }
+    return roundel;
   }
 
   /**

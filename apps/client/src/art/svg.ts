@@ -216,6 +216,25 @@ export function resourceIcon(resource: ResourceType): string {
   return svg(64, 64, RESOURCE_BODY[resource]);
 }
 
+const CARGO_BODY: Record<ResourceType, string> = {
+  wood: `${log(8, 42, 38, 10, -4, INK)}${log(14, 25, 34, 9, -4, INK)}`,
+  stone: stoneChunk(32, 34, 50, 2),
+  gold: goldNugget(32, 34, 50, 1),
+};
+
+/**
+ * Load an army carries home, 64×64 around its centre: a bundle of two logs, a stone chunk, a gold
+ * nugget — no glints. The map shows it inside the cargo roundel.
+ */
+export function cargoPiece(resource: ResourceType): Art {
+  return {
+    svg: svg(64, 64, CARGO_BODY[resource]),
+    width: 64,
+    height: 64,
+    anchor: { x: 32, y: 32 },
+  };
+}
+
 /** Where the gold mine (`deposit('gold')`) catches the light, art px: the map twinkles there. */
 export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[] = [
   { x: 20, y: 47, size: 9 },
