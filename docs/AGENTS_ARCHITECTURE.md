@@ -3,10 +3,10 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: eb9c095bb8610c8cc62d42a3d598efe67ea92939
+sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
 ---
 
 # Architecture
@@ -70,7 +70,7 @@ close code `4001` (client drops its token and shows the join screen).
 | --------- | ---- | ------- |
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
-| C→S | `buy` | Troop batches or victory points |
+| C→S | `buy` | Troop batches or victory points (at most `VICTORY_POINTS_PER_GAMEDAY` per gameday) |
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
