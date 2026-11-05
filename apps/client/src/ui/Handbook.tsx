@@ -36,7 +36,6 @@ import {
   type Resources,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
-import { compassRose, dataUrl } from '../art/svg';
 import { formatGameDuration, formatPercent } from '../game/format';
 import { HERALDRY } from '../theme/tokens';
 import { useGameStore } from '../state/store';
@@ -65,7 +64,6 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeftIcon, ChevronRightIcon, MenuIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
-const COMPASS_URL = dataUrl(compassRose());
 const INK = '#3b2a18';
 
 /** Leather-bound book with a gold clasp; the handbook's button. */
@@ -95,9 +93,28 @@ function BookGlyph({ size = 44 }: { size?: number }) {
   );
 }
 
-/** The compass rose as a small picture (chapter icon of the map legend). */
-function CompassGlyph() {
-  return <img src={COMPASS_URL} alt="" className="h-5 w-auto" draggable={false} />;
+/** A folded parchment map with a dotted route (chapter icon of the map legend). */
+function MapGlyph({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M2 5l6.5-2 7 2L22 3v16l-6.5 2-7-2L2 21z"
+        fill="#f6eedb"
+        stroke={INK}
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
+      <path d="M8.5 3v16M15.5 5v16" stroke={INK} strokeWidth={1} opacity=".45" />
+      <path
+        d="M5 16c2-1 3-4 6-4s3-4 7-5"
+        fill="none"
+        stroke="#9e2a1a"
+        strokeWidth={1.4}
+        strokeDasharray="1.6 1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 /** Example colours for the pictures: you, an opponent, a partner. */
@@ -310,7 +327,7 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'map',
     title: 'Die Karte auf einen Blick',
-    icon: <CompassGlyph />,
+    icon: <MapGlyph />,
     body: () => (
       <>
         <P>
@@ -1256,7 +1273,7 @@ function toRoman(n: number): string {
   return out;
 }
 
-/** The open handbook, wherever it was opened from (compass corner or the phone top bar). */
+/** The open handbook, wherever it was opened from (book corner or the phone top bar). */
 export function Handbook() {
   const open = useGameStore((s) => s.handbook);
   const setHandbook = useGameStore((s) => s.setHandbook);
@@ -1307,25 +1324,14 @@ export function HandbookButton() {
   );
 }
 
-/** Bottom-left corner: the compass rose with the handbook beside it; either opens the book. */
+/** Bottom-left corner: the handbook as a book with its name plate. */
 export function HandbookCorner() {
   const setHandbook = useGameStore((s) => s.setHandbook);
-  const open = () => setHandbook(true);
   return (
-    <div className="pointer-events-auto flex items-end gap-1">
-      <Tip label="Handbuch öffnen">
-        <Button
-          variant="plain"
-          onClick={open}
-          aria-label="Handbuch öffnen"
-          className="transition-transform hover:-rotate-6"
-        >
-          <img src={COMPASS_URL} alt="" className="h-24 w-auto" draggable={false} />
-        </Button>
-      </Tip>
+    <div className="pointer-events-auto flex items-end">
       <Button
         variant="plain"
-        onClick={open}
+        onClick={() => setHandbook(true)}
         className="mb-1 flex-col transition-transform hover:-translate-y-1"
       >
         <BookGlyph />

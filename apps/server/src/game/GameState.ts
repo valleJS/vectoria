@@ -1992,15 +1992,12 @@ export class GameState {
     this.dirty = true;
   }
 
-  private grant(playerId: string, resource: ResourceType, amount: number): void {
+  /** Admin: adds `amount` (may be negative, floored at 0) of one resource to the home castle. */
+  grant(playerId: string, resource: ResourceType, amount: number): void {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
     player.resources[resource] = Math.max(0, player.resources[resource] + amount);
     this.dirty = true;
-  }
-
-  grantAll(playerId: string, amount: number): void {
-    for (const r of RESOURCES) this.grant(playerId, r, amount);
   }
 
   grantTroops(playerId: string, amount: number): void {

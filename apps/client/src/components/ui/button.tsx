@@ -19,7 +19,7 @@ const buttonVariants = cva(
         outline: 'border-ink/45 bg-transparent text-ink hover:bg-accent',
         ghost: 'border-transparent bg-transparent text-ink hover:bg-accent',
         link: 'h-auto border-transparent bg-transparent p-0 text-ink-soft underline underline-offset-2 hover:text-seal',
-        /** No chrome: illustrated buttons (compass, book, chest, cards) keep focus ring and states. */
+        /** No chrome: illustrated buttons (book, chest, cards) keep focus ring and states. */
         plain: 'h-auto rounded-none border-transparent bg-transparent p-0 active:translate-y-0',
       },
       size: {
