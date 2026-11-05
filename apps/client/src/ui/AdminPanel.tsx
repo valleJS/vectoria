@@ -3,12 +3,13 @@ import {
   RESOURCE_NAMES,
   RESOURCES,
   type AdminAction,
+  type AdminPlayer,
   type AdminState,
 } from '@vectoria/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
-import { OnlineDot, ResourceIcon } from './icons';
+import { OnlineDot, ResourceIcon, SoldiersIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
 import { Input } from '@/components/ui/input';
 import {
@@ -21,6 +22,8 @@ import {
 
 const TOKEN_KEY = 'vectoria.adminToken';
 const POLL_MS = 2_000;
+/** The admin list has no player colours; troops show in plain ink-brown. */
+const TROOP_COLOR = '#8a7550';
 
 const PHASE_NAMES: Record<AdminState['phase'], string> = {
   registration: 'Anmeldung offen',
@@ -36,27 +39,134 @@ function storedToken(): string {
   }
 }
 
-/** A value with − and + buttons that change it by `step`. */
+/** Steps the −/+ buttons can change a value by; picked once for the whole player list. */
+const STEPS = [1, 10, 100] as const;
+type Step = (typeof STEPS)[number];
+
+/** One value with − and + buttons that change it by `step`; big enough to tap on a phone. */
 function AdjustRow({
+  icon,
   label,
+  value,
+  extra,
   step,
   onAdjust,
 }: {
-  label: ReactNode;
+  icon: ReactNode;
+  label: string;
+  value: number;
+  extra?: ReactNode;
   step: number;
   onAdjust: (amount: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="min-w-0">{label}</span>
+    <div className="flex items-center gap-2">
+      <span className="flex w-6 shrink-0 justify-center">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {label} <b className="tabular-nums">{value}</b>
+        {extra}
+      </span>
       <span className="flex shrink-0 gap-1">
-        <Button size="sm" className="min-w-11" onClick={() => onAdjust(-step)}>
+        <Button
+          size="sm"
+          className="h-9 min-w-12 text-sm sm:h-7 sm:min-w-11 sm:text-xs"
+          disabled={value === 0}
+          aria-label={`${label} −${step}`}
+          onClick={() => onAdjust(-step)}
+        >
           −{step}
         </Button>
-        <Button size="sm" className="min-w-11" onClick={() => onAdjust(step)}>
+        <Button
+          size="sm"
+          className="h-9 min-w-12 text-sm sm:h-7 sm:min-w-11 sm:text-xs"
+          aria-label={`${label} +${step}`}
+          onClick={() => onAdjust(step)}
+        >
           +{step}
         </Button>
       </span>
+    </div>
+  );
+}
+
+/** A small labelled fact for the game status. */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-ink-soft">{label}</dt>
+      <dd className="truncate font-bold">{children}</dd>
+    </div>
+  );
+}
+
+/** One player's card: login email, troops and each resource with its own −/+. */
+function PlayerCard({
+  player: p,
+  step,
+  run,
+}: {
+  player: AdminPlayer;
+  step: Step;
+  run: (action: AdminAction, confirmText?: string) => void;
+}) {
+  return (
+    <div className="space-y-2 border border-ink/30 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-bold">
+          <OnlineDot online={p.online} />
+          <span className="truncate">{p.name}</span>
+        </span>
+        <span className="shrink-0 tabular-nums">{p.victoryPoints} SP</span>
+      </div>
+      <Tip label="E-Mail für den Login ändern">
+        <Button
+          variant="link"
+          className="max-w-full truncate text-left text-xs decoration-dotted"
+          onClick={() => {
+            const email = window.prompt(`Login-E-Mail für ${p.name}:`, p.email ?? '');
+            if (email) run({ action: 'setEmail', playerId: p.id, email });
+          }}
+        >
+          {p.email ?? 'keine E-Mail — setzen'}
+        </Button>
+      </Tip>
+      <div className="space-y-1.5">
+        <AdjustRow
+          icon={<SoldiersIcon color={TROOP_COLOR} size={20} />}
+          label="Truppen"
+          value={p.homeTroops}
+          extra={
+            p.troopsAway > 0 && (
+              <span className="text-xs text-ink-soft"> · {p.troopsAway} unterwegs</span>
+            )
+          }
+          step={step}
+          onAdjust={(amount) => run({ action: 'grantTroops', playerId: p.id, amount })}
+        />
+        {RESOURCES.map((r) => (
+          <AdjustRow
+            key={r}
+            icon={<ResourceIcon resource={r} size={18} />}
+            label={RESOURCE_NAMES[r]}
+            value={p.resources[r]}
+            step={step}
+            onAdjust={(amount) => run({ action: 'grant', playerId: p.id, resource: r, amount })}
+          />
+        ))}
+      </div>
+      <div className="text-xs text-ink-soft">
+        Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
+      </div>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="danger"
+          className="h-9 sm:h-7"
+          onClick={() => run({ action: 'kick', playerId: p.id }, `${p.name} entfernen?`)}
+        >
+          Entfernen
+        </Button>
+      </div>
     </div>
   );
 }
@@ -68,6 +178,7 @@ export function AdminPanel() {
   const [state, setState] = useState<AdminState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [swap, setSwap] = useState<{ a: string; b: string }>({ a: '', b: '' });
+  const [step, setStep] = useState<Step>(1);
 
   useEffect(() => {
     if (!token) return;
@@ -125,7 +236,7 @@ export function AdminPanel() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Admin-Token"
               aria-label="Admin-Token"
-              className="h-7 flex-1"
+              className="h-9 flex-1 sm:h-7"
             />
             <Button type="submit" variant="primary">
               Login
@@ -136,13 +247,24 @@ export function AdminPanel() {
     );
   }
 
+  const running = state?.phase === 'running';
+  const clockText = (clock: AdminState['clock']) =>
+    clock.paused ? 'pausiert' : clock.running ? 'läuft' : 'außerhalb Spielzeit';
+  // Bigger tap targets on phones, the usual compact size from `sm` up.
+  const tap = 'h-10 sm:h-7';
+
   return (
     <div className="mx-auto h-full max-w-5xl space-y-3 overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold italic sm:text-2xl">Vectoria · Admin</h1>
+        <h1 className="truncate text-xl font-bold italic sm:text-2xl">Vectoria · Admin</h1>
         <Button
+          className={tap}
           onClick={() => {
-            localStorage.removeItem(TOKEN_KEY);
+            try {
+              localStorage.removeItem(TOKEN_KEY);
+            } catch {
+              // Nothing stored.
+            }
             setToken('');
             setState(null);
           }}
@@ -155,27 +277,35 @@ export function AdminPanel() {
       {state && (
         <>
           <Panel title="Spiel">
-            <div className="text-ink">
-              Phase: <b>{PHASE_NAMES[state.phase]}</b> · {state.players.length} Spieler:innen
-              {state.mapSize && ` · Karte ${state.mapSize}×${state.mapSize}`}
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-ink sm:grid-cols-4">
+              <Fact label="Phase">{PHASE_NAMES[state.phase]}</Fact>
+              <Fact label="Spieler:innen">{state.players.length}</Fact>
+              {state.mapSize && (
+                <Fact label="Karte">
+                  {state.mapSize}×{state.mapSize}
+                </Fact>
+              )}
               {state.phase !== 'registration' && (
                 <>
-                  {' '}
-                  · Gameday {state.clock.gameday} · Uhr {formatGameDuration(state.clock.clock)} ·{' '}
-                  {state.clock.paused
-                    ? 'pausiert'
-                    : state.clock.running
-                      ? 'läuft'
-                      : 'außerhalb Spielzeit'}{' '}
-                  · Modus {state.clock.mode}, {state.clock.timeScale}× · {state.armies} Züge ·{' '}
-                  {state.chests} Truhen · {state.outposts} Stützpunkte
+                  <Fact label="Gameday">{state.clock.gameday}</Fact>
+                  <Fact label="Uhr">
+                    {formatGameDuration(state.clock.clock)} · {clockText(state.clock)}
+                  </Fact>
+                  <Fact label="Modus">
+                    {state.clock.mode}, {state.clock.timeScale}×
+                  </Fact>
+                  <Fact label="Züge · Truhen">
+                    {state.armies} · {state.chests}
+                  </Fact>
+                  <Fact label="Stützpunkte">{state.outposts}</Fact>
                 </>
               )}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
+            </dl>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               {state.phase === 'registration' && (
                 <Button
                   variant="primary"
+                  className={`col-span-2 ${tap}`}
                   disabled={state.players.length === 0}
                   onClick={() =>
                     run(
@@ -187,22 +317,29 @@ export function AdminPanel() {
                   Anmeldung schließen & starten
                 </Button>
               )}
-              {state.phase === 'running' && (
+              {running && (
                 <>
                   {state.clock.paused ? (
-                    <Button onClick={() => run({ action: 'resume' })}>Fortsetzen</Button>
+                    <Button className={tap} onClick={() => run({ action: 'resume' })}>
+                      Fortsetzen
+                    </Button>
                   ) : (
-                    <Button onClick={() => run({ action: 'pause' })}>Pausieren</Button>
+                    <Button className={tap} onClick={() => run({ action: 'pause' })}>
+                      Pausieren
+                    </Button>
                   )}
-                  <Button onClick={() => run({ action: 'advanceClock', hours: 1 })}>
+                  <Button className={tap} onClick={() => run({ action: 'advanceClock', hours: 1 })}>
                     +1 h Spielzeit
                   </Button>
-                  <Button onClick={() => run({ action: 'newGameday' })}>
-                    Neuer Gameday (Auszahlung)
+                  <Button className={tap} onClick={() => run({ action: 'newGameday' })}>
+                    Neuer Gameday
                   </Button>
-                  <Button onClick={() => run({ action: 'spawnChest' })}>Truhe spawnen</Button>
+                  <Button className={tap} onClick={() => run({ action: 'spawnChest' })}>
+                    Truhe spawnen
+                  </Button>
                   <Button
                     variant="danger"
+                    className={tap}
                     onClick={() =>
                       run({ action: 'end' }, 'Spiel jetzt beenden? Höchste SP gewinnt.')
                     }
@@ -214,6 +351,7 @@ export function AdminPanel() {
               {state.phase !== 'registration' && (
                 <Button
                   variant="danger"
+                  className={tap}
                   onClick={() =>
                     run(
                       { action: 'reset' },
@@ -227,19 +365,22 @@ export function AdminPanel() {
             </div>
           </Panel>
 
-          <Panel title="Spieler:innen">
-            {state.phase === 'running' && state.players.length > 1 && (
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-ink-soft">
-                Hauptburgen tauschen:
+          {running && state.players.length > 1 && (
+            <Panel title="Hauptburgen tauschen">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:flex-wrap">
                 {(['a', 'b'] as const).map((side, i) => (
                   <span key={side} className="contents">
-                    {i === 1 && <span aria-hidden>⇄</span>}
+                    {i === 1 && (
+                      <span aria-hidden className="text-center">
+                        ⇄
+                      </span>
+                    )}
                     <Select
                       value={swap[side] || undefined}
                       onValueChange={(value) => setSwap({ ...swap, [side]: value })}
                     >
                       <SelectTrigger
-                        className="h-7 w-40 text-ink"
+                        className="h-10 w-full min-w-0 text-ink sm:h-7 sm:w-44"
                         aria-label={i === 0 ? 'Erste Burg' : 'Zweite Burg'}
                       >
                         <SelectValue placeholder="— wählen —" />
@@ -255,6 +396,7 @@ export function AdminPanel() {
                   </span>
                 ))}
                 <Button
+                  className={`col-span-3 ${tap}`}
                   disabled={!swap.a || !swap.b || swap.a === swap.b}
                   onClick={() => {
                     const name = (id: string) => state.players.find((p) => p.id === id)?.name;
@@ -267,70 +409,36 @@ export function AdminPanel() {
                   Tauschen
                 </Button>
               </div>
-            )}
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {state.players.map((p) => (
-                <div key={p.id} className="space-y-1.5 border border-ink/30 p-2 tabular-nums">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex min-w-0 items-center gap-1.5 font-bold">
-                      <OnlineDot online={p.online} />
-                      <span className="truncate">{p.name}</span>
-                    </span>
-                    <span className="shrink-0">{p.victoryPoints} SP</span>
-                  </div>
-                  <Tip label="E-Mail für den Login ändern">
-                    <Button
-                      variant="link"
-                      className="max-w-full truncate text-left text-xs decoration-dotted"
-                      onClick={() => {
-                        const email = window.prompt(`Login-E-Mail für ${p.name}:`, p.email ?? '');
-                        if (email) run({ action: 'setEmail', playerId: p.id, email });
-                      }}
-                    >
-                      {p.email ?? 'keine E-Mail — setzen'}
-                    </Button>
-                  </Tip>
-                  <AdjustRow
-                    label={
-                      <>
-                        Truppen <b>{p.homeTroops}</b>
-                        <span className="text-ink-soft"> · {p.troopsAway} unterwegs</span>
-                      </>
-                    }
-                    step={10}
-                    onAdjust={(amount) => run({ action: 'grantTroops', playerId: p.id, amount })}
-                  />
-                  <AdjustRow
-                    label={
-                      <span className="inline-flex flex-wrap items-center gap-x-2">
-                        {RESOURCES.map((r) => (
-                          <span key={r} className="inline-flex items-center gap-0.5">
-                            <ResourceIcon resource={r} size={16} title={RESOURCE_NAMES[r]} />
-                            <b>{p.resources[r]}</b>
-                          </span>
-                        ))}
-                      </span>
-                    }
-                    step={1}
-                    onAdjust={(amount) => run({ action: 'grantAll', playerId: p.id, amount })}
-                  />
-                  <div className="text-xs text-ink-soft">
-                    Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() =>
-                        run({ action: 'kick', playerId: p.id }, `${p.name} entfernen?`)
-                      }
-                    >
-                      Entfernen
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            </Panel>
+          )}
+
+          <Panel title="Spieler:innen">
+            <div className="mb-3 flex items-center gap-2 text-ink-soft">
+              <span>Schritt</span>
+              <div className="flex gap-1" role="group" aria-label="Schrittweite für − und +">
+                {STEPS.map((s) => (
+                  <Button
+                    key={s}
+                    size="sm"
+                    variant={s === step ? 'selected' : 'default'}
+                    className="h-9 min-w-12 text-sm sm:h-7 sm:min-w-11 sm:text-xs"
+                    aria-pressed={s === step}
+                    onClick={() => setStep(s)}
+                  >
+                    {s}
+                  </Button>
+                ))}
+              </div>
             </div>
+            {state.players.length === 0 ? (
+              <p className="text-ink-soft">Noch niemand angemeldet.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {state.players.map((p) => (
+                  <PlayerCard key={p.id} player={p} step={step} run={run} />
+                ))}
+              </div>
+            )}
           </Panel>
         </>
       )}

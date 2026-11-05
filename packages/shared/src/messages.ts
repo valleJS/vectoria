@@ -253,8 +253,8 @@ export type AdminAction =
   /** Swaps the two players' home castle positions; everything else stays with each player. */
   | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
-  /** Adds `amount` (may be negative) of every resource to the home castle. */
-  | { action: 'grantAll'; playerId: string; amount: number }
+  /** Adds `amount` (may be negative) of one resource to the home castle. */
+  | { action: 'grant'; playerId: string; resource: ResourceType; amount: number }
   /** Adds `amount` (may be negative) troops to the home castle. */
   | { action: 'grantTroops'; playerId: string; amount: number };
 
@@ -285,6 +285,10 @@ const isResource = (value: unknown): value is ResourceType =>
   RESOURCES.includes(value as ResourceType);
 
 const isCard = (value: unknown): value is CardType => CARD_TYPES.includes(value as CardType);
+
+/** A whole, non-zero admin adjustment of at most ±10 000. */
+const isAdminAmount = (value: unknown): value is number =>
+  Number.isInteger(value) && value !== 0 && Math.abs(value as number) <= 10_000;
 
 const isId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 64;
@@ -470,12 +474,13 @@ export function parseAdminAction(value: unknown): AdminAction | null {
         ? { action: 'setEmail', playerId: msg.playerId, email }
         : null;
     }
-    case 'grantAll':
+    case 'grant':
+      return isId(msg.playerId) && isResource(msg.resource) && isAdminAmount(msg.amount)
+        ? { action: 'grant', playerId: msg.playerId, resource: msg.resource, amount: msg.amount }
+        : null;
     case 'grantTroops':
-      return isId(msg.playerId) &&
-        Number.isInteger(msg.amount) &&
-        Math.abs(msg.amount as number) <= 10_000
-        ? { action: msg.action, playerId: msg.playerId, amount: msg.amount as number }
+      return isId(msg.playerId) && isAdminAmount(msg.amount)
+        ? { action: 'grantTroops', playerId: msg.playerId, amount: msg.amount }
         : null;
     default:
       return null;
