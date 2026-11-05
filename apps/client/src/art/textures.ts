@@ -104,7 +104,7 @@ const css = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
 /** Fills the art's silhouette, grown by `radius` art px, into `ctx` (whose size it matches). */
 function silhouette(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: CanvasImageSource,
   pad: number,
   radius: number,
   color: string,
@@ -146,8 +146,13 @@ export async function artCanvas(
   canvas.height = (art.height + pad * 2) * scale;
   const ctx = canvas.getContext('2d')!;
   if (options.outline) {
-    silhouette(ctx, image, pad, OUTLINE + 1.2, css(INK), 0.55, scale);
-    silhouette(ctx, image, pad, OUTLINE, css(PARCHMENT), 1, scale);
+    // Firefox re-renders an SVG image on every drawImage; the 48 silhouette stamps use a bitmap.
+    const bitmap = document.createElement('canvas');
+    bitmap.width = art.width * scale;
+    bitmap.height = art.height * scale;
+    bitmap.getContext('2d')!.drawImage(image, 0, 0, bitmap.width, bitmap.height);
+    silhouette(ctx, bitmap, pad, OUTLINE + 1.2, css(INK), 0.55, scale);
+    silhouette(ctx, bitmap, pad, OUTLINE, css(PARCHMENT), 1, scale);
   }
   ctx.drawImage(image, pad * scale, pad * scale, art.width * scale, art.height * scale);
   if (options.sepia) {
