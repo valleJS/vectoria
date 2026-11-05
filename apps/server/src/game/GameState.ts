@@ -33,6 +33,8 @@ import {
   pointAlong,
   remainingPath,
   RESOURCE_NAMES,
+  SPOT_NAMES,
+  TRADE_INPUT,
   RESOURCES,
   rollChestTroops,
   STARTING_RESOURCES,
@@ -82,8 +84,9 @@ const RAID_REACH_TILES = 1;
  * Version of the resource spot layout; older running games are re-laid once on load.
  * 3: spot count is a cap, no same-resource clusters.
  * 4: no spot within `SPOT_NEAR_HOURS` of a castle; far spot `SPOT_FAR_HOURS` (2 h).
+ * 5: the trader joins as a fourth spot kind.
  */
-const SPOT_LAYOUT = 4;
+const SPOT_LAYOUT = 5;
 /**
  * One-off fixes for running games, applied once on load. 1: gatherers load at the spot of their
  * resource nearest to their home castle (the re-layout had moved them to the spot nearest the old
@@ -141,8 +144,10 @@ interface ArmyRecord {
   forcedMarch: boolean;
   /** Seeweg: this leg runs straight, over water too; absent in older saves. */
   sea?: boolean;
-  /** Gathered resources, plunder, or goods moved between bases. */
+  /** Gathered resources, plunder, stone for the trader or what it was swapped for. */
   cargo: Resources;
+  /** On the way to the trader: what the stone is to be swapped for. Absent otherwise. */
+  trade?: { gold: number; wood: number };
   /** Carrying an opened chest home (cannot be raided); absent in older saves. */
   chest?: boolean;
 }
@@ -351,6 +356,7 @@ export class GameState {
     target: ArmyTarget,
     useActiveCard: boolean,
     cargo: Resources,
+    trade?: { gold: number; wood: number },
   ): void {
     const player = this.requirePlaying(playerId);
     const base = this.base(player, from);
@@ -374,12 +380,7 @@ export class GameState {
     const speed = (hasResources(cargo) ? LOADED_SPEED : 1) * this.marchSpeed(player);
     const destination = this.destination(player, base.position, target, forcedMarch, speed, sea);
     this.checkChestTroops(target, troops);
-    // Stock moves between own bases only with the nightly caravan (`startGameday`).
-    if (hasResources(cargo)) {
-      throw new RuleError(
-        'Ressourcen bleiben im Lager — die Karawane bringt sie nachts in die Burg.',
-      );
-    }
+    this.checkTrade(base.resources, target, cargo, trade);
 
     if (card) {
       player.cards.splice(player.cards.indexOf(card), 1);
@@ -403,6 +404,7 @@ export class GameState {
       sea,
       cargo: { ...cargo },
       chest: false,
+      ...(trade ? { trade: { ...trade } } : {}),
     };
     this.data.armies.push(army);
     this.addFeed(
@@ -415,10 +417,74 @@ export class GameState {
     this.dirty = true;
   }
 
+  /**
+   * Cargo goes only to the trader: stone, swapped for `trade` (gold + wood = stone). Stock never
+   * moves between own bases by hand — the night caravan does that (`sendCaravans`).
+   */
+  private checkTrade(
+    stock: Resources,
+    target: ArmyTarget,
+    cargo: Resources,
+    trade: { gold: number; wood: number } | undefined,
+  ): void {
+    const toTrader = this.isTrader(target);
+    if (!hasResources(cargo) && !trade) {
+      if (toTrader) throw new RuleError('Ohne Stein gibt es beim Händler nichts zu tauschen.');
+      return;
+    }
+    if (!toTrader) {
+      throw new RuleError(
+        'Ressourcen bleiben im Lager — die Karawane bringt sie um 18 Uhr in die Burg.',
+      );
+    }
+    const amount = cargo[TRADE_INPUT];
+    if (RESOURCES.some((r) => r !== TRADE_INPUT && cargo[r] > 0) || amount <= 0 || !trade) {
+      throw new RuleError('Zum Händler nimmst du nur Stein mit.');
+    }
+    if (trade.gold + trade.wood !== amount) {
+      throw new RuleError('Gold und Holz zusammen müssen so viel sein wie der Stein.');
+    }
+    if (!canAfford(stock, cargo)) throw new RuleError('So viel Stein lagert dort nicht.');
+  }
+
+  private isTrader(target: ArmyTarget): boolean {
+    return (
+      target.kind === 'spot' &&
+      this.data.spots.find((s) => s.id === target.id)?.resource === 'trader'
+    );
+  }
+
+  /** At the trader: the stone carried is swapped at once, and the army heads home loaded. */
+  private tradeAt(army: ArmyRecord, owner: PlayerRecord): void {
+    const stone = army.cargo[TRADE_INPUT];
+    const plan = army.trade ?? { gold: stone, wood: 0 };
+    if (stone > 0) {
+      const gold = Math.min(plan.gold, stone);
+      army.cargo = { ...emptyResources(), gold, wood: stone - gold };
+      const got = formatResources(army.cargo);
+      this.addLog(owner, `Beim Händler ${stone} Stein gegen ${got} getauscht — auf dem Heimweg.`);
+      this.addFeed(
+        'gather',
+        `${this.armyLabel(army)} handelt beim Händler und zieht mit ${got} heim.`,
+        army.id,
+      );
+    } else {
+      this.addLog(owner, 'Dein Zug kam ohne Stein beim Händler an und kehrt leer heim.');
+    }
+    this.startReturn(army, last(army.path));
+  }
+
   redirectArmy(playerId: string, armyId: string, target: ArmyTarget): void {
     const player = this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
+    // Stone bound for the trader goes there or back (recall), never to another store.
+    if (army.trade && army.status === 'outbound') {
+      throw new RuleError('Ein Zug zum Händler lässt sich nur zurückrufen.');
+    }
+    if (this.isTrader(target)) {
+      throw new RuleError('Zum Händler geht es nur mit Stein direkt aus einer Burg.');
+    }
     // Loaded armies (yield, plunder, a chest) may only switch to another own store.
     if (hasResources(army.cargo) || army.chest) {
       this.redirectHome(player, army, target);
@@ -675,6 +741,10 @@ export class GameState {
           this.startReturn(army, last(army.path));
           return;
         }
+        if (spot.resource === 'trader') {
+          this.tradeAt(army, owner);
+          return;
+        }
         army.status = 'gathering';
         army.path = [spot.position];
         army.departClock = this.data.clock;
@@ -727,7 +797,7 @@ export class GameState {
 
   private finishGathering(army: ArmyRecord, owner: PlayerRecord): void {
     const spot = this.data.spots.find((s) => s.id === army.target.id);
-    if (spot) {
+    if (spot && spot.resource !== 'trader') {
       const amount = gatherYield(army.troops);
       army.cargo[spot.resource] += amount;
       this.addLog(
@@ -972,7 +1042,7 @@ export class GameState {
       army.baseId = null;
       this.addLog(
         owner,
-        `Dein Zug (${army.troops}) lädt jetzt am nächsten ${RESOURCE_NAMES[current.resource]}-Vorkommen weiter und bringt die Ladung zur Burg.`,
+        `Dein Zug (${army.troops}) lädt jetzt am nächsten ${SPOT_NAMES[current.resource]} weiter und bringt die Ladung zur Burg.`,
       );
     }
     this.data.gathererFix = GATHERER_FIX;
@@ -1764,6 +1834,7 @@ export class GameState {
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
     army.sea = false;
+    delete army.trade;
     // The way home is open for everyone to see (and to ambush).
     army.stealth = false;
     army.forcedMarch = false;
@@ -1824,7 +1895,9 @@ export class GameState {
       }
       case 'spot': {
         const spot = this.data.spots.find((s) => s.id === id);
-        return `zieht zum ${spot ? RESOURCE_NAMES[spot.resource] : 'Rohstoff'}-Vorkommen`;
+        return spot?.resource === 'trader'
+          ? 'zieht zum Händler'
+          : `zieht zum ${spot ? SPOT_NAMES[spot.resource] : 'Vorkommen'}`;
       }
       case 'chest':
         return 'zieht zu einer Truhe';

@@ -1,5 +1,15 @@
-import { RESOURCES, type CardType, type ResourceType } from '@vectoria/shared';
-import { alarm, castle, chest, dataUrl, outpost, resourceIcon, ruin, soldiers } from '../art/svg';
+import { RESOURCES, type CardType, type ResourceType, type SpotKind } from '@vectoria/shared';
+import {
+  alarm,
+  castle,
+  chest,
+  dataUrl,
+  deposit,
+  outpost,
+  resourceIcon,
+  ruin,
+  soldiers,
+} from '../art/svg';
 import type { ReactNode } from 'react';
 import { cardColor } from '../game/format';
 
@@ -27,6 +37,23 @@ function Glyph({ size, children, title }: { size: number; children: ReactNode; t
 const RESOURCE_URLS = Object.fromEntries(
   RESOURCES.map((r) => [r, dataUrl(resourceIcon(r))]),
 ) as Record<ResourceType, string>;
+
+const TRADER_URL = dataUrl(deposit('trader').svg);
+
+/** A spot's icon: the resource, or the trader's market stall. */
+export function SpotIcon({ kind, size = 22 }: { kind: SpotKind; size?: number }) {
+  if (kind !== 'trader') return <ResourceIcon resource={kind} size={size} />;
+  return (
+    <img
+      src={TRADER_URL}
+      width={size}
+      height={size}
+      alt=""
+      className="inline-block shrink-0 object-contain"
+      draggable={false}
+    />
+  );
+}
 
 /** Resource art from the shared SVG source (same drawing as the map medallions). */
 export function ResourceIcon({

@@ -1,6 +1,7 @@
 import {
   outpostName,
   RESOURCE_NAMES,
+  SPOT_NAMES,
   RESOURCES,
   type ArmyTarget,
   type CardType,
@@ -88,7 +89,7 @@ export function describeTarget(view: GameView, target: ArmyTarget | null): strin
       return target.id === view.self.id ? 'deine Burg' : `Burg von ${playerName(view, target.id)}`;
     case 'spot': {
       const spot = view.spots.find((s) => s.id === target.id);
-      return spot ? `${RESOURCE_NAMES[spot.resource]}-Vorkommen` : 'Vorkommen';
+      return spot ? SPOT_NAMES[spot.resource] : 'Vorkommen';
     }
     case 'outpost': {
       const outpost = view.outposts.find((o) => o.id === target.id);

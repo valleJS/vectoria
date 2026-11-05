@@ -1,4 +1,10 @@
-import { hasResources, type CardType, type Resources, type ResourceType } from './rules';
+import {
+  hasResources,
+  type CardType,
+  type Resources,
+  type ResourceType,
+  type SpotKind,
+} from './rules';
 
 /** Position in tile units; (x + 0.5, y + 0.5) is the centre of tile (x, y). */
 export interface Vec2 {
@@ -49,7 +55,8 @@ export interface PlayerPublic {
 
 export interface ResourceSpot {
   id: string;
-  resource: ResourceType;
+  /** Named `resource` for save compatibility; `trader` is the Händler, not a resource. */
+  resource: SpotKind;
   position: Vec2;
 }
 

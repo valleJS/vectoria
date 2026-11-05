@@ -220,11 +220,19 @@ const CHAPTERS: Chapter[] = [
           angreifbar.
         </P>
         <P>
-          Die Vorkommen sind fair verteilt: Der Weg zum nächsten Holz, Stein und Gold zusammen ist
-          für alle etwa gleich lang (höchstens{' '}
+          Die Vorkommen sind fair verteilt: Der Weg zum nächsten Holz, Stein, Gold und Händler
+          zusammen ist für alle etwa gleich lang (höchstens{' '}
           {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Kein Vorkommen
-          liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, und bei jedem ist eine der drei
-          Ressourcen mindestens {SPOT_FAR_HOURS} Stunden entfernt.
+          liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, und bei jedem ist eines der vier
+          mindestens {SPOT_FAR_HOURS} Stunden entfernt.
+        </P>
+        <H>Händler</H>
+        <P>
+          Der Händler tauscht <b>Stein 1:1 gegen Gold und Holz</b> — wie viel davon Gold und wie
+          viel Holz wird, wählst du beim Losschicken (x Stein ergibt y Gold + z Holz, x = y + z).
+          Deine Truppen bringen den Stein aus einer Burg hin, der Handel geht <b>sofort</b>, ohne
+          Ladezeit, und sie tragen Gold und Holz zurück. Hin und zurück sind sie beladen: nur{' '}
+          {formatPercent(LOADED_SPEED)} Tempo und überfallbar.
         </P>
         <P>
           Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines
@@ -240,6 +248,10 @@ const CHAPTERS: Chapter[] = [
             'Rufst du einen ladenden Zug zurück oder leitest ihn um, bricht er das Laden ab und hat nichts dabei.',
             'Die Ladung geht an die Burg, aus der der Zug losgezogen ist — ist dieser Stützpunkt inzwischen verloren, an die Basis.',
             'Die faire Verteilung der Vorkommen ist ab deiner Heimatburg gemessen, nicht ab Stützpunkten.',
+            'Zum Händler geht nur ein Zug, der Stein mitnimmt; Stein ist die einzige Ladung, die du aus einer Burg mitschicken kannst.',
+            'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen — dann bringt er den Stein zurück.',
+            'Wird er unterwegs ausgeraubt, kommt er ohne Stein beim Händler an und kehrt leer heim.',
+            'Gold und Holz gehen an die Burg, aus der der Zug losgezogen ist; unterwegs lassen sie sich wie jede Ladung zu einem anderen eigenen Lager umleiten.',
           ]}
         />
       </>
@@ -448,7 +460,7 @@ const CHAPTERS: Chapter[] = [
         </P>
         <Details
           items={[
-            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
+            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute, Züge zum und vom Händler. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
             'Ausnahme Rückzug: Ist die Burg eines Spielers gefallen, sind alle seine Züge unantastbar, bis alle daheim sind. Ein Überfall, der schon unterwegs ist, geht dann ins Leere.',
             'Ein ausgeraubter Zug läuft leer und wieder normal schnell zu seinem Ziel weiter.',
             'Gewinnt der Überfall, nimmt der Räuber die ganze Ladung und trägt sie selbst heim — beladen, also langsamer und seinerseits überfallbar.',

@@ -1,4 +1,4 @@
-import type { ResourceType } from '@vectoria/shared';
+import type { ResourceType, SpotKind } from '@vectoria/shared';
 import {
   END_GRAIN,
   GOLD,
@@ -242,12 +242,46 @@ export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[]
 ];
 
 /**
- * Map piece for a resource deposit, 88×68, standing at (44, 58), centred on its tile at y 40:
- * a woodpile with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets.
+ * The trader's market stall: posts, a striped awning, a timber counter with quarry stone on one
+ * side and gold on the other (it swaps the one for the other).
  */
-export function deposit(resource: ResourceType): Art {
+function traderStall(): string {
+  const stripes = [0, 1, 2, 3, 4, 5]
+    .map((i) => {
+      const x = 12 + i * 11;
+      return `<path d="M${x} 16H${x + 11}V26Q${x + 5.5} 31 ${x} 26Z" fill="${i % 2 ? PARCHMENT : SEAL}"/>`;
+    })
+    .join('');
+  return `${groundShadow(44, 58, 38, 7)}
+    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
+      <rect x="15" y="22" width="5" height="34" fill="${TIMBER.shade}"/>
+      <rect x="68" y="22" width="5" height="34" fill="${TIMBER.shade}"/>
+    </g>
+    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
+      ${stripes}
+      <path d="M12 16H78V26Q72.5 31 67 26Q61.5 31 56 26Q50.5 31 45 26Q39.5 31 34 26Q28.5 31 23 26Q17.5 31 12 26Z" fill="none"/>
+      <path d="M9 16L16 9H74L81 16Z" fill="${TIMBER.light}"/>
+    </g>
+    ${stoneChunk(30, 37, 18, 1)}
+    ${goldNugget(57, 38, 14, 2)}${goldNugget(64, 39, 10, 0)}
+    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
+      <rect x="11" y="42" width="66" height="14" fill="${TIMBER.base}"/>
+      <path d="M11 42H77" stroke-width="2.6"/>
+    </g>
+    <path d="M14 48H74M14 52H74" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
+    ${glint(66, 32, 4)}`;
+}
+
+/**
+ * Map piece for a spot, 88×68, standing at (44, 58), centred on its tile at y 40: a woodpile
+ * with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets, or the
+ * trader's market stall.
+ */
+export function deposit(resource: SpotKind): Art {
   let body: string;
-  if (resource === 'wood') {
+  if (resource === 'trader') {
+    body = traderStall();
+  } else if (resource === 'wood') {
     body = `${groundShadow(44, 58, 38, 7)}
       <g transform="translate(66 50)">
         <path d="M-9 8V-5h18V8Q0 11-9 8Z" fill="${TIMBER.shade}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>

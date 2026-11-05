@@ -37,7 +37,7 @@ import {
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon } from './icons';
+import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
 import { Button, Tip } from './Panel';
 import { Locked } from './Routed';
 import { XIcon } from 'lucide-react';
@@ -107,6 +107,7 @@ function SendForm({
   defaultTroops = 50,
   minTroops = 1,
   preview,
+  trade = false,
 }: {
   view: GameView;
   target: ArmyTarget;
@@ -119,11 +120,15 @@ function SendForm({
   minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
+  /** Target is the trader: carry stone and choose the gold/wood split. */
+  trade?: boolean;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
   const [chosen, setTroops] = useState(defaultTroops);
   const [useCard, setUseCard] = useState(true);
+  const [stoneWanted, setStone] = useState(0);
+  const [goldShare, setGoldShare] = useState(0.5);
   const activeCard = view.self.activeCard;
   // A Seeweg cannot be used for a raid (the server refuses it): it stays armed for later.
   const cardUsable = activeCard !== null && !(activeCard === 'sea' && target.kind === 'army');
@@ -147,7 +152,18 @@ function SendForm({
   // Troops shrink as armies leave; never offer more than are there.
   const available = base.troops;
   const troops = Math.min(chosen, available);
-  const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
+  // Trader: x stone → y gold + z wood (x = y + z); stone in the store caps x.
+  const stone = trade ? Math.max(0, Math.min(stoneWanted, base.resources.stone)) : 0;
+  const gold = Math.round(stone * goldShare);
+  const wood = stone - gold;
+  // Carrying resources slows the march (same rule as the server).
+  const arrival = travel !== null && stone > 0 ? Math.round(travel / LOADED_SPEED) : travel;
+  const valid =
+    Number.isInteger(troops) &&
+    troops > 0 &&
+    troops >= minTroops &&
+    travel !== null &&
+    (!trade || stone > 0);
 
   const send = () => {
     gameSocket.send({
@@ -156,15 +172,18 @@ function SendForm({
       troops,
       target,
       useActiveCard: withCard,
-      // Stock moves between bases only with the nightly caravan.
-      cargo: emptyResources(),
+      // Cargo only goes to the trader; stock moves between bases with the night caravan.
+      cargo: trade ? { ...emptyResources(), stone } : emptyResources(),
+      ...(trade ? { trade: { gold, wood } } : {}),
     });
+    setStone(0);
   };
 
   return (
     <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
-      {/* Raids list their own field armies (with meeting points) in RaidOptions. */}
-      {target.kind !== 'army' && (
+      {/* Raids list their own field armies (with meeting points) in RaidOptions; the trader
+          only takes stone straight from a store. */}
+      {target.kind !== 'army' && !trade && (
         <FieldRedirect
           view={view}
           target={target}
@@ -223,6 +242,54 @@ function SendForm({
           Alle
         </Button>
       </div>
+      {trade && (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="trade-stone" className="gap-1">
+              <ResourceIcon resource="stone" size={16} title={RESOURCE_NAMES.stone} />
+              Stein
+            </Label>
+            <Input
+              id="trade-stone"
+              type="number"
+              min={0}
+              max={base.resources.stone}
+              value={stone}
+              onChange={(e) => setStone(Math.max(0, Math.floor(Number(e.target.value))))}
+              className="h-7 w-16 tabular-nums"
+            />
+            <span className="text-ink-soft">/ {base.resources.stone} im Lager</span>
+            <Button
+              size="sm"
+              onClick={() => setStone(base.resources.stone)}
+              disabled={base.resources.stone === 0}
+            >
+              Alles
+            </Button>
+          </div>
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[goldShare]}
+            onValueChange={([value]) => setGoldShare(value ?? 0.5)}
+            disabled={stone === 0}
+            className="py-1"
+            aria-label="Anteil Gold"
+          />
+          <div className="flex items-center justify-between tabular-nums">
+            <span className="inline-flex items-center gap-1">
+              <ResourceIcon resource="gold" size={16} title={RESOURCE_NAMES.gold} /> {gold} Gold
+            </span>
+            <span className="inline-flex items-center gap-1">
+              {wood} Holz <ResourceIcon resource="wood" size={16} title={RESOURCE_NAMES.wood} />
+            </span>
+          </div>
+          {base.resources.stone === 0 && (
+            <div className="text-seal">Hier lagert kein Stein — wähle eine andere Burg.</div>
+          )}
+        </div>
+      )}
       {activeCard && cardUsable && (
         <Tip label={CARDS[activeCard].description}>
           <Label className="gap-1.5 leading-snug">
@@ -244,7 +311,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(travel)}${barefoot(view) ? ' · barfuß' : ''}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${stone > 0 ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -620,6 +687,28 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       const here = view.armies.filter(
         (a) => a.status === 'gathering' && a.target?.kind === 'spot' && a.target.id === spot.id,
       );
+      if (spot.resource === 'trader') {
+        return (
+          <>
+            <Title icon={<SpotIcon kind="trader" size={26} />}>Händler</Title>
+            <div className="text-ink-soft">
+              Tauscht Stein 1:1 gegen Gold und Holz, die Aufteilung wählst du. Deine Truppen bringen
+              den Stein hin, der Handel geht sofort, und sie tragen Gold und Holz heim. Hin und
+              zurück sind sie beladen: nur {formatPercent(LOADED_SPEED)} Tempo und überfallbar.
+            </div>
+            <SendForm
+              key={selection.id}
+              view={view}
+              target={selection}
+              position={spot.position}
+              verb="Handeln"
+              bases={bases}
+              defaultTroops={10}
+              trade
+            />
+          </>
+        );
+      }
       const name = RESOURCE_NAMES[spot.resource];
       return (
         <>

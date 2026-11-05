@@ -3,21 +3,22 @@ import {
   distanceField,
   findPath,
   pathLength,
-  RESOURCES,
+  SPOT_KINDS,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
   SPOT_NEAR_HOURS,
   TileType,
   type MapData,
-  type ResourceType,
+  type SpotKind,
   type Vec2,
 } from '@vectoria/shared';
 
-/** Preferred terrain for each resource spot; any land tile works, at a small cost. */
-const SPOT_TERRAIN: Record<ResourceType, TileType> = {
+/** Preferred terrain for each spot kind; any land tile works, at a small cost. */
+const SPOT_TERRAIN: Record<SpotKind, TileType> = {
   wood: TileType.Forest,
   stone: TileType.Mountain,
   gold: TileType.Mountain,
+  trader: TileType.Grass,
 };
 /** Spots keep this far (tiles) from castles, outposts, chests and each other. */
 const MIN_GAP = 2;
@@ -36,16 +37,18 @@ const SPOT_COST = 0.5;
 /** Spots of the same resource closer than this (tiles) are penalised as redundant. */
 const SAME_GAP = 5;
 const SAME_WEIGHT = 2;
+/** Worst ratio of an 8-way grid walk to the straight line: at 22.5°, (1 + (√2 − 1)·tan) / sec. */
+const GRID_EXCESS = 1.0824;
 /** Per tile a spot lies inside `SPOT_NEAR_HOURS` of a castle: high, so it is a hard rule. */
 const NEAR_WEIGHT = 20;
 
 export interface SpotPlacement {
-  resource: ResourceType;
+  resource: SpotKind;
   position: Vec2;
 }
 
-/** Per castle: walking distance (tiles) to its nearest spot of each resource. */
-export type SpotReach = Record<ResourceType, number>[];
+/** Per castle: walking distance (tiles) to its nearest spot of each kind. */
+export type SpotReach = Record<SpotKind, number>[];
 
 const centre = (map: MapData, i: number): Vec2 => ({
   x: (i % map.width) + 0.5,
@@ -59,9 +62,9 @@ export function tilesFor(map: MapData, hours: number): number {
 }
 
 /**
- * Places up to `count` resource spots (at least one per resource) so every castle has about the
- * same total walk to its nearest wood, stone and gold (along land, water respected), with one of
- * the three at least `SPOT_FAR_HOURS` away and no spot within `SPOT_NEAR_HOURS` of any castle.
+ * Places up to `count` spots (at least one of each kind) so every castle has about the same total
+ * walk to its nearest wood, stone, gold and trader (along land, water respected), with one of
+ * the four at least `SPOT_FAR_HOURS` away and no spot within `SPOT_NEAR_HOURS` of any castle.
  * Simulated annealing on Dijkstra distance fields, then a polish on the real (straightened) routes
  * armies walk. `land` are the tiles spots may use, `taken` the sites they keep clear of.
  */
@@ -75,8 +78,9 @@ export function placeBalancedSpots(
 ): SpotPlacement[] {
   const fields = castles.map((c) => distanceField(map, c));
   const grid = (player: number, tile: number) => fields[player]![tile]!;
-  // Grid walks are never shorter than real ones, so this only drops tiles that are surely too near.
-  const near = tilesFor(map, SPOT_NEAR_HOURS);
+  // An 8-way grid walk is at most `GRID_EXCESS` times the real (any-angle) route, so a tile this
+  // far on the grid is surely far enough for real: every candidate keeps the near rule.
+  const near = tilesFor(map, SPOT_NEAR_HOURS) * GRID_EXCESS;
   const candidates = land
     .filter((p) => taken.every((t) => distance(t, p) >= MIN_GAP))
     .map((p) => Math.floor(p.y) * map.width + Math.floor(p.x))
@@ -100,7 +104,7 @@ export function placeBalancedSpots(
 
 interface Spot {
   tile: number;
-  resource: ResourceType;
+  resource: SpotKind;
 }
 
 interface Layout {
@@ -149,7 +153,7 @@ function score(
   for (let p = 0; p < players; p++) {
     let total = 0;
     let farthest = 0;
-    for (const r of RESOURCES) {
+    for (const r of SPOT_KINDS) {
       let nearest = Infinity;
       for (const s of spots) {
         if (s.resource === r) nearest = Math.min(nearest, dist(p, s.tile));
@@ -205,7 +209,7 @@ function anneal(
   const candidateSet = new Set(candidates);
   let spots: Spot[] = Array.from({ length: count }, (_, i) => ({
     tile: pick(candidates),
-    resource: RESOURCES[i % RESOURCES.length]!,
+    resource: SPOT_KINDS[i % SPOT_KINDS.length]!,
   }));
   let current = score(map, players, spots, dist).score;
   let best = { spots, score: current };
@@ -225,10 +229,10 @@ function anneal(
       next = next.filter((s) => s !== spot);
     } else if (move < 0.1) {
       if (next.length >= count) continue;
-      next.push({ tile: pick(candidates), resource: pick(RESOURCES) });
+      next.push({ tile: pick(candidates), resource: pick(SPOT_KINDS) });
     } else if (move < 0.2) {
       // Change the resource, keeping at least one spot of each.
-      if (spare) spot.resource = pick(RESOURCES);
+      if (spare) spot.resource = pick(SPOT_KINDS);
     } else if (move < 0.35) {
       spot.tile = pick(candidates);
     } else {
@@ -312,7 +316,7 @@ function nearbyTile(map: MapData, tile: number, radius: number, random: () => nu
 /** Real walking distance (tiles) from each castle to its nearest spot of each resource. */
 export function spotReach(map: MapData, castles: Vec2[], spots: SpotPlacement[]): SpotReach {
   return castles.map((c) => {
-    const reach = { wood: Infinity, stone: Infinity, gold: Infinity };
+    const reach = { wood: Infinity, stone: Infinity, gold: Infinity, trader: Infinity };
     for (const s of spots) {
       const path = findPath(map, c, s.position);
       if (path) reach[s.resource] = Math.min(reach[s.resource], pathLength(path));

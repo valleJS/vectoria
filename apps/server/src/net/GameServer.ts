@@ -192,6 +192,7 @@ export class GameServer {
             message.target,
             message.useActiveCard,
             message.cargo,
+            message.trade,
           );
         case 'recallArmy':
           return this.state.recallArmy(playerId, message.armyId);

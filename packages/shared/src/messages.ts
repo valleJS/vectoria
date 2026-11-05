@@ -36,8 +36,10 @@ export interface SendArmyMessage {
   target: ArmyTarget;
   /** Send the armed `activeCard` along with this army. */
   useActiveCard: boolean;
-  /** Resources to carry along; only allowed when the target is one of the sender's own bases. */
+  /** Resources to carry along: only stone, and only to the trader (with `trade`). */
   cargo: Resources;
+  /** Trader only: what the carried stone is swapped for; `gold + wood` equals `cargo.stone`. */
+  trade?: { gold: number; wood: number };
 }
 
 export interface RecallArmyMessage {
@@ -288,7 +290,23 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const target = parseTarget(msg.target);
       const cargo = parseResources(msg.cargo ?? {});
       const from = msg.from ?? null;
-      return isPositiveInt(msg.troops) && target && cargo && (from === null || isId(from))
+      const rawTrade = msg.trade as Record<string, unknown> | undefined;
+      const trade =
+        rawTrade === undefined
+          ? undefined
+          : typeof rawTrade === 'object' &&
+              rawTrade !== null &&
+              Number.isInteger(rawTrade.gold) &&
+              Number.isInteger(rawTrade.wood) &&
+              (rawTrade.gold as number) >= 0 &&
+              (rawTrade.wood as number) >= 0
+            ? { gold: rawTrade.gold as number, wood: rawTrade.wood as number }
+            : null;
+      return isPositiveInt(msg.troops) &&
+        target &&
+        cargo &&
+        trade !== null &&
+        (from === null || isId(from))
         ? {
             type: 'sendArmy',
             from,
@@ -296,6 +314,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
             target,
             useActiveCard: msg.useActiveCard === true,
             cargo,
+            ...(trade ? { trade } : {}),
           }
         : null;
     }

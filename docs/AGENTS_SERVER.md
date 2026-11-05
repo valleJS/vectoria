@@ -3,7 +3,7 @@ type: Codemap
 description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, email login, WebSocket + HTTP API, Postgres/Redis wiring.
 audience: agent
 category: codemap
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
 sources_stamp: 8543f10ad6dca748e451c1d47de2b98bc37e3849
@@ -24,7 +24,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/GameState.ts` | Authoritative game: phases, commands, bases, clock advance, arrivals, combat, raids, feed, views, save migration |
 | `src/game/calendar.ts` | Mon–Fri 10–18 schedule in a time zone; downtime catch-up |
 | `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
-| `src/game/spots.ts` | Balanced resource spot layout (equal walk totals, one far resource, none within `SPOT_NEAR_HOURS` of a castle; count is a cap, no same-resource clusters); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
+| `src/game/spots.ts` | Balanced spot layout over wood, stone, gold and trader (equal walk totals, one far spot, none within `SPOT_NEAR_HOURS` of a castle; count is a cap, no same-resource clusters); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |

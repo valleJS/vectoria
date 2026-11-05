@@ -1,4 +1,4 @@
-import { RESOURCES, type ResourceType } from '@vectoria/shared';
+import { RESOURCES, SPOT_KINDS, type ResourceType, type SpotKind } from '@vectoria/shared';
 import { CanvasSource, Texture } from 'pixi.js';
 import { INK, NEUTRAL_COLOR, PARCHMENT, PLAYER_PALETTE, SELF_COLOR, sepia } from '../game/palette';
 import {
@@ -79,7 +79,7 @@ export interface MapArt {
   ship: ArtTexture;
   /** Small boat for lakes and straits. */
   boat: ArtTexture;
-  deposits: Record<ResourceType, ArtTexture>;
+  deposits: Record<SpotKind, ArtTexture>;
   /** Bare resource icons, for cargo carried by armies. */
   resources: Record<ResourceType, ArtTexture>;
   chest: ArtTexture;
@@ -290,7 +290,7 @@ export function loadMapArt(): Promise<MapArt> {
       all([conifer(false), conifer(true)], decor),
       all([0, 1, 2, 3].map(rocks), decor),
       all([0, 1, 2].map(boulder), decor),
-      all(RESOURCES.map(deposit), { outline: true }),
+      all(SPOT_KINDS.map(deposit), { outline: true }),
       all(
         RESOURCES.map((r) => ({
           svg: resourceIcon(r),
@@ -335,7 +335,10 @@ export function loadMapArt(): Promise<MapArt> {
       ruin: ruinArt,
       campfire: campfireArt,
       glow: glowTexture(),
-      deposits: byResource(deposits),
+      deposits: Object.fromEntries(SPOT_KINDS.map((k, i) => [k, deposits[i]!])) as Record<
+        SpotKind,
+        ArtTexture
+      >,
       resources: byResource(icons),
       pieces,
     };

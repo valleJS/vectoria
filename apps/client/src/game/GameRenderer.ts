@@ -33,6 +33,7 @@ import {
   NEUTRAL_COLOR,
   PARCHMENT,
   RESOURCE_COLORS,
+  SPOT_COLORS,
   SEA,
   SEAL,
   SERIF,
@@ -1338,7 +1339,7 @@ export class GameRenderer {
       }
       case 'spot': {
         const spot = view.spots.find((s) => s.id === selection.id);
-        return site(spot?.position, 26, spot ? RESOURCE_COLORS[spot.resource] : INK);
+        return site(spot?.position, 26, spot ? SPOT_COLORS[spot.resource] : INK);
       }
       case 'chest':
         return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);

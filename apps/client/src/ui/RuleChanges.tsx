@@ -2,6 +2,7 @@ import {
   BAREFOOT_SPEED,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
+  LOADED_SPEED,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
   SPOT_NEAR_HOURS,
@@ -35,6 +36,22 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'trader',
+    date: '2026-11-05',
+    title: 'Neu: der Händler',
+    body: (
+      <>
+        Auf der Karte stehen jetzt <b>Händler</b>. Dort tauschst du{' '}
+        <b>Stein 1:1 gegen Gold und Holz</b>, die Aufteilung wählst du selbst. Schick Truppen mit
+        Stein hin: Der Handel geht sofort, ohne Ladezeit. Hin und zurück sind sie beladen, also nur{' '}
+        {formatPercent(LOADED_SPEED)} Tempo und überfallbar. Dafür wurden die Vorkommen noch einmal
+        neu verteilt: Der Weg zu Holz, Stein, Gold und Händler zusammen ist für alle etwa gleich
+        lang, keins liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, eins mindestens{' '}
+        {SPOT_FAR_HOURS} Stunden entfernt.
+      </>
+    ),
+  },
+  {
     id: 'fallen-castle-protected',
     date: '2026-11-05',
     title: 'Gefallene Burg ist geschützt',
@@ -60,20 +77,6 @@ const RULE_CHANGES: RuleChange[] = [
         Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann im Stützpunkt. Sammler
         bringen ihre Ladung wie bisher zu ihrer Burg und lassen sich jetzt unterwegs zu jedem
         eigenen Lager umleiten.
-      </>
-    ),
-  },
-  {
-    id: 'spots-min-distance',
-    date: '2026-11-05',
-    title: 'Vorkommen mit Mindestabstand',
-    body: (
-      <>
-        Die Rohstoff-Vorkommen wurden noch einmal neu verteilt: <b>Kein Vorkommen</b> liegt jetzt
-        näher als <b>{SPOT_NEAR_HOURS} Stunde</b> an einer Burg. Der Weg zum nächsten Holz, Stein
-        und Gold zusammen bleibt für alle etwa gleich lang, und eine der drei liegt mindestens{' '}
-        <b>{SPOT_FAR_HOURS} Stunden</b> entfernt. Laufende Züge und Sammler ziehen wie beim letzten
-        Mal zum nächsten neuen Vorkommen derselben Ressource weiter.
       </>
     ),
   },
