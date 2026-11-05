@@ -140,12 +140,16 @@ function windowLights(
  */
 type FigureMode = 'badge' | 'soldiers' | 'tent' | 'ship';
 
-/** Per figure: lift of its visual centre above the ground point and focus ring radius, glyph units. */
-const FIGURE_FOCUS: Record<FigureMode, readonly [number, number]> = {
-  badge: [0, 13],
-  soldiers: [-12, 22],
-  tent: [-9, 20],
-  ship: [-15, 27],
+/**
+ * Per figure, glyph units: offset of its visual centre from the ground point (x, then y as a
+ * lift) and focus ring radius. The tent's centre sits right of its pole, between the tent and
+ * its campfire.
+ */
+const FIGURE_FOCUS: Record<FigureMode, readonly [number, number, number]> = {
+  badge: [0, 0, 13],
+  soldiers: [0, -12, 22],
+  tent: [2.5, -9, 19],
+  ship: [0, -15, 27],
 };
 
 interface ArmySprite {
@@ -477,9 +481,9 @@ export class GameRenderer {
   private armyFocus(sprite: ArmySprite): { x: number; y: number; radius: number } {
     const { position, pivot, scale } = sprite.container;
     const u = this.unit;
-    const [lift, radius] = FIGURE_FOCUS[sprite.mode];
+    const [dx, lift, radius] = FIGURE_FOCUS[sprite.mode];
     return {
-      x: position.x - pivot.x * scale.x,
+      x: position.x + (dx * u - pivot.x) * scale.x,
       y: position.y + (lift * u - pivot.y) * scale.y,
       radius: radius * u * scale.x,
     };
