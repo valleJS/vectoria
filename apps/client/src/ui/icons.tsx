@@ -6,6 +6,7 @@ import {
   chest,
   dataUrl,
   deposit,
+  duoShields,
   outpost,
   resourceIcon,
   ruin,
@@ -160,6 +161,19 @@ export function SoldiersIcon({ size = 22, color }: { size?: number; color: strin
 /** A wagon of the night caravan in the owner's colour. */
 export function CaravanIcon({ size = 22, color }: { size?: number; color: string }) {
   return <ArtIcon id={`caravan${color}`} size={size} make={() => caravanWagon(color).svg} />;
+}
+
+/** A duo attack: two shields in the partners' colours over crossed spears. */
+export function DuoIcon({
+  size = 26,
+  left,
+  right,
+}: {
+  size?: number;
+  left: string;
+  right: string;
+}) {
+  return <ArtIcon id={`duo${left}${right}`} size={size} make={() => duoShields(left, right).svg} />;
 }
 
 /** The map's treasure chest. */

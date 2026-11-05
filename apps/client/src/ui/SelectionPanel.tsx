@@ -41,6 +41,7 @@ import {
   CaravanIcon,
   CastleIcon,
   ChestIcon,
+  DuoIcon,
   OutpostIcon,
   ResourceIcon,
   SoldiersIcon,
@@ -572,7 +573,19 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   const ownerRouted = view.players.find((p) => p.id === army.ownerId)?.routed ?? false;
   return (
     <>
-      <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
+      <Title
+        icon={
+          army.duoWith ? (
+            <DuoIcon
+              left={cssColor(playerColor(view, army.ownerId))}
+              right={cssColor(playerColor(view, army.duoWith))}
+              size={30}
+            />
+          ) : (
+            <SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />
+          )
+        }
+      >
         {army.duoWith
           ? `Duo-Zug: ${own ? 'du' : playerName(view, army.ownerId)} + ${army.duoWith === view.self.id ? 'du' : playerName(view, army.duoWith)}`
           : `Heerzug von ${own ? 'dir' : playerName(view, army.ownerId)}`}

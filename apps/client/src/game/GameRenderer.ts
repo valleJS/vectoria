@@ -157,6 +157,8 @@ interface ArmySprite {
   /** The latest server state of the army. */
   army: ArmyView;
   color: number;
+  /** A duo army: the other partner's colour, for the right ribbon tail of its plate. */
+  partnerColor: number | null;
   /** Night camp (marching armies pitch tents). */
   camp: boolean;
   mode: FigureMode;
@@ -860,7 +862,8 @@ export class GameRenderer {
    * The one label style on the map: italic ink on a parchment plate, with ribbon tails in the
    * owner's colour (none for `null`). `top` is the plate's top edge, `size` the font size; all
    * proportions follow the font size, so castle, outpost and army plates match. `home` puts a
-   * gold star before the text (the viewer's own castle).
+   * gold star before the text (the viewer's own castle); `right` gives the right tail its own
+   * colour (a duo army: one tail per partner).
    */
   private nameplate(
     text: string,
@@ -870,7 +873,8 @@ export class GameRenderer {
       top = 23 * u,
       size = 13 * u,
       home = false,
-    }: { top?: number; size?: number; home?: boolean } = {},
+      right,
+    }: { top?: number; size?: number; home?: boolean; right?: number } = {},
   ): Container {
     const label = this.label(text, size, INK, true);
     const star = home ? size * 1.05 : 0;
@@ -896,7 +900,7 @@ export class GameRenderer {
             edge,
             top + drop + h,
           ])
-          .fill(color)
+          .fill(side === 1 && right !== undefined ? right : color)
           .stroke({ width: line, color: INK });
       }
     }
@@ -979,6 +983,7 @@ export class GameRenderer {
           container,
           army,
           color,
+          partnerColor: null,
           camp: false,
           mode: 'soldiers',
           figure,
@@ -1001,6 +1006,7 @@ export class GameRenderer {
       }
       sprite.army = army;
       sprite.color = color;
+      sprite.partnerColor = army.duoWith ? playerColor(view, army.duoWith) : null;
       sprite.target = target;
       // At night marching armies pitch camp: a tent with a campfire instead of soldiers.
       sprite.camp = this.night.night && !gathering;
@@ -1076,8 +1082,8 @@ export class GameRenderer {
       this.drawCargo(sprite, army, u, mode);
     }
     const count = army.troops === null ? '?' : String(army.troops);
-    const troops = army.duoWith && mode !== 'badge' ? `Duo · ${count}` : count;
-    const text = `${mode === 'badge'}:${troops}`;
+    const troops = count;
+    const text = `${mode === 'badge'}:${troops}:${sprite.partnerColor}`;
     if (text !== sprite.text) {
       sprite.text = text;
       for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
@@ -1093,7 +1099,14 @@ export class GameRenderer {
         count.position.set(0, 0.6 * u);
         sprite.plate.addChild(count);
       } else {
-        sprite.plate.addChild(this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }));
+        // A duo army's plate flies both partners' colours: owner left, partner right.
+        sprite.plate.addChild(
+          this.nameplate(troops, color, u, {
+            top: 2 * u,
+            size: 11 * u,
+            right: sprite.partnerColor ?? undefined,
+          }),
+        );
       }
     }
   }

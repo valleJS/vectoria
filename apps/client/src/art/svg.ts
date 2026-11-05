@@ -723,6 +723,28 @@ export function gatherShield(color: string): Art {
   return { svg: svg(30, 34, body), width: 30, height: 34, anchor: { x: 15, y: 16 } };
 }
 
+/**
+ * Emblem of a duo attack: two heraldic shields side by side, the left in the initiator's colour,
+ * the right in the partner's, leaning together over two crossed spears. 52×40, centred at (26, 21).
+ */
+export function duoShields(left: string, right: string): Art {
+  const outline = 'M4 4.5H26V15.5Q26 26.5 15 31Q4 26.5 4 15.5Z';
+  const shield = (color: string, x: number, angle: number) => `
+    <g transform="translate(${x} 4) rotate(${angle} 15 18)">
+      <path d="${outline}" fill="${color}"/>
+      <path d="M15 4.5V31Q26 26.5 26 15.5V4.5Z" fill="${shade(color, 0.82)}"/>
+      <path d="M6.6 7.4H23.4V15.5Q23.4 24.6 15 28.2Q6.6 24.6 6.6 15.5Z" fill="none" stroke="${shade(color, 1.45)}" stroke-width="1.1" opacity=".75"/>
+      <path d="${outline}" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M3 4.5H27" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>
+    </g>`;
+  const spear = (x1: number, x2: number) => `
+    <path d="M${x1} 38L${x2} 4" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M${x1} 38L${x2} 4" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M${x2} 0L${x2 + (x2 > x1 ? 3 : -3)} 6L${x2 - (x2 > x1 ? 1.5 : -1.5)} 6.5Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>`;
+  const body = `${spear(8, 44)}${spear(44, 8)}${shield(left, 3, -10)}${shield(right, 19, 10)}`;
+  return { svg: svg(52, 40, body), width: 52, height: 40, anchor: { x: 26, y: 21 } };
+}
+
 // ---- Sites ----
 
 const LINE = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
