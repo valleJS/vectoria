@@ -581,7 +581,8 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
       </div>
       <div className="text-ink-soft">
-        Ziel: {describeTarget(view, army.target)} · noch {formatGameDuration(remaining)}
+        Ziel: {describeTarget(view, army.target)}
+        {army.to !== null && ` · noch ${formatGameDuration(remaining)}`}
       </div>
       {carrying && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">

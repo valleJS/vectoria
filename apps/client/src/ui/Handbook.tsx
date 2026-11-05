@@ -598,7 +598,7 @@ const CHAPTERS: Chapter[] = [
             'Eine scharf geschaltete Marschkarte bleibt in deiner Hand, bis ein Zug sie mitnimmt. Du kannst sie wieder entschärfen oder durch eine andere ersetzen.',
             'Beim Losschicken entscheidest du, ob die scharfe Karte mitgeht. Umleiten verbraucht keine Karte.',
             'Nebel gilt für das ganze Leben des Zuges, auch auf dem Heimweg: Andere sehen nur „?“, auch im Liveticker.',
-            'Tarnung verbirgt Ziel und Route nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
+            'Tarnung verbirgt Ziel, Route und Ankunftszeit nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
             'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
             'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
             'Seeweg führt den Hinweg schnurgerade zum Ziel, auch übers Wasser. Heim geht es wieder über Land. Wer umleitet, verlässt den Seeweg; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
@@ -651,7 +651,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Ladungen sind immer für alle sichtbar, auch unter Nebel oder Tarnung.',
             'Der Liveticker zeigt die letzten 60 Ereignisse, deine Chronik die letzten 30 Einträge.',
-            'Der Liveticker schreibt mit, was alle sehen: Unter Nebel steht dort „?“ statt der Truppenzahl, unter Tarnung „unbekanntes Ziel“.',
+            'Der Liveticker schreibt mit, was alle sehen: Unter Nebel steht dort „?“ statt der Truppenzahl. Ein getarnter Zug zieht ohne Meldung los.',
           ]}
         />
       </>

@@ -434,13 +434,16 @@ export class GameState {
       ...(trade ? { trade: { ...trade } } : {}),
     };
     this.data.armies.push(army);
-    this.addFeed(
-      target.kind === 'army' ? 'battle' : 'march',
-      `${this.armyLabel(army)} ${this.marchPhrase(army)}` +
-        (hasResources(cargo) ? ` (mit ${formatResources(cargo)})` : '') +
-        '.',
-      army.id,
-    );
+    // A stealth march sets out unannounced: the ticker would give away that something is afoot.
+    if (!army.stealth) {
+      this.addFeed(
+        target.kind === 'army' ? 'battle' : 'march',
+        `${this.armyLabel(army)} ${this.marchPhrase(army)}` +
+          (hasResources(cargo) ? ` (mit ${formatResources(cargo)})` : '') +
+          '.',
+        army.id,
+      );
+    }
     this.dirty = true;
   }
 
@@ -537,11 +540,13 @@ export class GameState {
     army.target = target;
     army.departClock = this.data.clock;
     army.arriveClock = destination.arriveClock;
-    this.addFeed(
-      target.kind === 'army' ? 'battle' : 'march',
-      `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
-      army.id,
-    );
+    if (!army.stealth) {
+      this.addFeed(
+        target.kind === 'army' ? 'battle' : 'march',
+        `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
+        army.id,
+      );
+    }
     this.dirty = true;
   }
 
@@ -2114,7 +2119,8 @@ export class GameState {
       route: visible ? remainingPath(army.path, this.legFraction(army)) : null,
       target: visible && !secret ? army.target : null,
       departClock: army.departClock,
-      arriveClock: army.arriveClock,
+      // The arrival time would tell how far away the hidden target is.
+      arriveClock: visible ? army.arriveClock : army.departClock,
       cargo: army.cargo,
       fog: army.fog,
       stealth: army.stealth,
@@ -2446,7 +2452,6 @@ export class GameState {
 
   /** What a marching army is doing, for the ticker ("greift die Burg von X an"). */
   private marchPhrase(army: ArmyRecord): string {
-    if (army.stealth) return 'bricht zu einem unbekannten Ziel auf';
     const { kind, id } = army.target;
     const name = (playerId: string | undefined) =>
       (playerId && this.player(playerId)?.name) ?? 'Unbekannt';

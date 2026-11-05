@@ -153,7 +153,8 @@ always keeps at least one troop (`raid`), so the chest always gets home.
 ## Live ticker
 
 `GameState.addFeed` keeps the last 60 public events (marches, battles, gathering returns, chests,
-outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied.
+outposts, gamedays) in `GameView.feed`, written with fog already applied; a stealth march (or
+redirect) is not announced at all.
 
 ## Chests and cards
 
@@ -172,7 +173,7 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
 | Card | Use | Effect |
 | ---- | --- | ------ |
 | Nebel (`fog`) | on send | others see `?` for troop count |
-| Tarnung (`stealth`) | on send | others don't see the target |
+| Tarnung (`stealth`) | on send | others don't see the target, route or arrival time (`arriveClock` = `departClock`); the march is not in the ticker |
 | Eilmarsch (`forcedMarch`) | on send | outbound trip takes half as long |
 | Bollwerk (`fortify`) | instant | castle defends ×1.5 for one gameday |
 | Seeweg (`sea`) | on send | outbound path is the straight line `[from, to]`, over water too (`ArmyView.sea`); home, redirects and reroutes go by land again; refused for raids, and armies on water cannot be intercepted (no land path to the meeting point) |
