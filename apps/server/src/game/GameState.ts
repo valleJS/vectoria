@@ -519,6 +519,9 @@ export class GameState {
     }
     // Empty-handed armies can be re-routed anywhere, even on their way home.
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
+    if (army.target.kind === target.kind && army.target.id === target.id) {
+      throw new RuleError('Der Zug ist schon dorthin unterwegs.');
+    }
     const destination = this.destination(
       player,
       this.armyPosition(army),

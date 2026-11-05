@@ -350,6 +350,11 @@ function SendForm({
           position={position}
           verb={verb}
           minTroops={minTroops}
+          ownBase={
+            (target.kind === 'castle' && target.id === view.self.id) ||
+            (target.kind === 'outpost' &&
+              view.outposts.some((o) => o.id === target.id && o.ownerId === view.self.id))
+          }
         />
       )}
       {trade ? (
@@ -398,7 +403,9 @@ function SendForm({
 
 /**
  * Own armies in the field that could take this target instead: any status (also on the way
- * home), but without cargo or a chest, and not already heading here. Redirecting re-routes them from where they stand.
+ * home), not already heading here; armies with cargo or a chest only on their way home and
+ * only when the target is one of the player's own bases (`ownBase`). Redirecting re-routes them from where they
+ * stand; cargo slows them (same rule as the server).
  */
 function FieldRedirect({
   view,
@@ -406,12 +413,14 @@ function FieldRedirect({
   position,
   verb,
   minTroops,
+  ownBase,
 }: {
   view: GameView;
   target: ArmyTarget;
   position: Vec2;
   verb: string;
   minTroops: number;
+  ownBase: boolean;
 }) {
   const map = useGameStore((s) => s.map);
   if (!map) return null;
@@ -419,8 +428,10 @@ function FieldRedirect({
     (a) =>
       a.ownerId === view.self.id &&
       a.duoWith === null &&
-      !hasResources(a.cargo) &&
-      !a.chest &&
+      // Loaded armies on their way home may switch to another own store (not a trade march).
+      (ownBase
+        ? a.status === 'returning' || !(hasResources(a.cargo) || a.chest)
+        : !(hasResources(a.cargo) || a.chest)) &&
       !(a.target?.kind === target.kind && a.target.id === target.id),
   );
   if (field.length === 0) return null;
@@ -432,16 +443,19 @@ function FieldRedirect({
           const path = findPath(map, army.position, position);
           const troops = army.troops ?? 0;
           const enough = troops >= minTroops;
+          const loaded = hasResources(army.cargo);
+          const speed = (loaded ? LOADED_SPEED : 1) * (barefoot(view) ? BAREFOOT_SPEED : 1);
           return (
             <li key={army.id} className="flex items-center justify-between gap-2 py-1">
               <span className="min-w-0">
                 Zug ({troops}) → {describeTarget(view, army.target)}
+                {loaded && ` · mit ${formatResources(army.cargo)}`}
                 <span className="block text-xs text-ink-soft">
                   {!path
                     ? 'Kein Landweg dorthin.'
                     : !enough
                       ? `Zu wenige Truppen (mind. ${minTroops}).`
-                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, barefoot(view) ? BAREFOOT_SPEED : 1))}`}
+                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, speed))}`}
                 </span>
               </span>
               <Button

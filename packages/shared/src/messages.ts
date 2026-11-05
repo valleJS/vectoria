@@ -53,7 +53,10 @@ export interface RecallArmyMessage {
   armyId: string;
 }
 
-/** Sends an army already in the field (outbound or gathering, empty-handed) somewhere else. */
+/**
+ * Sends an army already in the field somewhere else. Empty-handed armies may take any target;
+ * armies carrying resources only another base of their own; chest bearers none.
+ */
 export interface RedirectArmyMessage {
   type: 'redirectArmy';
   armyId: string;

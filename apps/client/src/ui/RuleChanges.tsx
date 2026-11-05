@@ -95,6 +95,19 @@ const RULE_CHANGES: RuleChange[] = [
     ),
   },
   {
+    id: 'universal-colors',
+    date: '2026-11-05',
+    title: 'Feste Farben für alle',
+    body: (
+      <>
+        Jede Person hat jetzt bei allen <b>dieselbe Farbe</b> — Burg, Züge und Wege sehen überall
+        gleich aus, du bist also nicht mehr automatisch rot. Deine eigene Burg erkennst du am{' '}
+        <b>goldenen Stern</b> im Namensschild und am farbigen Sockel. Wege tragen immer die Farbe
+        ihres Zuges, auch mit Ladung; die Striche zeigen spitz in Laufrichtung.
+      </>
+    ),
+  },
+  {
     id: 'cards-sea-harvest-shoes-relocate',
     date: '2026-11-05',
     title: 'Vier neue Karten',
