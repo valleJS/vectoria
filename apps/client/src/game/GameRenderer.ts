@@ -283,8 +283,9 @@ export class GameRenderer {
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
   /**
-   * Focus ring around the selection: a parchment band with orbiting studs on the ground under
-   * the piece, and four arrowheads over the sites (under labels and armies) that point at it.
+   * Focus ring around the selection: a soft disc on the ground under the piece, and over
+   * everything else on the map the parchment band with orbiting studs and four arrowheads that
+   * point at it, so no site, label or army ever hides it.
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
@@ -339,9 +340,8 @@ export class GameRenderer {
     this.app = app;
     this.art = art;
     this.night = new NightScene(art);
-    // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus ring),
-    // sites and their lamp light, deposits, the focus arrows (over every site, under every label),
-    // labels, alarms, armies, fireflies.
+    // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
+    // sites and their lamp light, deposits, labels, alarms, armies, fireflies, the focus ring.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -354,11 +354,11 @@ export class GameRenderer {
       this.siteLayer,
       this.night.glowOver,
       this.spotLayer,
-      this.focusTop,
       this.labelLayer,
       this.alertLayer,
       this.armyLayer,
       this.night.fireflies,
+      this.focusTop,
     );
     app.stage.addChild(this.world);
 
@@ -1479,10 +1479,10 @@ export class GameRenderer {
   }
 
   /**
-   * Focus ring, redrawn every frame: on the ground a soft disc and a parchment band edged in ink
-   * with a thread and four orbiting studs in the accent colour; over the sites four arrowheads
-   * on the diagonals that breathe toward the piece. A new selection locks on: the ring shrinks
-   * onto it from a little wider while fading in.
+   * Focus ring, redrawn every frame: on the ground a soft disc; on top of the map a parchment
+   * band edged in ink with a thread and four orbiting studs in the accent colour, and four
+   * arrowheads on the diagonals that breathe toward the piece. A new selection locks on: the ring
+   * shrinks onto it from a little wider while fading in.
    */
   private drawFocus(seconds: number, now: number, tint: number): void {
     const ground = this.focusGround.clear();
@@ -1507,9 +1507,8 @@ export class GameRenderer {
       g.tint = tint;
     }
 
-    ground
-      .circle(0, 0, r)
-      .fill({ color, alpha: 0.14 })
+    ground.circle(0, 0, r).fill({ color, alpha: 0.14 });
+    top
       .circle(0, 0, r)
       .stroke({ width: 5.4 * s, color: INK, alpha: 0.85 })
       .circle(0, 0, r)
@@ -1524,7 +1523,7 @@ export class GameRenderer {
       const d = 3.6 * s;
       const along = { x: Math.cos(a) * d, y: Math.sin(a) * d };
       const across = { x: -Math.sin(a) * d * 0.7, y: Math.cos(a) * d * 0.7 };
-      ground
+      top
         .poly([
           x + along.x,
           y + along.y,
