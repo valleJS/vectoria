@@ -31,6 +31,7 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   VICTORY_POINT_BASE_COST,
+  VICTORY_POINTS_PER_GAMEDAY,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { compassRose, dataUrl } from '../art/svg';
@@ -152,7 +153,8 @@ const CHAPTERS: Chapter[] = [
         <P>
           Siegpunkte kauft man in der eigenen Burg. Der erste kostet{' '}
           {formatResources(VICTORY_POINT_BASE_COST)}, jeder weitere 1 Ressource mehr als der vorige
-          — abwechselnd Stein, Holz, Gold. Der aktuelle Preis steht im Laden deiner Burg. Siegpunkte
+          — abwechselnd Stein, Holz, Gold. Der aktuelle Preis steht im Laden deiner Burg. Pro
+          Spieltag gibt es höchstens <b>{VICTORY_POINTS_PER_GAMEDAY} Siegpunkte</b>. Siegpunkte
           können nie gestohlen werden — Ressourcen und Truppen dagegen schon.
         </P>
         <P>
@@ -162,6 +164,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Das Spiel endet sofort, wenn jemand das Siegziel erreicht — auch mitten im Spieltag.',
             'Kaufst du mehrere Siegpunkte auf einmal, zahlst du die Summe der einzelnen, steigenden Preise.',
+            `Die Grenze von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten gilt vom Spieltagbeginn um 10 Uhr bis zum nächsten, Abend und Nacht eingeschlossen.`,
             'Siegpunkte gehen nie verloren, auch nicht, wenn deine Burg gestürmt wird.',
             'Beendet der Admin das Spiel bei Gleichstand, gewinnt, wer sich früher angemeldet hat.',
           ]}

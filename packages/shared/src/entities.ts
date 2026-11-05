@@ -214,6 +214,8 @@ export interface SelfState {
   caravanTrip: CaravanTrip | null;
   /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
   barefootUntil: number | null;
+  /** Victory points bought this gameday (capped at `VICTORY_POINTS_PER_GAMEDAY`). */
+  victoryPointsToday: number;
   log: LogEntry[];
 }
 

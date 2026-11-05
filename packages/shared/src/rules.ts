@@ -54,6 +54,8 @@ export const TROOP_BATCH_COST: Resources = { wood: 1, stone: 0, gold: 1 };
 /** Price of the first victory point; each further one costs 1 more of one resource, in turn. */
 export const VICTORY_POINT_BASE_COST: Resources = { wood: 1, stone: 2, gold: 1 };
 export const VICTORY_POINT_STEP_ORDER: readonly ResourceType[] = ['stone', 'wood', 'gold'];
+/** At most this many victory points can be bought per gameday (evening and night included). */
+export const VICTORY_POINTS_PER_GAMEDAY = 3;
 
 /** Travelling the full map width (along land) takes this many gameday hours. */
 export const CROSS_MAP_HOURS = 10;

@@ -43,6 +43,7 @@ import {
   TROOP_BATCH_SIZE,
   travelMs,
   victoryPointsCost,
+  VICTORY_POINTS_PER_GAMEDAY,
   type AdminState,
   type ArmyStatus,
   type ArmyTarget,
@@ -131,6 +132,8 @@ interface PlayerRecord {
   harvestDays?: number;
   /** Shoes stolen: marches started before this clock go barefoot. Absent in older saves. */
   barefootUntil?: number | null;
+  /** Victory points bought in `gameday`; absent in older saves and before the first purchase. */
+  victoryPointsBought?: { gameday: number; count: number };
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
@@ -358,6 +361,16 @@ export class GameState {
 
   buy(playerId: string, item: 'troops' | 'victoryPoint', count: number): void {
     const player = this.requirePlaying(playerId);
+    if (item === 'victoryPoint') {
+      const left = VICTORY_POINTS_PER_GAMEDAY - this.victoryPointsToday(player);
+      if (count > left) {
+        throw new RuleError(
+          left > 0
+            ? `Heute kannst du nur noch ${left} Siegpunkt${left === 1 ? '' : 'e'} kaufen.`
+            : `Pro Spieltag gibt es höchstens ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkte — morgen wieder.`,
+        );
+      }
+    }
     // Victory points get dearer one by one, so their price is the sum over the whole purchase.
     const cost =
       item === 'troops' ? TROOP_BATCH_COST : victoryPointsCost(player.victoryPoints, count);
@@ -370,6 +383,10 @@ export class GameState {
       player.homeTroops += count * TROOP_BATCH_SIZE;
     } else {
       player.victoryPoints += count;
+      player.victoryPointsBought = {
+        gameday: this.data.gameday,
+        count: this.victoryPointsToday(player) + count,
+      };
       this.addLog(player, `Du hast ${count} Siegpunkt(e) gekauft.`);
       if (player.victoryPoints >= this.options.victoryPointsToWin) this.finish(player.id);
     }
@@ -2052,6 +2069,7 @@ export class GameState {
             initiatorSources: [...pact.initiatorSources],
           })),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
+        victoryPointsToday: this.victoryPointsToday(self),
         log: self.log,
       },
     };
@@ -2399,6 +2417,12 @@ export class GameState {
     // The way home is open for everyone to see (and to ambush).
     army.stealth = false;
     army.forcedMarch = false;
+  }
+
+  /** Victory points the player bought in the current gameday. */
+  private victoryPointsToday(player: PlayerRecord): number {
+    const bought = player.victoryPointsBought;
+    return bought && bought.gameday === this.data.gameday ? bought.count : 0;
   }
 
   /** Pace of marches the player starts now: slowed while barefoot (Schuhe klauen). */

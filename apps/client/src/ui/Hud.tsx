@@ -8,6 +8,7 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   victoryPointCost,
+  VICTORY_POINTS_PER_GAMEDAY,
   type ArmyView,
   type CardType,
   type FeedEntry,
@@ -286,6 +287,7 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     gameSocket.send({ type: 'buy', item, count });
   const owned = view.players.find((p) => p.id === self.id)?.victoryPoints ?? 0;
   const vpCost = victoryPointCost(owned);
+  const vpLeft = Math.max(0, VICTORY_POINTS_PER_GAMEDAY - self.victoryPointsToday);
   return (
     <>
       <BaseStats view={view} base={base} />
@@ -324,14 +326,15 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
           <span className="flex items-center gap-1">
             <StarIcon size={16} /> {owned + 1}. Siegpunkt
             <span className="ml-1 text-xs text-ink-soft">
-              <Cost cost={vpCost} />
+              {vpLeft > 0 ? <Cost cost={vpCost} /> : 'heute keiner mehr'}
             </span>
           </span>
           <Button
             variant="primary"
             className="px-2 py-0.5"
             onClick={() => buy('victoryPoint', 1)}
-            disabled={!canAfford(self.resources, vpCost)}
+            disabled={vpLeft === 0 || !canAfford(self.resources, vpCost)}
+            title={`Noch ${vpLeft} von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten heute`}
           >
             1×
           </Button>

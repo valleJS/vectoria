@@ -8,6 +8,7 @@ import {
   SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
   OUTPOST_DAILY_INCOME,
+  VICTORY_POINTS_PER_GAMEDAY,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,17 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'victory-points-per-gameday',
+    date: '2026-11-05',
+    title: 'Höchstens 3 Siegpunkte pro Spieltag',
+    body: (
+      <>
+        Pro Spieltag lassen sich nur noch <b>{VICTORY_POINTS_PER_GAMEDAY} Siegpunkte</b> kaufen. Die
+        Grenze gilt vom Spieltagbeginn um 10 Uhr bis zum nächsten, Abend und Nacht eingeschlossen.
+      </>
+    ),
+  },
   {
     id: 'spots-spread-out',
     date: '2026-11-05',
