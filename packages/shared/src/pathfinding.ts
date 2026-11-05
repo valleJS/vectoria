@@ -235,9 +235,10 @@ export function remainingPath(path: readonly Vec2[], fraction: number): Vec2[] {
 
 /**
  * Path distance (tiles) from `from` to the centre of every tile; Infinity where unreachable.
- * One Dijkstra pass, so many destinations can be checked at once.
+ * One Dijkstra pass, so many destinations can be checked at once. With `limit`, tiles farther than
+ * that stay Infinity (the search stops there), which keeps small neighbourhoods cheap.
  */
-export function distanceField(map: MapData, from: Vec2): Float64Array {
+export function distanceField(map: MapData, from: Vec2, limit = Infinity): Float64Array {
   const start = tileOf(map, from);
   const walkable = landTest(map, start);
   const cost = new Float64Array(map.tiles.length).fill(Infinity);
@@ -251,7 +252,7 @@ export function distanceField(map: MapData, from: Vec2): Float64Array {
     closed[current] = 1;
     forEachNeighbour(map, current, walkable, (next, step) => {
       const g = cost[current]! + step;
-      if (g < cost[next]!) {
+      if (g <= limit && g < cost[next]!) {
         cost[next] = g;
         open.push(next, g);
       }

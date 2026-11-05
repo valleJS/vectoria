@@ -5,6 +5,7 @@ import {
   LOADED_SPEED,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
+  SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
   OUTPOST_DAILY_INCOME,
 } from '@vectoria/shared';
@@ -35,6 +36,22 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'spots-spread-out',
+    date: '2026-11-05',
+    title: 'Vorkommen gleichmäßig verteilt',
+    body: (
+      <>
+        Die Vorkommen wurden noch einmal neu verteilt, diesmal <b>über die ganze Karte</b>: keine
+        Häufungen mehr und keine leeren Gegenden. Von deiner Burg aus liegen Stein, Händler und
+        eines von Holz und Gold <b>unter {SPOT_FAR_HOURS} Stunden</b> entfernt, nur das andere von
+        Holz und Gold liegt {SPOT_FAR_HOURS} bis {SPOT_MAX_HOURS} Stunden weit weg. Keins liegt
+        näher als {SPOT_NEAR_HOURS} Stunde an einer Burg. Züge auf dem Weg zu einem Vorkommen laufen
+        zum nächsten neuen derselben Art weiter, wer gerade lud, lädt dort mit derselben Restzeit
+        fertig.
+      </>
+    ),
+  },
   {
     id: 'duo-attacks',
     date: '2026-11-05',

@@ -3,7 +3,6 @@ import {
   mapSizeForPlayers,
   MIN_OUTPOSTS,
   OUTPOSTS_PER_PLAYER,
-  SPOT_KINDS,
   TileType,
   type MapData,
   type Outpost,
@@ -11,11 +10,15 @@ import {
   type Vec2,
 } from '@vectoria/shared';
 import { generateMap } from './mapgen';
-import { placeBalancedSpots } from './spots';
+import { placeBalancedSpots, type SpotLayout } from './spots';
 import { createRandom } from './random';
 
-/** Cap on spots per player (four kinds); the layout keeps only the ones the balance needs. */
-const SPOTS_PER_PLAYER = 2;
+/**
+ * Castle placements tried: ones that leave a castle no room for its spots are thrown away at once
+ * (cheap); at most `FULL_SEARCHES` get the full spot search, the best layout is kept.
+ */
+const PLACEMENT_TRIES = 20;
+const FULL_SEARCHES = 4;
 
 export interface World {
   map: MapData;
@@ -43,28 +46,37 @@ export function createWorld(players: number, seed: number): World {
   const land = innerLand(map);
   if (land.length < players * 4) throw new Error('Generated map has too little land');
 
-  // Farthest-point sampling spreads castles evenly across the land.
-  const taken: Vec2[] = [];
-  const castles: Vec2[] = [];
-  for (let i = 0; i < players; i++) {
-    const next =
-      castles.length === 0
-        ? land[Math.floor(random() * land.length)]!
-        : farthestFrom(land, castles, random);
-    castles.push(next);
-    taken.push(next);
+  let best: { castles: Vec2[]; outposts: Outpost[]; layout: SpotLayout } | null = null;
+  let searches = 0;
+  for (let attempt = 0; attempt < PLACEMENT_TRIES && searches < FULL_SEARCHES; attempt++) {
+    // Farthest-point sampling spreads castles evenly across the land.
+    const taken: Vec2[] = [];
+    const castles: Vec2[] = [];
+    for (let i = 0; i < players; i++) {
+      const next =
+        castles.length === 0
+          ? land[Math.floor(random() * land.length)]!
+          : farthestFrom(land, castles, random);
+      castles.push(next);
+      taken.push(next);
+    }
+    const outposts = placeOutposts(land, castles, taken, outpostCount(players), random);
+    const anchors = [...castles, ...outposts.map((o) => o.position)];
+    // The last try searches even a cramped placement, so a world always comes out.
+    const force = attempt === PLACEMENT_TRIES - 1 && !best;
+    const layout = placeBalancedSpots(map, castles, land, taken, anchors, random, { force });
+    if (layout.spots.length === 0) continue;
+    searches++;
+    const improves =
+      !best ||
+      (layout.valid && !best.layout.valid) ||
+      (layout.valid === best.layout.valid && layout.spreadHours < best.layout.spreadHours);
+    if (improves) best = { castles, outposts, layout };
+    if (layout.valid) break;
   }
-
-  const outposts = placeOutposts(land, castles, taken, outpostCount(players), random);
-
-  const spots = placeBalancedSpots(map, castles, land, taken, spotCount(players), random).map(
-    (s, i): ResourceSpot => ({ id: `spot-${i}`, ...s }),
-  );
+  const { castles, outposts, layout } = best!;
+  const spots = layout.spots.map((s, i): ResourceSpot => ({ id: `spot-${i}`, ...s }));
   return { map, castles, outposts, spots };
-}
-
-export function spotCount(players: number): number {
-  return Math.max(SPOT_KINDS.length, Math.round(players * SPOTS_PER_PLAYER));
 }
 
 /** Mainland tiles off the map's outer ring: where castles, outposts and spots may stand. */

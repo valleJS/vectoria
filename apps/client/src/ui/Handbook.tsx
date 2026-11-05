@@ -19,7 +19,11 @@ import {
   LOADED_SPEED,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
+  SPOT_GAP_HOURS,
+  SPOT_HOLE_HOURS,
+  SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
+  SPOT_SAME_GAP_HOURS,
   RESOURCE_NAMES,
   RESOURCES,
   STARTING_RESOURCES,
@@ -220,11 +224,15 @@ const CHAPTERS: Chapter[] = [
           angreifbar.
         </P>
         <P>
-          Die Vorkommen sind fair verteilt: Der Weg zum nächsten Holz, Stein, Gold und Händler
-          zusammen ist für alle etwa gleich lang (höchstens{' '}
-          {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Kein Vorkommen
-          liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, und bei jedem ist eines der vier
-          mindestens {SPOT_FAR_HOURS} Stunden entfernt.
+          Die Vorkommen sind fair verteilt. Von jeder Burg aus liegen Stein, Händler und eines von
+          Holz und Gold näher als {SPOT_FAR_HOURS} Stunden, das andere {SPOT_FAR_HOURS} bis{' '}
+          {SPOT_MAX_HOURS} Stunden entfernt. Kein Vorkommen liegt näher als {SPOT_NEAR_HOURS} Stunde
+          an einer Burg. Der Weg zu allen vier zusammen ist für alle etwa gleich lang (Ziel:
+          höchstens {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied).
+          Vorkommen liegen mindestens {SPOT_GAP_HOURS} Stunde auseinander, gleiche mindestens{' '}
+          {SPOT_SAME_GAP_HOURS} Stunden, und nirgends ist man weiter als{' '}
+          {formatGameDuration(SPOT_HOLE_HOURS * HOUR_MS)} vom nächsten Vorkommen, Stützpunkt oder
+          Burg entfernt.
         </P>
         <H>Händler</H>
         <P>

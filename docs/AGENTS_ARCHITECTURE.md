@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 70a92ee87c46bd51a595066c0683a91a7c1d78bd
+sources_stamp: eb9c095bb8610c8cc62d42a3d598efe67ea92939
 ---
 
 # Architecture
