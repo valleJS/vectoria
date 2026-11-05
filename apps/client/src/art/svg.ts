@@ -216,29 +216,13 @@ export function resourceIcon(resource: ResourceType): string {
   return svg(64, 64, RESOURCE_BODY[resource]);
 }
 
-/** Gold veins glinting in the mine's mound: ink-edged seams, lit in pale gold. */
-const GOLD_VEINS = [
-  'M15 44L20 40L19 35L24 31',
-  'M64 28L68 33L67 38L72 42',
-  'M27 27L32 29L35 25',
-  'M57 44L62 47',
-]
-  .map(
-    (d) =>
-      `<path d="${d}" fill="none" stroke="${INK}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-       <path d="${d}" fill="none" stroke="${GOLD}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-       <path d="${d}" fill="none" stroke="${GOLD_LIGHT}" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round"/>`,
-  )
-  .join('');
-
 /** Where the gold mine (`deposit('gold')`) catches the light, art px: the map twinkles there. */
 export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[] = [
-  { x: 16, y: 40, size: 9 },
-  { x: 68, y: 40, size: 10 },
-  { x: 41, y: 51, size: 8 },
-  { x: 24, y: 28, size: 7 },
-  { x: 62, y: 22, size: 7 },
-  { x: 60, y: 50, size: 6 },
+  { x: 20, y: 47, size: 9 },
+  { x: 43, y: 50, size: 10 },
+  { x: 62, y: 49, size: 8 },
+  { x: 72, y: 53, size: 6 },
+  { x: 30, y: 54, size: 6 },
 ];
 
 /**
@@ -271,7 +255,7 @@ function traderTent(): string {
 
 /**
  * Map piece for a spot, 88×68, standing at (44, 58), centred on its tile at y 40: a woodpile
- * with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets, or the
+ * with a chopping block, a heap of quarry stone, a gold mine with nuggets, or the
  * trader's pavilion.
  */
 export function deposit(resource: SpotKind): Art {
@@ -323,10 +307,7 @@ export function deposit(resource: SpotKind): Art {
         <rect x="27" y="30" width="34" height="6" rx="1" fill="${TIMBER.light}"/>
       </g>
       <path d="M31.6 38v16M54 38v16" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
-      ${GOLD_VEINS}
-      ${goldNugget(22, 52, 20, 1)}${goldNugget(60, 54, 18, 2)}${goldNugget(41, 56, 22, 0)}${goldNugget(30, 58, 14, 3)}${goldNugget(70, 57, 12, 4)}
-      <path d="M38 22l-1.4 2.8" stroke="#fffbe6" stroke-width="1.6" stroke-linecap="round"/>
-      ${glint(16, 40, 5)}${glint(68, 40, 5.5)}${glint(46, 47, 3.8)}${glint(24, 28, 3.6)}${glint(62, 22, 3.2)}`;
+      ${goldNugget(22, 52, 20, 1)}${goldNugget(60, 54, 18, 2)}${goldNugget(41, 56, 22, 0)}${goldNugget(30, 58, 14, 3)}${goldNugget(70, 57, 12, 4)}`;
   }
   return { svg: svg(88, 68, body), width: 88, height: 68, anchor: { x: 44, y: 58 }, centreY: 40 };
 }

@@ -280,8 +280,17 @@ export class GameRenderer {
   private readonly alertLayer = new Container();
   private alerts: SiteAlert[] = [];
   private alertsKey = '';
-  /** Glints twinkling on chests and gold mines, each with its own phase. */
-  private sparkles: { sprite: Sprite; phase: number; size: number; speed: number }[] = [];
+  /**
+   * Glints twinkling on chests and gold mines, each with its own phase; chest glints also turn,
+   * gold mine glints only blink.
+   */
+  private sparkles: {
+    sprite: Sprite;
+    phase: number;
+    size: number;
+    speed: number;
+    spin: boolean;
+  }[] = [];
   /** Warm shine pulsing under gold mines. */
   private shines: { sprite: Sprite; phase: number }[] = [];
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
@@ -730,6 +739,7 @@ export class GameRenderer {
             phase: Math.random() * Math.PI * 2,
             size: g.size * k,
             speed: 2.6 + Math.random() * 1.6,
+            spin: false,
           });
         }
       }
@@ -753,6 +763,7 @@ export class GameRenderer {
           phase: Math.random() * Math.PI * 2,
           size: size * u,
           speed: 2.2,
+          spin: true,
         });
       }
     }
@@ -1702,11 +1713,11 @@ export class GameRenderer {
       fire.flame.scale.set(fire.scale * (2 - flicker), fire.scale * flicker * 1.1);
       fire.light.alpha = 0.35 + 0.4 * flicker;
     }
-    for (const { sprite, phase, size, speed } of this.sparkles) {
+    for (const { sprite, phase, size, speed, spin } of this.sparkles) {
       const twinkle = Math.max(0, Math.sin(seconds * speed + phase));
       sprite.alpha = twinkle;
       sprite.scale.set(((0.4 + 0.6 * twinkle) * size) / this.art.sparkle.width);
-      sprite.rotation = seconds * 0.8 + phase;
+      if (spin) sprite.rotation = seconds * 0.8 + phase;
     }
     for (const { sprite, phase } of this.shines) {
       // Brighter in the dark, where the gold catches the moon.
