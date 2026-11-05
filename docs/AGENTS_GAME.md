@@ -3,10 +3,10 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 27de36b184af866184df143a0b581a0e19a9cc1d
+sources_stamp: 70a92ee87c46bd51a595066c0683a91a7c1d78bd
 ---
 
 # Game rules (prototype)
@@ -41,9 +41,18 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - After downtime the server catches the clock up (`calendar.gameTimeBetween`); only one daily
   payout is granted for missed days.
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
-  (always). Then: pending activity becomes active, every player gets 1 of each resource and 3 of
-  the active one, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
+  (always). Then: the night caravan arrives (see below), pending activity
+  becomes active, every player gets 1 of each resource and 3 of the active one plus
+  `OUTPOST_DAILY_INCOME` (1) of each per owned outpost, all straight into the home castle, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
   (one per player, at least `CHESTS_PER_GAMEDAY`).
+
+- **Night caravan** (`sendCaravans`): once per gameday, on the first tick outside game hours
+  (18:00, not while paused), every owned outpost's whole stock moves into `PlayerRecord.caravan`
+  (`SelfState.caravan`; troop-free, neither spendable nor raidable/plunderable). `startGameday`
+  adds it to the home castle; it also sends a caravan first if none left yet for the ending day
+  (`caravanDay`; `always` mode, or the server was down over the night). `PlayerRecord.caravanTrip`
+  (`SelfState.caravanTrip`) keeps one wagon per outpost with stock (`from`, `load`) plus real
+  `departedAt` / `arrivesAt` (`calendar.nextGameTime`), so the owner's map shows the wagons rolling home.
 
 ## Economy
 
@@ -53,9 +62,10 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
-| Spending | only resources stored in the home castle; outpost stock must be carried home first |
+| Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (leaves 18:00, arrives at the next gameday start) |
 | Start | 50 troops, 2 of each resource |
-| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`; the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
+| Spot layout | `spots.placeBalancedSpots` over the four `SPOT_KINDS` (wood, stone, gold, trader): for every castle, real walk to nearest wood + stone + gold + trader sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the four ≥ `SPOT_FAR_HOURS`, no spot within `SPOT_NEAR_HOURS` of any castle (hard rule: candidates need `SPOT_NEAR_HOURS × GRID_EXCESS` on the 8-way grid, which guarantees it on real routes; plus a penalty, polish never breaks it, a layout keeping it always wins); cap `SPOTS_PER_PLAYER` 2; the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
+| Trader | spot kind `trader` (`ResourceSpot.resource`, name kept for saves): `sendArmy` with `cargo` = stone only and `trade` {gold, wood} summing to it (`checkTrade`); no other cargo is ever allowed. Outbound and home loaded (`LOADED_SPEED`, raidable). On arrival `tradeAt` swaps instantly (no loading) — an army robbed of its stone on the way turns home at once (`raid`; `tradeAt` still handles an empty arrival). Outbound trade armies cannot be redirected (recall only, stone goes back); nothing can be redirected onto a trader |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
 
 ## Bases and outposts
@@ -68,8 +78,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving
   at an own outpost deposits troops and cargo; at a foreign one (or a ruin) it is an assault.
-- Moving troops between own bases may carry `cargo` (no capacity limit). Cargo is only allowed
-  when the target is an own base.
+- Moving troops between own bases never carries `cargo`: `sendArmy` refuses any cargo, so stock
+  is not moved between bases by day (troops withdrawn from an outpost leave it behind). Gatherers
+  still deposit their yield at the base they left from.
 
 ## Armies
 
@@ -79,14 +90,13 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
-- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. An army with resource cargo may only be redirected to another own base (castle or own outpost; `redirectConvoy`): a returner stays a returner (`baseId` = new base, open, normal pace), a transport stays outbound with its cards; both at `LOADED_SPEED`. Chest bearers cannot be redirected; nor can an army to the target it already has.
+- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. A loaded army (cargo or chest) may only switch to another own base (`redirectHome`: new `baseId`, then `startReturn`, so it stays loaded-slow and raidable); stock that reached a base stays there (castle until spent, outpost until the night caravan).
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
 - Heading home with resource cargo is slower: `startReturn` passes `LOADED_SPEED` (0.75)
   to `travelMs`. Chest bearers and empty armies march at normal speed; a convoy robbed of all
-  cargo is re-timed from where it stands and walks on at normal speed. Transfers between own
-  bases with cargo (`sendArmy`, e.g. "Heimholen") march at `LOADED_SPEED` too.
+  cargo is re-timed from where it stands and walks on at normal speed.
 - Everything is visible to everyone. Fog/stealth null out fields in `GameState.armyView`.
 
 ## Combat
@@ -105,17 +115,38 @@ troops than the other side brought (stops 1-troop harassment).
 marching home with the whole stock (no garrison → the stock stays in the ruin). `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
 command in `requirePlaying` until the player's last army is gone (`removeArmy` lifts it). Nobody
 in the field → no lockout. The client greys out every action (`ui/Routed.tsx` `Locked`, `inert`)
-and shows a "Handlungsunfähig" stamp in the top bar.
+and shows a "Handlungsunfähig" stamp in the top bar. While routed, the castle itself is off limits too: the
+winning assault calls `turnBackAssaults` (every other outbound assault on that castle turns home
+on the spot), `destination` refuses new attacks or redirects onto it, and one that still arrives
+turns back without a fight (`assaultCastle`). With no troops away there is no rout, hence no
+protection.
+
+**Duo attacks** (`offerDuo` / `answerDuo` / `withdrawDuo` / `abortDuo`, `PactRecord` in
+`data.pacts`, `SelfState.pacts` for the two participants only): against a third player's castle
+(not while it is protected after a fall) or owned outpost. The initiator picks own stationed
+troops per base and asks the partner for a number (≤ partner's stationed troops); the partner
+only accepts (choosing their own bases, sum must match) or declines; unanswered offers lapse when
+the following gameday ends. On accept every group marches to one meeting point (`planDuo` in
+`shared/duo.ts`: the land tile with the earliest latest arrival, target ignored); outsiders see
+no target until then. Groups that arrive wait (`status: 'waiting'`, skipped by `advance`); the
+last one unites them (`arriveAtMeet`) into one army (`ownerId` = initiator, `pactId`,
+`ArmyView.duoWith`) at the slower pace. No march cards. At the target `duoAssault` fights by the
+usual rules; losses, plunder (`splitByShare`) are shared by troops, a castle's chest by lot
+weighted by troops, a won outpost goes to the larger share (tie 50:50) with its survivors and
+stock share, everyone else marches home separately. Recall/redirect are refused; a pact ends
+early only when both call `abortDuo` (or the target is invalid on arrival, or a participant is
+kicked) — groups return to their bases, a united army splits by share. A participant's rout
+skips pact armies, and `hasArmies` counts them, so they stay routed until those are home.
 
 **Raids**: any marching army carrying resource cargo (`isRaidable` in `shared/entities.ts`: home
-from a spot or a win, or a transfer between own bases) can be ambushed — except while its owner
-is routed (all their armies are immune; raids already underway go empty). A robbed transfer walks
+from a spot or a win; base-to-base transfers no longer exist) can be ambushed — except while its owner
+is routed (all their armies are immune; raids already underway go empty). A robbed army walks
 on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
 A convoy cannot raid in turn: armies with cargo can only be redirected to an own base
-(`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen,
+(`redirectArmy`), and `sendArmy` takes no cargo at all. VP are never stolen,
 and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and
 always keeps at least one troop (`raid`), so the chest always gets home.
 

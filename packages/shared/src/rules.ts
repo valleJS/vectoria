@@ -13,6 +13,24 @@ export const RESOURCE_NAMES: Record<ResourceType, string> = {
   gold: 'Gold',
 };
 
+/** What a spot on the map offers: a resource to gather, or the trader. */
+export const SPOT_KINDS = [...RESOURCES, 'trader'] as const;
+export type SpotKind = (typeof SPOT_KINDS)[number];
+
+export const SPOT_NAMES: Record<SpotKind, string> = {
+  wood: 'Holz-Vorkommen',
+  stone: 'Stein-Vorkommen',
+  gold: 'Gold-Vorkommen',
+  trader: 'Händler',
+};
+
+/**
+ * The trader swaps `TRADE_INPUT` 1:1 for the `TRADE_OUTPUTS`, split as the sender chooses
+ * (x stone → y gold + z wood, x = y + z). Instant on arrival, no loading time.
+ */
+export const TRADE_INPUT: ResourceType = 'stone';
+export const TRADE_OUTPUTS: readonly ResourceType[] = ['gold', 'wood'];
+
 export const HOUR_MS = 60 * 60 * 1000;
 /** A gameday is 10:00–18:00, i.e. 8 hours of game clock. */
 export const GAMEDAY_HOURS = 8;
@@ -21,6 +39,11 @@ export const GAMEDAY_MS = GAMEDAY_HOURS * HOUR_MS;
 /** Daily payout: every resource +1, the chosen base activity pays this amount instead. */
 export const DAILY_BASE_INCOME = 1;
 export const DAILY_ACTIVITY_INCOME = 3;
+/**
+ * Each owned outpost adds this much of every resource to the home castle at each gameday start
+ * (straight into the castle, not the outpost's own stock).
+ */
+export const OUTPOST_DAILY_INCOME = 1;
 
 export const STARTING_TROOPS = 50;
 export const STARTING_RESOURCES: Resources = { wood: 2, stone: 2, gold: 2 };
@@ -43,12 +66,14 @@ export const GATHER_YIELD_PER_100_TROOPS = 10;
 export const GATHER_DURATION_MS = HOUR_MS;
 
 /**
- * Resource spot balance. For every castle, the walk to its nearest wood + nearest stone + nearest
- * gold spot adds up to about the same; the totals of all players differ by at most
- * `SPOT_BALANCE_TOLERANCE_HOURS`. One of the three lies at least `SPOT_FAR_HOURS` away.
+ * Spot balance. For every castle, the walk to its nearest spot of each kind (wood, stone, gold,
+ * trader) adds up to about the same; the totals of all players differ by at most
+ * `SPOT_BALANCE_TOLERANCE_HOURS`. One of the four lies at least `SPOT_FAR_HOURS` away, and no
+ * spot lies closer than `SPOT_NEAR_HOURS` to any castle.
  */
 export const SPOT_BALANCE_TOLERANCE_HOURS = 0.25;
-export const SPOT_FAR_HOURS = 2.5;
+export const SPOT_FAR_HOURS = 2;
+export const SPOT_NEAR_HOURS = 1;
 
 /** Neutral outposts on the map: this many per player (at least `MIN_OUTPOSTS`). */
 export const OUTPOSTS_PER_PLAYER = 0.75;

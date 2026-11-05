@@ -3,7 +3,7 @@ import {
   mapSizeForPlayers,
   MIN_OUTPOSTS,
   OUTPOSTS_PER_PLAYER,
-  RESOURCES,
+  SPOT_KINDS,
   TileType,
   type MapData,
   type Outpost,
@@ -14,7 +14,8 @@ import { generateMap } from './mapgen';
 import { placeBalancedSpots } from './spots';
 import { createRandom } from './random';
 
-const SPOTS_PER_PLAYER = 1.5;
+/** Cap on spots per player (four kinds); the layout keeps only the ones the balance needs. */
+const SPOTS_PER_PLAYER = 2;
 
 export interface World {
   map: MapData;
@@ -63,7 +64,7 @@ export function createWorld(players: number, seed: number): World {
 }
 
 export function spotCount(players: number): number {
-  return Math.max(RESOURCES.length, Math.round(players * SPOTS_PER_PLAYER));
+  return Math.max(SPOT_KINDS.length, Math.round(players * SPOTS_PER_PLAYER));
 }
 
 /** Mainland tiles off the map's outer ring: where castles, outposts and spots may stand. */

@@ -19,7 +19,7 @@ const CHEST = chestParts();
 /** The map chest (src/art/svg.ts `chestParts`) with the lid as its own group so it can fly off. */
 function ChestArt({ open }: { open: boolean }) {
   return (
-    <svg viewBox="0 0 56 48" className="h-44 w-auto overflow-visible" aria-hidden>
+    <svg viewBox="0 0 56 48" className="h-36 w-auto overflow-visible sm:h-44" aria-hidden>
       <g dangerouslySetInnerHTML={{ __html: CHEST.shadow }} />
       {open && <ellipse cx="28" cy="25" rx="20" ry="4.5" fill="#fff3a8" />}
       <g dangerouslySetInnerHTML={{ __html: CHEST.body }} />
@@ -86,16 +86,18 @@ function ChestScene() {
           <>
             <Rays />
             <div className="chest-burst absolute h-40 w-40 rounded-full bg-[#fff3a8]" aria-hidden />
-            <div className="relative text-xl italic">Du erhältst: {CARDS[card].name}</div>
+            <div className="relative px-4 text-center text-xl italic">
+              Du erhältst: {CARDS[card].name}
+            </div>
             <Button
               variant="plain"
-              className="card-reveal relative [perspective:800px]"
+              className="card-reveal relative font-normal whitespace-normal [perspective:800px]"
               onClick={() => showCard(card)}
               aria-label="Karte ansehen"
             >
               <CardFace card={card} className="text-ink" />
             </Button>
-            <div className="relative flex gap-2">
+            <div className="relative flex flex-wrap justify-center gap-2 px-4">
               {chests > 0 && (
                 <Button variant="primary" onClick={() => setPhase('closed')}>
                   Nächste Truhe ({chests})
@@ -107,7 +109,7 @@ function ChestScene() {
           </>
         ) : (
           <>
-            <div className="text-xl italic">
+            <div className="px-4 text-center text-xl italic">
               {chests === 0 && phase === 'closed'
                 ? 'Keine Truhe mehr da.'
                 : `Deine Truppen haben ${chests === 1 ? 'eine Truhe' : `${chests} Truhen`} heimgebracht!`}

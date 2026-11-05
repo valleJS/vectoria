@@ -30,6 +30,7 @@ import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
 import {
   AlarmIcon,
+  CaravanIcon,
   SoldiersIcon,
   CardArt,
   CastleIcon,
@@ -56,6 +57,8 @@ import { Progress } from '@/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Locked } from './Routed';
 import { SelectionContent } from './SelectionPanel';
+import { pactsToAnswer, useDuoNotices } from '../game/duo';
+import { Inbox } from './Duo';
 
 const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = {
   idle: { label: 'Offline', dot: 'bg-ink-soft' },
@@ -132,9 +135,13 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
               : label}
         </span>
       </Tip>
-      <RoutedBadge view={view} compact={compact} />
-      {compact && <RuleChangesButton compact />}
-      {compact && <HandbookButton />}
+      {!compact && <RoutedBadge view={view} compact={false} />}
+      {compact && (
+        <span className="flex shrink-0 items-center gap-1">
+          <RuleChangesButton compact />
+          <HandbookButton />
+        </span>
+      )}
     </header>
   );
 }
@@ -148,9 +155,14 @@ function RoutedBadge({ view, compact }: { view: GameView; compact: boolean }) {
   const detail = `Burg gefallen — noch ${away} Truppen auf dem Rückzug`;
   return (
     <Tip label={detail}>
-      <span className="shrink-0 animate-pulse border-2 border-seal bg-parchment px-2 py-0.5 text-xs font-bold tracking-wider text-seal uppercase">
+      {/* Top bar: may shrink and truncate. Phone banner: full detail, wrapping. */}
+      <span
+        className={`pointer-events-auto animate-pulse border-2 border-seal bg-parchment px-2 py-0.5 text-xs font-bold tracking-wider text-seal uppercase ${
+          compact ? 'max-w-full text-center' : 'min-w-0 truncate'
+        }`}
+      >
         Handlungsunfähig
-        {!compact && <span className="ml-2 font-normal tracking-normal normal-case">{detail}</span>}
+        <span className="ml-2 font-normal tracking-normal normal-case">{detail}</span>
       </span>
     </Tip>
   );
@@ -278,6 +290,14 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     <>
       <BaseStats view={view} base={base} />
       <div className="mt-1 text-xs text-ink-soft">Unterwegs: {field} Truppen</div>
+      {hasResources(self.caravan) && (
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#8a6410]">
+          <CaravanIcon color={cssColor(playerColor(view, self.id))} size={20} />
+          <span>
+            Karawane unterwegs: {formatResources(self.caravan)} — morgen früh in der Basis
+          </span>
+        </div>
+      )}
       <div className="mt-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
@@ -328,7 +348,8 @@ function OutpostBase({ view, base }: { view: GameView; base: BaseInfo }) {
     <>
       <BaseStats view={view} base={base} />
       <p className="mt-1 text-xs text-ink-soft">
-        Ausgeben lässt sich nur, was in der Basis lagert.
+        Ausgeben lässt sich nur, was in der Basis lagert. Um 18 Uhr bringt die Karawane das Lager
+        hier heim.
       </p>
       <div className="mt-1.5 flex gap-1.5">
         <Button className="flex-1 px-1" onClick={() => select({ kind: 'outpost', id: base.id! })}>
@@ -526,12 +547,17 @@ function armyStatusText(view: GameView, army: ArmyView): string {
       );
     case 'outbound':
       return `${army.target?.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${left}`;
+    case 'waiting':
+      return `wartet am Duo-Treffpunkt, noch ${left}`;
   }
 }
 
 function ArmiesList({ view }: { view: GameView }) {
   const select = useGameStore((s) => s.select);
-  const mine = view.armies.filter((a) => a.ownerId === view.self.id);
+  // Own armies, and a duo army the player is part of (led by the other side).
+  const mine = view.armies.filter(
+    (a) => a.ownerId === view.self.id || (a.duoWith === view.self.id && a.status === 'outbound'),
+  );
   if (mine.length === 0) {
     return (
       <p className="py-2 text-ink-soft italic">
@@ -551,7 +577,7 @@ function ArmiesList({ view }: { view: GameView }) {
             <b className="tabular-nums">{army.troops}</b> → {describeTarget(view, army.target)}
             <span className="block text-xs text-ink-soft">{armyStatusText(view, army)}</span>
           </Button>
-          {army.status !== 'returning' && (
+          {army.status !== 'returning' && !army.duoWith && (
             <Tip label="Zurückrufen">
               <Button
                 size="icon-sm"
@@ -845,7 +871,17 @@ function SheetContent({ view, tab }: { view: GameView; tab: SheetTab }) {
   );
   switch (tab) {
     case 'ticker':
-      return <Ticker view={view} collapsible={false} />;
+      // Phones: the inbox sits on top of the ticker sheet (the tab bar has no room for it).
+      return (
+        <div className="flex min-h-0 flex-col gap-1.5">
+          {view.self.pacts.length > 0 && (
+            <div className="flex max-h-[50%] min-h-0 flex-col">
+              <Inbox view={view} />
+            </div>
+          )}
+          <Ticker view={view} collapsible={false} />
+        </div>
+      );
     case 'selection':
       return titled('Auswahl', <SelectionContent view={view} />);
     case 'armies':
@@ -883,7 +919,12 @@ function CompactHud({ view }: { view: GameView }) {
   const color = cssColor(playerColor(view, view.self.id));
   const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
   const tabs: { id: SheetTab; label: string; icon: ReactNode; badge?: number }[] = [
-    { id: 'ticker', label: 'Ticker', icon: <AlarmIcon size={20} /> },
+    {
+      id: 'ticker',
+      label: 'Ticker',
+      icon: <AlarmIcon size={20} />,
+      badge: pactsToAnswer(view),
+    },
     {
       id: 'selection',
       label: 'Auswahl',
@@ -903,11 +944,11 @@ function CompactHud({ view }: { view: GameView }) {
     <div className="pointer-events-none absolute inset-0 flex flex-col">
       <TopBar view={view} compact />
       <div className="relative min-h-0 flex-1">
-        {night && !nightDismissed && (
-          <div className="absolute inset-x-2 top-2 flex justify-center">
-            <NightBanner onClose={() => setNightDismissed(true)} />
-          </div>
-        )}
+        {/* Banners sit under the top bar, never in it: the menu buttons there must stay reachable. */}
+        <div className="absolute inset-x-2 top-2 flex flex-col items-center gap-1.5">
+          <RoutedBadge view={view} compact />
+          {night && !nightDismissed && <NightBanner onClose={() => setNightDismissed(true)} />}
+        </div>
         <Notice className="top-2" />
         <div className="absolute inset-x-2 bottom-2 flex flex-col items-center">
           {!tab && <EndBanner view={view} />}
@@ -957,6 +998,7 @@ function CompactHud({ view }: { view: GameView }) {
 export function Hud() {
   const view = useGameStore((s) => s.view);
   const compact = useCompact();
+  useDuoNotices(view);
   if (!view) return null;
   return (
     <>
@@ -967,8 +1009,11 @@ export function Hud() {
           <TopBar view={view} compact={false} />
           <div className="relative flex min-h-0 flex-1 justify-between gap-4 p-3">
             <div className="flex w-80 min-h-0 flex-col gap-3">
-              <div className="flex max-h-[55%] min-h-0 flex-col">
+              <div className="flex max-h-[45%] min-h-0 flex-col">
                 <Ticker view={view} />
+              </div>
+              <div className="flex max-h-[35%] min-h-0 flex-col">
+                <Inbox view={view} />
               </div>
               <div className="mt-auto flex items-end gap-2">
                 <HandbookCorner />

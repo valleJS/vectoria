@@ -1,8 +1,14 @@
-import { ARMY_TARGET_KINDS, type ArmyTarget, type GamePhase, type GameView } from './entities';
+import {
+  ARMY_TARGET_KINDS,
+  type ArmyTarget,
+  type DuoSourcePick,
+  type GamePhase,
+  type GameView,
+} from './entities';
 import type { MapData } from './map';
 import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** WebSocket close code for an unknown or revoked session token. */
 export const CLOSE_UNKNOWN_TOKEN = 4001;
@@ -36,8 +42,10 @@ export interface SendArmyMessage {
   target: ArmyTarget;
   /** Send the armed `activeCard` along with this army. */
   useActiveCard: boolean;
-  /** Resources to carry along; only allowed when the target is one of the sender's own bases. */
+  /** Resources to carry along: only stone, and only to the trader (with `trade`). */
   cargo: Resources;
+  /** Trader only: what the carried stone is swapped for; `gold + wood` equals `cargo.stone`. */
+  trade?: { gold: number; wood: number };
 }
 
 export interface RecallArmyMessage {
@@ -71,7 +79,49 @@ export interface OpenChestMessage {
   type: 'openChest';
 }
 
+/**
+ * Offers a duo attack to `partnerId`: the target, the initiator's own troops (`sources`,
+ * stationed troops from own bases) and how many troops the partner is to bring.
+ */
+export interface DuoOfferMessage {
+  type: 'duoOffer';
+  partnerId: string;
+  target: ArmyTarget;
+  sources: DuoSourcePick[];
+  partnerTroops: number;
+}
+
+/** The initiator takes back an offer not answered yet. */
+export interface DuoWithdrawMessage {
+  type: 'duoWithdraw';
+  pactId: string;
+}
+
+/**
+ * The partner answers an offer. Accepting needs `sources` adding up to the asked troops; the
+ * attack starts at once.
+ */
+export interface DuoAnswerMessage {
+  type: 'duoAnswer';
+  pactId: string;
+  accept: boolean;
+  sources: DuoSourcePick[];
+}
+
+/**
+ * Asks to call off a running duo attack, or agrees when the other participant asked first (then
+ * it is called off). Sent again by the one who asked, it takes the request back.
+ */
+export interface DuoAbortMessage {
+  type: 'duoAbort';
+  pactId: string;
+}
+
 export type ClientMessage =
+  | DuoOfferMessage
+  | DuoWithdrawMessage
+  | DuoAnswerMessage
+  | DuoAbortMessage
   | PingMessage
   | SetActivityMessage
   | BuyMessage
@@ -203,7 +253,10 @@ export type AdminAction =
   /** Swaps the two players' home castle positions; everything else stays with each player. */
   | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
-  | { action: 'grant'; playerId: string; resource: ResourceType; amount: number };
+  /** Adds `amount` (may be negative) of every resource to the home castle. */
+  | { action: 'grantAll'; playerId: string; amount: number }
+  /** Adds `amount` (may be negative) troops to the home castle. */
+  | { action: 'grantTroops'; playerId: string; amount: number };
 
 // ---- Codec ----
 
@@ -253,6 +306,18 @@ function parseTarget(value: unknown): ArmyTarget | null {
     : null;
 }
 
+function parseSources(value: unknown): DuoSourcePick[] | null {
+  if (!Array.isArray(value) || value.length > 32) return null;
+  const out: DuoSourcePick[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== 'object' || item === null) return null;
+    const { from, troops } = item as Record<string, unknown>;
+    if (!(from === null || isId(from)) || !isPositiveInt(troops)) return null;
+    out.push({ from: from as string | null, troops: troops as number });
+  }
+  return out;
+}
+
 function parseResources(value: unknown): Resources | null {
   if (typeof value !== 'object' || value === null) return null;
   const raw = value as Record<string, unknown>;
@@ -288,7 +353,23 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const target = parseTarget(msg.target);
       const cargo = parseResources(msg.cargo ?? {});
       const from = msg.from ?? null;
-      return isPositiveInt(msg.troops) && target && cargo && (from === null || isId(from))
+      const rawTrade = msg.trade as Record<string, unknown> | undefined;
+      const trade =
+        rawTrade === undefined
+          ? undefined
+          : typeof rawTrade === 'object' &&
+              rawTrade !== null &&
+              Number.isInteger(rawTrade.gold) &&
+              Number.isInteger(rawTrade.wood) &&
+              (rawTrade.gold as number) >= 0 &&
+              (rawTrade.wood as number) >= 0
+            ? { gold: rawTrade.gold as number, wood: rawTrade.wood as number }
+            : null;
+      return isPositiveInt(msg.troops) &&
+        target &&
+        cargo &&
+        trade !== null &&
+        (from === null || isId(from))
         ? {
             type: 'sendArmy',
             from,
@@ -296,11 +377,34 @@ export function parseClientMessage(raw: string): ClientMessage | null {
             target,
             useActiveCard: msg.useActiveCard === true,
             cargo,
+            ...(trade ? { trade } : {}),
           }
         : null;
     }
     case 'recallArmy':
       return isId(msg.armyId) ? { type: 'recallArmy', armyId: msg.armyId } : null;
+    case 'duoOffer': {
+      const target = parseTarget(msg.target);
+      const sources = parseSources(msg.sources);
+      return isId(msg.partnerId) && target && sources && isPositiveInt(msg.partnerTroops)
+        ? {
+            type: 'duoOffer',
+            partnerId: msg.partnerId,
+            target,
+            sources,
+            partnerTroops: msg.partnerTroops,
+          }
+        : null;
+    }
+    case 'duoWithdraw':
+    case 'duoAbort':
+      return isId(msg.pactId) ? { type: msg.type, pactId: msg.pactId } : null;
+    case 'duoAnswer': {
+      const sources = parseSources(msg.sources ?? []);
+      return isId(msg.pactId) && typeof msg.accept === 'boolean' && sources
+        ? { type: 'duoAnswer', pactId: msg.pactId, accept: msg.accept, sources }
+        : null;
+    }
     case 'redirectArmy': {
       const target = parseTarget(msg.target);
       return isId(msg.armyId) && target
@@ -366,17 +470,12 @@ export function parseAdminAction(value: unknown): AdminAction | null {
         ? { action: 'setEmail', playerId: msg.playerId, email }
         : null;
     }
-    case 'grant':
+    case 'grantAll':
+    case 'grantTroops':
       return isId(msg.playerId) &&
-        isResource(msg.resource) &&
         Number.isInteger(msg.amount) &&
         Math.abs(msg.amount as number) <= 10_000
-        ? {
-            action: 'grant',
-            playerId: msg.playerId,
-            resource: msg.resource,
-            amount: msg.amount as number,
-          }
+        ? { action: msg.action, playerId: msg.playerId, amount: msg.amount as number }
         : null;
     default:
       return null;

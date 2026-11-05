@@ -7,6 +7,7 @@ import {
   boulder,
   broadleaf,
   campfire,
+  caravanWagon,
   castle,
   CASTLE_STYLE_NAMES,
   chest,
@@ -386,6 +387,9 @@ export function DesignSheet() {
               <MapArt art={deposit(r)} options={{ outline: true }} height={78} />
             </Tile>
           ))}
+          <Tile label="Händler">
+            <MapArt art={deposit('trader')} options={{ outline: true }} height={78} />
+          </Tile>
           {RESOURCES.map((r) => (
             <Tile key={`i${r}`} label={`Icon ${RESOURCE_NAMES[r]}`}>
               <img
@@ -434,6 +438,14 @@ export function DesignSheet() {
               <MapArt art={tent(c)} options={{ outline: true }} height={52} />
             </Tile>
           ))}
+          {HERALDRY.slice(0, 3).map((c) => (
+            <Tile key={`k${c}`} label="Karawane">
+              <MapArt art={caravanWagon(c)} options={{ outline: true }} height={52} />
+            </Tile>
+          ))}
+          <Tile label="Karawane nachts" ground="#3d4568">
+            <MapArt art={caravanWagon(HERALDRY[0]!)} options={{ outline: true }} height={52} />
+          </Tile>
           <Tile label="Lagerfeuer" ground="#3d4568">
             <span className="relative inline-block">
               <MapArt art={campfire()} options={{ outline: true }} height={26} />

@@ -5,6 +5,7 @@ import {
   GATHER_DURATION_MS,
   BAREFOOT_SPEED,
   LOADED_SPEED,
+  OUTPOST_DAILY_INCOME,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
@@ -12,13 +13,11 @@ import {
   pathLength,
   planIntercept,
   RESOURCE_NAMES,
-  RESOURCES,
   travelMs,
   type ArmyTarget,
   type ArmyView,
   type GameView,
   type MapData,
-  type Resources,
   type Vec2,
 } from '@vectoria/shared';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -38,10 +37,11 @@ import {
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon } from './icons';
-import { Button, Tip } from './Panel';
+import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
+import { Button, SectionLabel, Tip } from './Panel';
+import { DuoForm } from './Duo';
 import { Locked } from './Routed';
-import { XIcon } from 'lucide-react';
+import { ArrowRightIcon, XIcon } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,6 +63,7 @@ const STATUS_NAMES: Record<ArmyView['status'], string> = {
   outbound: 'unterwegs',
   gathering: 'sammelt',
   returning: 'auf dem Heimweg',
+  waiting: 'wartet am Duo-Treffpunkt',
 };
 
 /** Convoy movement as seen now: the remaining route, walked until its arrival clock. */
@@ -105,10 +106,10 @@ function SendForm({
   position,
   verb,
   bases,
-  allowCargo = false,
   defaultTroops = 50,
   minTroops = 1,
   preview,
+  trade = false,
 }: {
   view: GameView;
   target: ArmyTarget;
@@ -116,19 +117,20 @@ function SendForm({
   verb: string;
   /** Bases the troops may leave from; the nearest one with troops is preselected. */
   bases: BaseInfo[];
-  /** Target is an own base: offer to carry resources along. */
-  allowCargo?: boolean;
   defaultTroops?: number;
   /** Fewer troops than this cannot be sent (e.g. a chest's requirement). */
   minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
+  /** Target is the trader: carry stone and choose the gold/wood split. */
+  trade?: boolean;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
   const [chosen, setTroops] = useState(defaultTroops);
   const [useCard, setUseCard] = useState(true);
-  const [cargo, setCargo] = useState<Resources>(emptyResources);
+  const [stoneWanted, setStone] = useState(0);
+  const [goldShare, setGoldShare] = useState(0.5);
   const activeCard = view.self.activeCard;
   // A Seeweg cannot be used for a raid (the server refuses it): it stays armed for later.
   const cardUsable = activeCard !== null && !(activeCard === 'sea' && target.kind === 'army');
@@ -152,13 +154,18 @@ function SendForm({
   // Troops shrink as armies leave; never offer more than are there.
   const available = base.troops;
   const troops = Math.min(chosen, available);
-  const load = Object.fromEntries(
-    RESOURCES.map((r) => [r, Math.min(cargo[r], base.resources[r])]),
-  ) as Resources;
+  // Trader: x stone → y gold + z wood (x = y + z); stone in the store caps x.
+  const stone = trade ? Math.max(0, Math.min(stoneWanted, base.resources.stone)) : 0;
+  const gold = Math.round(stone * goldShare);
+  const wood = stone - gold;
   // Carrying resources slows the march (same rule as the server).
-  const loaded = allowCargo && hasResources(load);
-  const arrival = travel !== null && loaded ? Math.round(travel / LOADED_SPEED) : travel;
-  const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
+  const arrival = travel !== null && stone > 0 ? Math.round(travel / LOADED_SPEED) : travel;
+  const valid =
+    Number.isInteger(troops) &&
+    troops > 0 &&
+    troops >= minTroops &&
+    travel !== null &&
+    (!trade || stone > 0);
 
   const send = () => {
     gameSocket.send({
@@ -167,47 +174,42 @@ function SendForm({
       troops,
       target,
       useActiveCard: withCard,
-      cargo: allowCargo ? load : emptyResources(),
+      // Cargo only goes to the trader; stock moves between bases with the night caravan.
+      cargo: trade ? { ...emptyResources(), stone } : emptyResources(),
+      ...(trade ? { trade: { gold, wood } } : {}),
     });
-    setCargo(emptyResources());
+    setStone(0);
   };
 
-  return (
-    <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
-      {/* Raids list their own field armies (with meeting points) in RaidOptions. */}
-      {target.kind !== 'army' && (
-        <FieldRedirect
-          view={view}
-          target={target}
-          position={position}
-          verb={verb}
-          minTroops={minTroops}
-          ownBase={allowCargo}
-        />
-      )}
-      {bases.length > 1 && (
-        <div className="flex items-center gap-2">
-          <Label htmlFor="send-from" className="text-ink-soft">
-            Von
-          </Label>
-          {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
-          <Select
-            value={base.id ?? HOME}
-            onValueChange={(value) => setFromId(value === HOME ? null : value)}
-          >
-            <SelectTrigger id="send-from" className="h-7 flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {bases.map((b) => (
-                <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
-                  {b.name} ({b.troops} Truppen)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+  const baseSelect = bases.length > 1 && (
+    <div className="flex items-center gap-2">
+      <Label htmlFor="send-from" className="text-ink-soft">
+        {trade ? 'Aus' : 'Von'}
+      </Label>
+      {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
+      <Select
+        value={base.id ?? HOME}
+        onValueChange={(value) => setFromId(value === HOME ? null : value)}
+      >
+        <SelectTrigger id="send-from" className="h-7 flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {bases.map((b) => (
+            <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
+              {trade
+                ? `${b.name} (${b.resources.stone} Stein · ${b.troops} Tr.)`
+                : `${b.name} (${b.troops} Truppen)`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const troopFields = (
+    <div className="space-y-1">
+      {trade && <SectionLabel>Träger</SectionLabel>}
       <Slider
         min={available > 0 ? 1 : 0}
         max={Math.max(available, 1)}
@@ -235,31 +237,136 @@ function SendForm({
           Alle
         </Button>
       </div>
-      {allowCargo && hasResources(base.resources) && (
-        <div>
-          <div className="text-ink-soft">Mitnehmen:</div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {RESOURCES.map((r) => (
-              <Label key={r} className="gap-1">
-                <ResourceIcon resource={r} size={16} title={RESOURCE_NAMES[r]} />
-                <Input
-                  type="number"
-                  min={0}
-                  max={base.resources[r]}
-                  value={load[r]}
-                  onChange={(e) =>
-                    setCargo({ ...cargo, [r]: Math.max(0, Math.floor(Number(e.target.value))) })
-                  }
-                  className="h-7 w-12 px-1.5 tabular-nums"
-                  aria-label={RESOURCE_NAMES[r]}
-                />
-              </Label>
-            ))}
-            <Button size="sm" onClick={() => setCargo({ ...base.resources })}>
-              Alles
-            </Button>
-          </div>
+    </div>
+  );
+
+  const store = base.resources.stone;
+  const tradeFields = trade && (
+    <div className="space-y-2">
+      {/* The deal at a glance: x stone in, y gold + z wood out. */}
+      <div className="flex items-center justify-center gap-2 border border-ink/30 bg-parchment-dark px-2 py-1.5 text-base tabular-nums">
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="stone" size={22} title={RESOURCE_NAMES.stone} />
+          <b>{stone}</b>
+        </span>
+        <ArrowRightIcon className="size-4 text-ink-soft" aria-hidden />
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="gold" size={22} title={RESOURCE_NAMES.gold} />
+          <b>{gold}</b>
+        </span>
+        <span className="text-ink-soft">+</span>
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="wood" size={22} title={RESOURCE_NAMES.wood} />
+          <b>{wood}</b>
+        </span>
+      </div>
+      {baseSelect}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="trade-stone" className="gap-1">
+            <ResourceIcon resource="stone" size={16} title={RESOURCE_NAMES.stone} />
+            Stein
+          </Label>
+          <Slider
+            min={0}
+            max={Math.max(store, 1)}
+            step={1}
+            value={[stone]}
+            onValueChange={([value]) => setStone(value ?? 0)}
+            disabled={store === 0}
+            className="flex-1 py-1"
+            aria-label="Stein zum Tauschen"
+          />
+          <Input
+            id="trade-stone"
+            type="number"
+            min={0}
+            max={store}
+            value={stone}
+            onChange={(e) => setStone(Math.max(0, Math.floor(Number(e.target.value))))}
+            className="h-7 w-16 tabular-nums"
+          />
+          <Button size="sm" onClick={() => setStone(store)} disabled={store === 0}>
+            Alles
+          </Button>
         </div>
+        {store === 0 && (
+          <div className="text-seal">
+            {bases.length > 1
+              ? 'Hier lagert kein Stein — wähle einen anderen Ort.'
+              : 'Kein Stein im Lager.'}
+          </div>
+        )}
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex w-12 items-center gap-1">
+            <ResourceIcon resource="gold" size={16} title={RESOURCE_NAMES.gold} /> Gold
+          </span>
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[1 - goldShare]}
+            onValueChange={([value]) => setGoldShare(1 - (value ?? 0.5))}
+            className="flex-1 py-1"
+            aria-label="Aufteilung Gold / Holz"
+          />
+          <span className="inline-flex w-12 items-center justify-end gap-1">
+            Holz <ResourceIcon resource="wood" size={16} title={RESOURCE_NAMES.wood} />
+          </span>
+        </div>
+        <div className="flex gap-1">
+          {(
+            [
+              ['Alles Gold', 1],
+              ['Halb / halb', 0.5],
+              ['Alles Holz', 0],
+            ] as const
+          ).map(([label, share]) => (
+            <Button
+              key={label}
+              size="sm"
+              className="flex-1"
+              variant={goldShare === share ? 'selected' : 'default'}
+              onClick={() => setGoldShare(share)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
+      {/* Raids list their own field armies (with meeting points) in RaidOptions; the trader
+          only takes stone straight from a store. */}
+      {target.kind !== 'army' && !trade && (
+        <FieldRedirect
+          view={view}
+          target={target}
+          position={position}
+          verb={verb}
+          minTroops={minTroops}
+          ownBase={
+            (target.kind === 'castle' && target.id === view.self.id) ||
+            (target.kind === 'outpost' &&
+              view.outposts.some((o) => o.id === target.id && o.ownerId === view.self.id))
+          }
+        />
+      )}
+      {trade ? (
+        <>
+          {tradeFields}
+          {troopFields}
+        </>
+      ) : (
+        <>
+          {baseSelect}
+          {troopFields}
+        </>
       )}
       {activeCard && cardUsable && (
         <Tip label={CARDS[activeCard].description}>
@@ -282,7 +389,9 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${loaded ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
+            : trade
+              ? `Hin und zurück ${formatGameDuration(2 * (arrival ?? travel))} · beladen ${formatPercent(LOADED_SPEED)} Tempo${barefoot(view) ? ' · barfuß' : ''}`
+              : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${stone > 0 ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -294,8 +403,8 @@ function SendForm({
 
 /**
  * Own armies in the field that could take this target instead: any status (also on the way
- * home), not carrying a chest and not already heading here; armies with cargo only when the
- * target is one of the player's own bases (`ownBase`). Redirecting re-routes them from where they
+ * home), not already heading here; armies with cargo or a chest only on their way home and
+ * only when the target is one of the player's own bases (`ownBase`). Redirecting re-routes them from where they
  * stand; cargo slows them (same rule as the server).
  */
 function FieldRedirect({
@@ -318,8 +427,11 @@ function FieldRedirect({
   const field = view.armies.filter(
     (a) =>
       a.ownerId === view.self.id &&
-      (ownBase || !hasResources(a.cargo)) &&
-      !a.chest &&
+      a.duoWith === null &&
+      // Loaded armies on their way home may switch to another own store (not a trade march).
+      (ownBase
+        ? a.status === 'returning' || !(hasResources(a.cargo) || a.chest)
+        : !(hasResources(a.cargo) || a.chest)) &&
       !(a.target?.kind === target.kind && a.target.id === target.id),
   );
   if (field.length === 0) return null;
@@ -376,7 +488,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
   const track = trackOf(view, convoy);
   if (!map || !track) return null;
   const field = view.armies.filter(
-    (a) => a.ownerId === view.self.id && !hasResources(a.cargo) && !a.chest,
+    (a) => a.ownerId === view.self.id && a.duoWith === null && !hasResources(a.cargo) && !a.chest,
   );
   const strength = (troops: number) =>
     convoy.troops === null ? null : troops > convoy.troops ? 'überlegen' : 'unterlegen';
@@ -453,7 +565,9 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   return (
     <>
       <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
-        Heerzug von {own ? 'dir' : playerName(view, army.ownerId)}
+        {army.duoWith
+          ? `Duo-Zug: ${own ? 'du' : playerName(view, army.ownerId)} + ${army.duoWith === view.self.id ? 'du' : playerName(view, army.duoWith)}`
+          : `Heerzug von ${own ? 'dir' : playerName(view, army.ownerId)}`}
       </Title>
       <div>
         {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
@@ -489,7 +603,13 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
             .join(' · ')}
         </div>
       )}
-      {own && army.status !== 'returning' && (
+      {own && (carrying || army.chest) && <StoreRedirect view={view} army={army} />}
+      {army.duoWith && (army.ownerId === view.self.id || army.duoWith === view.self.id) && (
+        <div className="mt-1 text-xs text-ink-soft italic">
+          Duo-Pakt: abbrechen nur gemeinsam, im Posteingang.
+        </div>
+      )}
+      {own && army.status !== 'returning' && !army.duoWith && (
         <Locked className="mt-2">
           <Button onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}>
             Zurückrufen
@@ -503,6 +623,42 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       )}
       {!own && isRaidable(army, ownerRouted) && <RaidOptions view={view} convoy={army} />}
     </>
+  );
+}
+
+/** A loaded own army can switch to any other own store (castle or outpost) to unload there. */
+function StoreRedirect({ view, army }: { view: GameView; army: ArmyView }) {
+  const current =
+    army.status === 'returning' && army.target
+      ? army.target.kind === 'castle'
+        ? null
+        : army.target.id
+      : undefined;
+  const stores = ownBases(view).filter((b) => b.id !== current);
+  if (stores.length === 0) return null;
+  return (
+    <Locked className="mt-2">
+      <div className="text-ink-soft">Abliefern in:</div>
+      <div className="mt-0.5 flex flex-wrap gap-1.5">
+        {stores.map((b) => (
+          <Button
+            key={b.id ?? 'home'}
+            onClick={() =>
+              gameSocket.send({
+                type: 'redirectArmy',
+                armyId: army.id,
+                target:
+                  b.id === null
+                    ? { kind: 'castle', id: view.self.id }
+                    : { kind: 'outpost', id: b.id },
+              })
+            }
+          >
+            {b.name}
+          </Button>
+        ))}
+      </div>
+    </Locked>
   );
 }
 
@@ -552,7 +708,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             outposts.length > 0 && (
               <>
                 <p className="mt-1 text-xs text-ink-soft">
-                  Nur Ressourcen in der Burg sind sicher und können ausgegeben werden.
+                  Truppen heimholen geht jederzeit, Ressourcen bleiben im Stützpunkt. Die Karawane
+                  bringt sie um 18 Uhr in die Burg, ausgeben lassen sie sich am nächsten Morgen.
                 </p>
                 <SendForm
                   key={selection.id}
@@ -561,10 +718,13 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
                   position={player.castle}
                   verb="Heimholen"
                   bases={outposts}
-                  allowCargo
                 />
               </>
             )
+          ) : player.routed ? (
+            <p className="mt-1 text-xs text-ink-soft">
+              Gefallen: nicht angreifbar, bis alle Truppen von {player.name} wieder daheim sind.
+            </p>
           ) : (
             <>
               <p className="mt-1 text-xs text-ink-soft">
@@ -580,6 +740,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
                 verb="Angreifen"
                 bases={bases}
               />
+              <DuoForm key={`duo-${selection.id}`} view={view} target={selection} />
             </>
           )}
         </>
@@ -602,7 +763,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
           <p className="mt-1 text-xs text-ink-soft">
             {own
-              ? 'Truppen und Ressourcen lassen sich hier sammeln. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.'
+              ? `Bringt täglich +${OUTPOST_DAILY_INCOME} jedes Rohstoffs in die Burg. Das Lager zieht um 18 Uhr per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.`
               : outpost.ownerId
                 ? 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'
                 : 'Wer die Ruine einnimmt, baut sie als eigenen Stützpunkt wieder auf.'}
@@ -614,8 +775,10 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             position={outpost.position}
             verb={own ? 'Verlegen' : outpost.ownerId ? 'Angreifen' : 'Einnehmen'}
             bases={bases.filter((b) => b.id !== outpost.id)}
-            allowCargo={own}
           />
+          {!own && outpost.ownerId && (
+            <DuoForm key={`duo-${selection.id}`} view={view} target={selection} />
+          )}
         </>
       );
     }
@@ -625,6 +788,27 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       const here = view.armies.filter(
         (a) => a.status === 'gathering' && a.target?.kind === 'spot' && a.target.id === spot.id,
       );
+      if (spot.resource === 'trader') {
+        return (
+          <>
+            <Title icon={<SpotIcon kind="trader" size={30} />}>Händler</Title>
+            <div className="text-ink-soft">
+              Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin
+              und zurück — beladen langsamer und überfallbar.
+            </div>
+            <SendForm
+              key={selection.id}
+              view={view}
+              target={selection}
+              position={spot.position}
+              verb="Handeln"
+              bases={bases}
+              defaultTroops={10}
+              trade
+            />
+          </>
+        );
+      }
       const name = RESOURCE_NAMES[spot.resource];
       return (
         <>

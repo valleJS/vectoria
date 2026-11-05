@@ -1,4 +1,4 @@
-import type { ResourceType } from '@vectoria/shared';
+import type { ResourceType, SpotKind } from '@vectoria/shared';
 import * as T from '../theme/tokens';
 
 /** Pixi colours: the design tokens (theme/tokens.ts) as 0xrrggbb numbers. */
@@ -35,6 +35,11 @@ export const RESOURCE_COLORS: Record<ResourceType, number> = {
   wood: T.hex(T.RESOURCE.wood),
   stone: T.hex(T.RESOURCE.stone),
   gold: T.hex(T.RESOURCE.gold),
+};
+/** Focus ring colour per spot kind: the resource, the trader's awning red. */
+export const SPOT_COLORS: Record<SpotKind, number> = {
+  ...RESOURCE_COLORS,
+  trader: T.hex(T.SEAL),
 };
 
 /** Unowned outposts. */

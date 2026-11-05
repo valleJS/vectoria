@@ -2,8 +2,11 @@ import {
   BAREFOOT_SPEED,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
+  LOADED_SPEED,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
+  SPOT_NEAR_HOURS,
+  OUTPOST_DAILY_INCOME,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -33,15 +36,61 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
-    id: 'redirect-convoys',
+    id: 'duo-attacks',
     date: '2026-11-05',
-    title: 'Züge mit Ladung umleiten',
+    title: 'Neu: Duo-Angriffe',
     body: (
       <>
-        Züge, die Ressourcen heimbringen oder zu einem Stützpunkt tragen, lassen sich jetzt{' '}
-        <b>umleiten</b> — aber nur zu deiner <b>Burg</b> oder einem deiner <b>Stützpunkte</b>. Wähle
-        das Ziel auf der Karte, der Zug steht unter „Zug im Feld umleiten“. Ein Heimweg bleibt dabei
-        offen sichtbar und überfallbar; Züge mit Truhe lassen sich weiter nicht umleiten.
+        Greift zu zweit an: Wähle eine fremde Burg oder einen Stützpunkt und dann{' '}
+        <b>„Duo-Angreifen“</b>. Dein Partner bekommt den Plan in den neuen <b>Posteingang</b> (unter
+        dem Liveticker, am Handy oben im Ticker) und kann annehmen oder ablehnen. Eure Züge treffen
+        sich auf kürzestem Weg, erst dann wird das Ziel sichtbar. Beute und Truhe teilt ihr nach
+        Truppen. Abbrechen geht nur, wenn <b>beide</b> zustimmen.
+      </>
+    ),
+  },
+  {
+    id: 'trader',
+    date: '2026-11-05',
+    title: 'Neu: der Händler',
+    body: (
+      <>
+        Auf der Karte stehen jetzt <b>Händler</b>. Dort tauschst du{' '}
+        <b>Stein 1:1 gegen Gold und Holz</b>, die Aufteilung wählst du selbst. Schick Truppen mit
+        Stein hin: Der Handel geht sofort, ohne Ladezeit. Hin und zurück sind sie beladen, also nur{' '}
+        {formatPercent(LOADED_SPEED)} Tempo und überfallbar. Dafür wurden die Vorkommen noch einmal
+        neu verteilt: Der Weg zu Holz, Stein, Gold und Händler zusammen ist für alle etwa gleich
+        lang, keins liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, eins mindestens{' '}
+        {SPOT_FAR_HOURS} Stunden entfernt.
+      </>
+    ),
+  },
+  {
+    id: 'fallen-castle-protected',
+    date: '2026-11-05',
+    title: 'Gefallene Burg ist geschützt',
+    body: (
+      <>
+        Fällt eine Burg, drehen <b>alle anderen Angriffe</b> auf sie sofort um. Bis ihr Besitzer
+        wieder handlungsfähig ist, also bis alle Truppen daheim sind, kann{' '}
+        <b>niemand sie angreifen</b>. Damit gibt es keine zweite Truhe mehr für eine Burg, die schon
+        gefallen ist.
+      </>
+    ),
+  },
+  {
+    id: 'outpost-income-night-caravan',
+    date: '2026-11-05',
+    title: 'Stützpunkte: Einkommen und Nachtkarawane',
+    body: (
+      <>
+        Jeder eigene Stützpunkt bringt zu Beginn jedes Spieltags{' '}
+        <b>+{OUTPOST_DAILY_INCOME} Holz, Stein und Gold</b> direkt in deine Basis.{' '}
+        <b>Manuelle Transporte gibt es nicht mehr.</b> Dafür bricht <b>um 18 Uhr eine Karawane</b>{' '}
+        mit dem ganzen Lager aller Stützpunkte auf, am nächsten Morgen liegt es in der Basis.
+        Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann im Stützpunkt. Sammler
+        bringen ihre Ladung wie bisher zu ihrer Burg und lassen sich jetzt unterwegs zu jedem
+        eigenen Lager umleiten.
       </>
     ),
   },
@@ -94,8 +143,8 @@ const RULE_CHANGES: RuleChange[] = [
         Alle Vorkommen liegen jetzt an neuen Orten, damit niemand im Vorteil ist: Der Weg zum
         nächsten Holz, Stein und Gold zusammen ist <b>für alle etwa gleich lang</b> (höchstens{' '}
         {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Dafür liegt bei
-        jedem eine der drei mindestens <b>{SPOT_FAR_HOURS} Stunden</b> entfernt. Züge auf dem Weg zu
-        einem Vorkommen laufen zum nächsten neuen Vorkommen derselben Ressource weiter — die schon
+        jedem eine der drei mindestens <b>2,5 Stunden</b> entfernt. Züge auf dem Weg zu einem
+        Vorkommen laufen zum nächsten neuen Vorkommen derselben Ressource weiter — die schon
         gelaufene Zeit zählt mit. Wer gerade lud, lädt am neuen Vorkommen mit derselben Restzeit
         fertig.
       </>

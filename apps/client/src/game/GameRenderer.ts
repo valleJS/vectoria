@@ -1,4 +1,5 @@
 import {
+  findPath,
   getTile,
   hasResources,
   HOUR_MS,
@@ -7,6 +8,7 @@ import {
   TileType,
   type ArmyView,
   type GameView,
+  type Resources,
   type MapData,
   type Vec2,
 } from '@vectoria/shared';
@@ -20,7 +22,13 @@ import {
   type Ticker,
 } from 'pixi.js';
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
-import { CASTLE_WINDOWS, GOLD_MINE_GLINTS, OUTPOST_WINDOWS, type LitWindow } from '../art/svg';
+import {
+  CARAVAN_LANTERN,
+  CASTLE_WINDOWS,
+  GOLD_MINE_GLINTS,
+  OUTPOST_WINDOWS,
+  type LitWindow,
+} from '../art/svg';
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
@@ -33,6 +41,7 @@ import {
   NEUTRAL_COLOR,
   PARCHMENT,
   RESOURCE_COLORS,
+  SPOT_COLORS,
   SEA,
   SEAL,
   SERIF,
@@ -186,6 +195,23 @@ interface ArmySprite {
   fire: { flame: Sprite; light: Sprite; scale: number } | null;
 }
 
+/** Drawn width of a night caravan wagon, world px at piece scale 1. */
+const CARAVAN_WIDTH = 32;
+
+/**
+ * A wagon of the own night caravan, rolling from its outpost to the home castle by real time
+ * (the game clock stands still at night).
+ */
+interface CaravanSprite {
+  container: Container;
+  figure: Container;
+  /** Land route, world px; the wagon stands at `pointAlong(route, progress)`. */
+  route: PointData[];
+  /** Lantern light at the front hoop, brighter the darker it is. */
+  light: Sprite;
+  stride: number;
+}
+
 /** A route drawn with marching dashes; redrawn every frame. */
 interface RouteLine {
   points: PointData[];
@@ -266,6 +292,10 @@ export class GameRenderer {
   /** Armies, painted back to front; gather badges always on top. */
   private readonly armyLayer = new Container({ sortableChildren: true });
   private readonly armies = new Map<string, ArmySprite>();
+  /** Wagons of the own night caravan, with the trip they were built for. */
+  private caravans: CaravanSprite[] = [];
+  private caravanKey = '';
+  private caravanTrip: { departedAt: number; arrivesAt: number } | null = null;
   /** Night rest: darkness, lights, fireflies, stars (see night.ts). */
   private readonly night: NightScene;
   private readonly unsubscribe: () => void;
@@ -526,7 +556,79 @@ export class GameRenderer {
     if (view) this.night.setNight(isNightRest(view));
     this.drawSites(view, selfId);
     this.drawArmies(view);
+    this.drawCaravan(view, selfId);
     this.drawAlerts(view);
+  }
+
+  /**
+   * The own night caravan: one wagon per outpost it set out from, on the land route to the home
+   * castle, with its load as a cargo tag. Rebuilt only when the trip (or the colour) changes.
+   */
+  private drawCaravan(view: GameView | null, selfId: string | null): void {
+    const trip = view?.self.caravanTrip ?? null;
+    const castle = view?.players.find((p) => p.id === selfId)?.castle ?? null;
+    const color = view && selfId ? playerColor(view, selfId) : 0;
+    const art = trip && castle ? this.art.pieces.caravan(color) : null;
+    const key = trip && castle && art ? JSON.stringify([trip, castle, color, this.unit]) : '';
+    if (key === this.caravanKey) return;
+    this.caravanKey = key;
+    for (const wagon of this.caravans) wagon.container.destroy({ children: true });
+    this.caravans = [];
+    this.caravanTrip =
+      trip && art ? { departedAt: trip.departedAt, arrivesAt: trip.arrivesAt } : null;
+    if (!trip || !castle || !art || !this.map) return;
+    const u = this.unit;
+    for (const wagon of trip.wagons) {
+      const path = findPath(this.map, wagon.from, castle) ?? [wagon.from, castle];
+      const container = new Container();
+      const figure = new Container();
+      const light = new Sprite(this.art.glow);
+      light.anchor.set(0.5);
+      light.tint = FIRELIGHT;
+      light.blendMode = 'add';
+      light.scale.set((40 * u) / this.art.glow.width);
+      const sprite = artSprite(art, CARAVAN_WIDTH * u);
+      const k = (CARAVAN_WIDTH * u) / (art.width - art.pad * 2);
+      light.position.set(
+        (CARAVAN_LANTERN.x + art.pad - art.anchor.x) * k,
+        (CARAVAN_LANTERN.y + art.pad - art.anchor.y) * k,
+      );
+      figure.addChild(light, sprite);
+      const tag = this.cargoTag(wagon.load, u);
+      tag.position.set(10 * u, -26 * u);
+      container.addChild(tag, figure);
+      this.armyLayer.addChild(container);
+      this.caravans.push({
+        container,
+        figure,
+        route: path.map((p) => this.px(p)),
+        light,
+        stride: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  /** Night caravan wagons roll on by real time between departure and arrival. */
+  private animateCaravan(seconds: number, k: number): void {
+    const trip = this.caravanTrip;
+    if (!trip) return;
+    const span = Math.max(1, trip.arrivesAt - trip.departedAt);
+    const p = Math.min(1, Math.max(0, (Date.now() - trip.departedAt) / span));
+    const u = this.unit;
+    for (const wagon of this.caravans) {
+      const at = pointAlong(wagon.route, p);
+      const ahead = pointAlong(wagon.route, Math.min(1, p + 0.01));
+      wagon.container.position.copyFrom(at);
+      wagon.container.scale.set(k);
+      wagon.container.zIndex = at.y;
+      // The art faces right; it turns where the road heads left. Near-vertical legs keep it.
+      if (Math.abs(ahead.x - at.x) > 0.25 * Math.abs(ahead.y - at.y)) {
+        wagon.figure.scale.x = ahead.x < at.x ? -1 : 1;
+      }
+      // Rocks gently on the road; the lantern sways and glows only in the dark.
+      wagon.figure.y = -Math.abs(Math.sin(seconds * 3 + wagon.stride)) * 0.8 * u;
+      wagon.light.alpha = this.night.amount * (0.55 + 0.25 * Math.sin(seconds * 5 + wagon.stride));
+    }
   }
 
   /** Game clock now, run on from the last view. */
@@ -944,7 +1046,8 @@ export class GameRenderer {
       sprite.cargoKey = cargoKey;
       this.drawCargo(sprite, army, u, mode);
     }
-    const troops = army.troops === null ? '?' : String(army.troops);
+    const count = army.troops === null ? '?' : String(army.troops);
+    const troops = army.duoWith && mode !== 'badge' ? `Duo · ${count}` : count;
     const text = `${mode === 'badge'}:${troops}`;
     if (text !== sprite.text) {
       sprite.text = text;
@@ -1287,18 +1390,26 @@ export class GameRenderer {
       sprite.cargo.addChild(chest);
     }
     if (!hasResources(army.cargo)) return;
-    // A small tag in the nameplate style (parchment, solid ink rim, italic ink figure) with the
-    // main resource and the total load: tells a convoy at a glance without outweighing the troops.
-    const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
-    const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);
-    const h = CARGO_TAG * u;
-    const tag = new Container();
+    const tag = this.cargoTag(army.cargo, u);
     // Just off the figure's right edge (tucked behind it): beside the soldiers, on the tent's
     // right slope, at the ship's stern, or beside a gather shield. The icon sits at the origin.
     if (mode === 'badge') tag.position.set(10 * u, -6 * u);
     else if (mode === 'tent') tag.position.set(13 * u, -9 * u);
     else if (mode === 'ship') tag.position.set(21 * u, -18 * u);
     else tag.position.set(20 * u, -13 * u);
+    sprite.cargo.addChild(tag);
+  }
+
+  /**
+   * A small tag in the nameplate style (parchment, solid ink rim, italic ink figure) with the main
+   * resource and the total load: tells a convoy at a glance without outweighing the troops. The
+   * icon sits at (0, 0).
+   */
+  private cargoTag(cargo: Resources, u: number): Container {
+    const main = RESOURCES.reduce((a, b) => (cargo[b] > cargo[a] ? b : a));
+    const total = RESOURCES.reduce((sum, r) => sum + cargo[r], 0);
+    const h = CARGO_TAG * u;
+    const tag = new Container();
     const icon = artSprite(this.art.resources[main], h * 0.78, true);
     const amount = this.label(String(total), h * 0.72, INK, true);
     amount.anchor.set(0, 0.5);
@@ -1310,7 +1421,7 @@ export class GameRenderer {
       .fill(PARCHMENT)
       .stroke({ width: Math.max(0.7 * u, h * 0.08), color: INK });
     tag.addChild(pill, icon, amount);
-    sprite.cargo.addChild(tag);
+    return tag;
   }
 
   /**
@@ -1340,7 +1451,7 @@ export class GameRenderer {
       }
       case 'spot': {
         const spot = view.spots.find((s) => s.id === selection.id);
-        return site(spot?.position, 26, spot ? RESOURCE_COLORS[spot.resource] : INK);
+        return site(spot?.position, 26, spot ? SPOT_COLORS[spot.resource] : INK);
       }
       case 'chest':
         return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);
@@ -1548,6 +1659,7 @@ export class GameRenderer {
           sprite.mode === 'soldiers' ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
       }
     }
+    this.animateCaravan(seconds, k);
     for (const layer of [this.siteLayer, this.spotLayer, this.labelLayer]) {
       for (const piece of layer.children) piece.scale.set(k);
     }

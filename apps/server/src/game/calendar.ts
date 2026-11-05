@@ -64,3 +64,15 @@ export function gameTimeBetween(schedule: Schedule, fromMs: number, toMs: number
   }
   return total;
 }
+
+/**
+ * First instant at or after `fromMs` inside the gameday hours (one-minute resolution); `fromMs`
+ * itself when none comes within `maxDays`.
+ */
+export function nextGameTime(schedule: Schedule, fromMs: number, maxDays = 8): number {
+  const start = Math.ceil(fromMs / STEP_MS) * STEP_MS;
+  for (let t = start; t < fromMs + maxDays * 86_400_000; t += STEP_MS) {
+    if (isGameTime(schedule, new Date(t))) return t;
+  }
+  return fromMs;
+}

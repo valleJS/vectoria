@@ -1,4 +1,4 @@
-import { RESOURCES, type ResourceType } from '@vectoria/shared';
+import { RESOURCES, SPOT_KINDS, type ResourceType, type SpotKind } from '@vectoria/shared';
 import { CanvasSource, Texture } from 'pixi.js';
 import { INK, NEUTRAL_COLOR, PARCHMENT, PLAYER_PALETTE, sepia } from '../game/palette';
 import {
@@ -8,6 +8,7 @@ import {
   boulder,
   broadleaf,
   campfire,
+  caravanWagon,
   castle,
   chest,
   conifer,
@@ -64,6 +65,8 @@ export interface PieceCache {
   ship(color: number): ArtTexture | null;
   /** Badge of troops loading at a deposit. */
   shield(color: number): ArtTexture | null;
+  /** A wagon of the night caravan. */
+  caravan(color: number): ArtTexture | null;
   /** Called (once per batch) when textures asked for earlier have become ready. */
   onReady: (() => void) | null;
 }
@@ -79,7 +82,7 @@ export interface MapArt {
   ship: ArtTexture;
   /** Small boat for lakes and straits. */
   boat: ArtTexture;
-  deposits: Record<ResourceType, ArtTexture>;
+  deposits: Record<SpotKind, ArtTexture>;
   /** Bare resource icons, for cargo carried by armies. */
   resources: Record<ResourceType, ArtTexture>;
   chest: ArtTexture;
@@ -196,6 +199,7 @@ function pieceCache(): PieceCache {
     tent: (color) => get(`tent:${color}`, () => tent(css(color))),
     ship: (color) => get(`ship:${color}`, () => armyShip(css(color))),
     shield: (color) => get(`shield:${color}`, () => gatherShield(css(color))),
+    caravan: (color) => get(`caravan:${color}`, () => caravanWagon(css(color))),
   };
   function get(key: string, make: () => Art): ArtTexture | null {
     const hit = ready.get(key);
@@ -290,7 +294,7 @@ export function loadMapArt(): Promise<MapArt> {
       all([conifer(false), conifer(true)], decor),
       all([0, 1, 2, 3].map(rocks), decor),
       all([0, 1, 2].map(boulder), decor),
-      all(RESOURCES.map(deposit), { outline: true }),
+      all(SPOT_KINDS.map(deposit), { outline: true }),
       all(
         RESOURCES.map((r) => ({
           svg: resourceIcon(r),
@@ -335,7 +339,10 @@ export function loadMapArt(): Promise<MapArt> {
       ruin: ruinArt,
       campfire: campfireArt,
       glow: glowTexture(),
-      deposits: byResource(deposits),
+      deposits: Object.fromEntries(SPOT_KINDS.map((k, i) => [k, deposits[i]!])) as Record<
+        SpotKind,
+        ArtTexture
+      >,
       resources: byResource(icons),
       pieces,
     };
