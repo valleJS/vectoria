@@ -12,7 +12,6 @@ import {
   type Field,
 } from './fields';
 import { COAST, FOREST, GRASS, ROCK, SEA, SHALLOW, hex } from '../theme/tokens';
-import { INK } from './palette';
 
 // Draws the static map once per MapData. The tile grid is resampled into slightly blurred
 // fields whose iso-lines follow the tile edges but round the corners; those outlines are filled
@@ -327,16 +326,6 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   for (const { sprite } of details) detailLayer.addChild(sprite);
   root.addChild(detailLayer);
 
-  // Double map frame.
-  const fw = width * T - origin * 2;
-  const fh = height * T - origin * 2;
-  root.addChild(
-    new Graphics()
-      .rect(origin + 4, origin + 4, fw - 8, fh - 8)
-      .stroke({ width: 3, color: INK })
-      .rect(origin + 10, origin + 10, fw - 20, fh - 20)
-      .stroke({ width: 1, color: INK }),
-  );
   return {
     root,
     isWater: (x, y) => sample(landField, x, y, 0) < 0.5,
