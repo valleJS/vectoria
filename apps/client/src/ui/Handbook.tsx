@@ -402,7 +402,8 @@ const CHAPTERS: Chapter[] = [
             `Die Beute wird je Ressource abgerundet: Wer nur 1 Holz daheim hat, verliert es nicht. Auch wer gar nichts hat, wird gestürmt — die Truhe gibt es trotzdem.`,
             'Die Truhe entsteht neu; ungeöffnete Truhen und Karten des Verlierers bleiben, wo sie sind.',
             'Kommen mehrere Angreifer an, wird nacheinander gekämpft, in der Reihenfolge ihrer Ankunft. Jeder Kampf sieht die Verteidigung, die der vorige übrig gelassen hat.',
-            'Eine gefallene Burg lässt sich erneut stürmen — jeder weitere Sieg bringt eine weitere Truhe.',
+            'Kommen mehrere Angreifer an, wird gekämpft, bis die Burg fällt. Ab dann drehen alle übrigen Angriffe auf sie sofort um.',
+            'Eine gefallene Burg ist geschützt, bis ihr Besitzer wieder handlungsfähig ist: So lange kann niemand sie angreifen.',
           ]}
         />
         <H>Gefallene Burg im Detail</H>
@@ -411,10 +412,10 @@ const CHAPTERS: Chapter[] = [
             'Alle Züge drehen um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Ladung und Truhen nehmen sie mit.',
             'Ladende Züge brechen ab und kommen ohne Ladung heim.',
             'Stützpunkte werden zu Ruinen. Die Besatzung trägt das ganze Lager heim (beladen, also langsamer).',
-            'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Deine Basis kann aber weiter gestürmt werden.',
-            'Stehen gerade keine Truppen außerhalb, gibt es keine Sperre; die Stützpunkte sind trotzdem aufgegeben.',
+            'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Auch deine Basis kann in der Zeit niemand stürmen.',
+            'Stehen gerade keine Truppen außerhalb, gibt es keine Sperre und damit auch keinen Schutz: Die Basis ist gleich wieder angreifbar. Die Stützpunkte sind trotzdem aufgegeben.',
             'Während der Sperre läuft das Einkommen weiter, du kannst aber auch keine Truhe öffnen und die Basisaktivität nicht wechseln.',
-            'Du kannst in der Zeit weiter angegriffen und überfallen werden; heimkehrende Truppen verstärken die Basis, sobald sie ankommen.',
+            'Heimkehrende Truppen verstärken die Basis, sobald sie ankommen. Mit dem letzten Zug daheim ist die Basis wieder angreifbar.',
             'Die Sperre endet in dem Moment, in dem der letzte Zug daheim ankommt.',
           ]}
         />

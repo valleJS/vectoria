@@ -35,6 +35,19 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'fallen-castle-protected',
+    date: '2026-11-05',
+    title: 'Gefallene Burg ist geschützt',
+    body: (
+      <>
+        Fällt eine Burg, drehen <b>alle anderen Angriffe</b> auf sie sofort um. Bis ihr Besitzer
+        wieder handlungsfähig ist, also bis alle Truppen daheim sind, kann{' '}
+        <b>niemand sie angreifen</b>. Damit gibt es keine zweite Truhe mehr für eine Burg, die schon
+        gefallen ist.
+      </>
+    ),
+  },
+  {
     id: 'outpost-income-night-caravan',
     date: '2026-11-05',
     title: 'Stützpunkte: Einkommen und Nachtkarawane',

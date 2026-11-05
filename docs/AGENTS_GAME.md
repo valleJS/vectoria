@@ -107,7 +107,11 @@ troops than the other side brought (stops 1-troop harassment).
 marching home with the whole stock (no garrison → the stock stays in the ruin). `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
 command in `requirePlaying` until the player's last army is gone (`removeArmy` lifts it). Nobody
 in the field → no lockout. The client greys out every action (`ui/Routed.tsx` `Locked`, `inert`)
-and shows a "Handlungsunfähig" stamp in the top bar.
+and shows a "Handlungsunfähig" stamp in the top bar. While routed, the castle itself is off limits too: the
+winning assault calls `turnBackAssaults` (every other outbound assault on that castle turns home
+on the spot), `destination` refuses new attacks or redirects onto it, and one that still arrives
+turns back without a fight (`assaultCastle`). With no troops away there is no rout, hence no
+protection.
 
 **Raids**: any marching army carrying resource cargo (`isRaidable` in `shared/entities.ts`: home
 from a spot or a win; base-to-base transfers no longer exist) can be ambushed — except while its owner

@@ -734,6 +734,15 @@ export class GameState {
       this.startReturn(army, last(army.path));
       return;
     }
+    // A fallen castle is off limits until its owner can act again (see `turnBackAssaults`).
+    if (defender.routed) {
+      this.addLog(
+        attacker,
+        `Die Burg von ${defender.name} ist bereits gefallen — deine Truppen kehren um.`,
+      );
+      this.startReturn(army, last(army.path));
+      return;
+    }
     defender.attackedAt = this.data.clock;
     const fortified = (defender.fortifiedUntil ?? 0) > this.data.clock;
     const multiplier = fortified ? FORTIFY_MULTIPLIER : 1;
@@ -765,6 +774,7 @@ export class GameState {
       );
       this.startReturn(army, last(army.path));
       this.rout(defender);
+      this.turnBackAssaults(defender);
     } else {
       this.addLog(
         attacker,
@@ -777,6 +787,28 @@ export class GameState {
       );
       this.addFeed('battle', `${defender.name} wehrt einen Angriff von ${attacker.name} ab.`);
       this.removeArmy(army);
+    }
+  }
+
+  /**
+   * The castle of `defender` just fell: every other assault still marching on it turns home on
+   * the spot. Until the owner can act again (`routed` lifted) no new one may be sent
+   * (`destination`), and one that arrives anyway turns back without a fight (`assaultCastle`).
+   */
+  private turnBackAssaults(defender: PlayerRecord): void {
+    for (const army of this.data.armies) {
+      if (army.status !== 'outbound' || army.ownerId === defender.id) continue;
+      if (army.target.kind !== 'castle' || army.target.id !== defender.id) continue;
+      this.startReturn(army, this.armyPosition(army));
+      const owner = this.player(army.ownerId);
+      if (owner) {
+        this.addLog(owner, `Die Burg von ${defender.name} ist gefallen — dein Angriff kehrt um.`);
+      }
+      this.addFeed(
+        'march',
+        `${this.armyLabel(army)} kehrt um: die Burg ist schon gefallen.`,
+        army.id,
+      );
     }
   }
 
@@ -1587,10 +1619,17 @@ export class GameState {
     let to: Vec2 | null = null;
     let ownBase = false;
     switch (target.kind) {
-      case 'castle':
-        to = this.player(target.id)?.castle ?? null;
+      case 'castle': {
+        const owner = this.player(target.id);
+        if (owner && owner.id !== player.id && owner.routed) {
+          throw new RuleError(
+            `Die Burg von ${owner.name} ist gefallen — angreifbar erst, wenn alle Truppen dort heim sind.`,
+          );
+        }
+        to = owner?.castle ?? null;
         ownBase = target.id === player.id;
         break;
+      }
       case 'outpost': {
         const outpost = this.data.outposts.find((o) => o.id === target.id);
         to = outpost?.position ?? null;

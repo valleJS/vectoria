@@ -520,6 +520,10 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
                 />
               </>
             )
+          ) : player.routed ? (
+            <p className="mt-1 text-xs text-ink-soft">
+              Gefallen: nicht angreifbar, bis alle Truppen von {player.name} wieder daheim sind.
+            </p>
           ) : (
             <>
               <p className="mt-1 text-xs text-ink-soft">
