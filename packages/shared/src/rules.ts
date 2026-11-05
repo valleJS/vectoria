@@ -66,14 +66,22 @@ export const GATHER_YIELD_PER_100_TROOPS = 10;
 export const GATHER_DURATION_MS = HOUR_MS;
 
 /**
- * Spot balance. For every castle, the walk to its nearest spot of each kind (wood, stone, gold,
- * trader) adds up to about the same; the totals of all players differ by at most
- * `SPOT_BALANCE_TOLERANCE_HOURS`. One of the four lies at least `SPOT_FAR_HOURS` away, and no
- * spot lies closer than `SPOT_NEAR_HOURS` to any castle.
+ * Spot layout. Hard rules, per castle and its nearest spot of each kind: every spot at least
+ * `SPOT_NEAR_HOURS` from every castle; exactly one kind lies `SPOT_FAR_HOURS`–`SPOT_MAX_HOURS`
+ * away and it is one of `SPOT_FAR_KINDS` (wood or gold), the other three lie under
+ * `SPOT_FAR_HOURS`. Across the map: spots keep `SPOT_GAP_HOURS` from each other
+ * (`SPOT_SAME_GAP_HOURS` within one kind) and no land lies farther than `SPOT_HOLE_HOURS` from a
+ * spot, castle or outpost. Soft goal: the four walks add up to about the same for every castle
+ * (totals within `SPOT_BALANCE_TOLERANCE_HOURS`).
  */
 export const SPOT_BALANCE_TOLERANCE_HOURS = 0.25;
 export const SPOT_FAR_HOURS = 2;
 export const SPOT_NEAR_HOURS = 1;
+export const SPOT_MAX_HOURS = 4;
+export const SPOT_FAR_KINDS = ['wood', 'gold'] as const satisfies readonly SpotKind[];
+export const SPOT_GAP_HOURS = 1;
+export const SPOT_SAME_GAP_HOURS = 2;
+export const SPOT_HOLE_HOURS = 1.5;
 
 /** Neutral outposts on the map: this many per player (at least `MIN_OUTPOSTS`). */
 export const OUTPOSTS_PER_PLAYER = 0.75;

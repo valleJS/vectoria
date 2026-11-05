@@ -85,7 +85,6 @@ import {
   mainlandTiles,
   outpostCount,
   placeOutposts,
-  spotCount,
 } from './world';
 
 const MAX_LOG = 30;
@@ -98,8 +97,10 @@ const RAID_REACH_TILES = 1;
  * 3: spot count is a cap, no same-resource clusters.
  * 4: no spot within `SPOT_NEAR_HOURS` of a castle; far spot `SPOT_FAR_HOURS` (2 h).
  * 5: the trader joins as a fourth spot kind.
+ * 6: exactly one kind (wood or gold) 2–4 h away, the rest under 2 h; minimum gaps between spots,
+ *    no land farther than `SPOT_HOLE_HOURS` from a spot, castle or outpost.
  */
-const SPOT_LAYOUT = 5;
+const SPOT_LAYOUT = 6;
 /**
  * One-off fixes for running games, applied once on load. 1: gatherers load at the spot of their
  * resource nearest to their home castle (the re-layout had moved them to the spot nearest the old
@@ -1463,15 +1464,16 @@ export class GameState {
       ...this.data.chests.map((c) => c.position),
     ];
     const random = createRandom(this.data.seed ^ 0x5b075);
+    const anchors = [...castles, ...this.data.outposts.map((o) => o.position)];
     const old = new Map(this.data.spots.map((s) => [s.id, s.resource]));
-    this.data.spots = placeBalancedSpots(
-      map,
-      castles,
-      innerLand(map),
-      taken,
-      spotCount(this.data.players.length),
-      random,
-    ).map((s) => ({ id: this.nextId('spot'), ...s }));
+    // Castles of a running game stay where they are: always search, even around a cramped one.
+    const layout = placeBalancedSpots(map, castles, innerLand(map), taken, anchors, random, {
+      force: true,
+    });
+    if (!layout.valid) {
+      console.warn(`Spot re-layout: not every hard rule kept (cramped castles: ${layout.cramped})`);
+    }
+    this.data.spots = layout.spots.map((s) => ({ id: this.nextId('spot'), ...s }));
 
     for (const army of this.data.armies) {
       if (army.target.kind !== 'spot' || army.status === 'returning') continue;
@@ -1505,7 +1507,10 @@ export class GameState {
     for (const player of this.data.players) {
       this.addLog(player, 'Die Rohstoff-Vorkommen wurden neu verteilt.');
     }
-    this.addFeed('day', 'Die Rohstoff-Vorkommen wurden neu verteilt — für alle gleich weite Wege.');
+    this.addFeed(
+      'day',
+      'Die Rohstoff-Vorkommen wurden neu verteilt — gleichmäßig über die ganze Karte.',
+    );
     this.revision++;
     this.dirty = true;
   }
