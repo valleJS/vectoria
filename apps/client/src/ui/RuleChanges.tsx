@@ -4,6 +4,7 @@ import {
   HOUR_MS,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
+  SPOT_NEAR_HOURS,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,20 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'spots-min-distance',
+    date: '2026-11-05',
+    title: 'Vorkommen mit Mindestabstand',
+    body: (
+      <>
+        Die Rohstoff-Vorkommen wurden noch einmal neu verteilt: <b>Kein Vorkommen</b> liegt jetzt
+        näher als <b>{SPOT_NEAR_HOURS} Stunde</b> an einer Burg. Der Weg zum nächsten Holz, Stein
+        und Gold zusammen bleibt für alle etwa gleich lang, und eine der drei liegt mindestens{' '}
+        <b>{SPOT_FAR_HOURS} Stunden</b> entfernt. Laufende Züge und Sammler ziehen wie beim letzten
+        Mal zum nächsten neuen Vorkommen derselben Ressource weiter.
+      </>
+    ),
+  },
   {
     id: 'cards-sea-harvest-shoes-relocate',
     date: '2026-11-05',
@@ -68,8 +83,8 @@ const RULE_CHANGES: RuleChange[] = [
         Alle Vorkommen liegen jetzt an neuen Orten, damit niemand im Vorteil ist: Der Weg zum
         nächsten Holz, Stein und Gold zusammen ist <b>für alle etwa gleich lang</b> (höchstens{' '}
         {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Dafür liegt bei
-        jedem eine der drei mindestens <b>{SPOT_FAR_HOURS} Stunden</b> entfernt. Züge auf dem Weg zu
-        einem Vorkommen laufen zum nächsten neuen Vorkommen derselben Ressource weiter — die schon
+        jedem eine der drei mindestens <b>2,5 Stunden</b> entfernt. Züge auf dem Weg zu einem
+        Vorkommen laufen zum nächsten neuen Vorkommen derselben Ressource weiter — die schon
         gelaufene Zeit zählt mit. Wer gerade lud, lädt am neuen Vorkommen mit derselben Restzeit
         fertig.
       </>

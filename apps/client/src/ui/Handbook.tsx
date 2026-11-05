@@ -18,6 +18,7 @@ import {
   LOADED_SPEED,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
+  SPOT_NEAR_HOURS,
   RESOURCE_NAMES,
   RESOURCES,
   STARTING_RESOURCES,
@@ -219,8 +220,9 @@ const CHAPTERS: Chapter[] = [
         <P>
           Die Vorkommen sind fair verteilt: Der Weg zum nächsten Holz, Stein und Gold zusammen ist
           für alle etwa gleich lang (höchstens{' '}
-          {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Dafür liegt bei
-          jedem eine der drei Ressourcen mindestens {SPOT_FAR_HOURS} Stunden entfernt.
+          {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied). Kein Vorkommen
+          liegt näher als {SPOT_NEAR_HOURS} Stunde an einer Burg, und bei jedem ist eine der drei
+          Ressourcen mindestens {SPOT_FAR_HOURS} Stunden entfernt.
         </P>
         <P>
           Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines

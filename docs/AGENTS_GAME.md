@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 861910e4173be53ee514f4c1da9bfda5e83b9bd1
@@ -55,7 +55,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
 | Spending | only resources stored in the home castle; outpost stock must be carried home first |
 | Start | 50 troops, 2 of each resource |
-| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`; the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
+| Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`, no spot within `SPOT_NEAR_HOURS` of any castle (hard rule: candidates pre-filtered on the grid, heavy penalty on real routes, polish never breaks it, a layout keeping it always wins); the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
 
 ## Bases and outposts

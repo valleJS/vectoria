@@ -80,8 +80,9 @@ const RAID_REACH_TILES = 1;
 /**
  * Version of the resource spot layout; older running games are re-laid once on load.
  * 3: spot count is a cap, no same-resource clusters.
+ * 4: no spot within `SPOT_NEAR_HOURS` of a castle; far spot `SPOT_FAR_HOURS` (2 h).
  */
-const SPOT_LAYOUT = 3;
+const SPOT_LAYOUT = 4;
 /**
  * One-off fixes for running games, applied once on load. 1: gatherers load at the spot of their
  * resource nearest to their home castle (the re-layout had moved them to the spot nearest the old
