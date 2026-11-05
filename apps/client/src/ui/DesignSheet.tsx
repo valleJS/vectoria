@@ -60,7 +60,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 // Design sheet (`/?design`): every token and every piece of art as the map shows it, on one page,
 // so the drawing language can be reviewed and kept consistent. Not linked from the game.
 
-const HERALDRY = [T.SELF_COLOR, ...T.HERALDRY];
+const HERALDRY = T.HERALDRY;
 
 /** Art as the map renders it (outline / sepia), as an <img>. */
 function MapArt({
@@ -166,7 +166,7 @@ const TOKEN_GROUPS: { title: string; tokens: [string, string, string?][] }[] = [
       ['fortify', T.FORTIFY, '--color-fortify'],
       ['gold', T.GOLD, '--color-gold'],
       ['gold-deep', T.GOLD_DEEP, '--color-gold-deep'],
-      ['cargo', T.CARGO_GOLD],
+      ['cargo (Truhe)', T.CARGO_GOLD],
     ],
   },
   {
@@ -230,7 +230,7 @@ export function DesignSheet() {
         <h3 className="mb-2 text-sm tracking-wider text-ink-soft uppercase">Wappenfarben</h3>
         <div className="flex flex-wrap gap-3">
           {HERALDRY.map((c, i) => (
-            <Swatch key={c} name={i === 0 ? 'du (immer rot)' : `Spieler ${i}`} value={c} />
+            <Swatch key={c} name={`Spieler ${i + 1}`} value={c} />
           ))}
           <Swatch name="neutral" value={T.NEUTRAL_COLOR} />
         </div>
@@ -337,7 +337,7 @@ export function DesignSheet() {
 
       <Section
         title="Burgen"
-        note="Drei Bauformen × 12 Wappenfarben (+ du in Rot): bis 36 Mitspieler unterscheiden sich in Form oder Farbe. Die Bauform folgt der Beitrittsreihenfolge und ist bei allen gleich."
+        note="Drei Bauformen × 13 Wappenfarben: bis 39 Mitspieler unterscheiden sich in Form oder Farbe. Farbe und Bauform folgen der Beitrittsreihenfolge und sind bei allen gleich."
       >
         {CASTLE_STYLE_NAMES.map((name, style) => (
           <div key={name} className="mb-4">

@@ -25,11 +25,12 @@ import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
 import { formatResources, playerColor, playerHeraldry, playerName } from './format';
-import { dashedPolyline } from './glyphs';
+import { pointedDashes } from './glyphs';
 import {
   CARGO_GOLD,
   FORTIFY_BLUE,
   INK,
+  INK_SOFT,
   NEUTRAL_COLOR,
   PARCHMENT,
   RESOURCE_COLORS,
@@ -71,6 +72,8 @@ const GATHER_RING = 28;
 const GATHER_RING_STEP = 20;
 const GATHER_BADGE = 9;
 const GATHER_START_ANGLE = -Math.PI / 3;
+/** Radius (glyph units) of the cargo token on an army carrying resources home. */
+const CARGO_TOKEN = 5;
 /** Foam rings behind a ship: one every WAKE_EVERY_S, fading over WAKE_LIFE_S. */
 const WAKE_EVERY_S = 0.3;
 const WAKE_LIFE_S = 1.8;
@@ -151,7 +154,7 @@ interface ArmySprite {
   plate: Container;
   text: string;
   /**
-   * Gold halo + tag with resource icon and amount while the army carries resources; a small chest
+   * Small token with resource icon and amount while the army carries resources; a small chest
    * while it brings a chest home.
    */
   cargo: Container;
@@ -238,6 +241,11 @@ export class GameRenderer {
    * further down always stands in front of the one behind it.
    */
   private readonly siteLayer = new Container({ sortableChildren: true });
+  /**
+   * Resource deposits, above castles, outposts and chests so no site hides one (a deposit next to
+   * a castle stays in view), but under the labels and the armies that walk to and work at them.
+   */
+  private readonly spotLayer = new Container({ sortableChildren: true });
   /** Site nameplates, above every site so no piece hides a label; armies walk in front. */
   private readonly labelLayer = new Container({ sortableChildren: true });
   private readonly alertLayer = new Container();
@@ -303,8 +311,8 @@ export class GameRenderer {
     this.art = art;
     this.night = new NightScene(art);
     // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus ring),
-    // sites and their lamp light, the focus arrows (over every site, under every label), labels,
-    // alarms, armies, fireflies.
+    // sites and their lamp light, deposits, the focus arrows (over every site, under every label),
+    // labels, alarms, armies, fireflies.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -316,6 +324,7 @@ export class GameRenderer {
       this.night.glowUnder,
       this.siteLayer,
       this.night.glowOver,
+      this.spotLayer,
       this.focusTop,
       this.labelLayer,
       this.alertLayer,
@@ -541,7 +550,7 @@ export class GameRenderer {
       : '';
     if (key === this.sitesKey) return;
     this.sitesKey = key;
-    for (const layer of [this.siteLayer, this.labelLayer]) {
+    for (const layer of [this.siteLayer, this.spotLayer, this.labelLayer]) {
       for (const child of layer.removeChildren()) child.destroy({ children: true });
     }
     this.sparkles = [];
@@ -559,12 +568,12 @@ export class GameRenderer {
 
     // Every piece is its own container at its map position, so `animate` can scale it, and its
     // labels another one at the same spot in the label layer. Both sort by map y.
-    const place = (at: Vec2, ...labels: Container[]): Container => {
+    const place = (at: Vec2, labels: Container[] = [], layer = this.siteLayer): Container => {
       const point = this.px(at);
       const piece = new Container();
       piece.position.copyFrom(point);
       piece.zIndex = point.y;
-      this.siteLayer.addChild(piece);
+      layer.addChild(piece);
       if (labels.length > 0) {
         const plate = new Container();
         plate.position.copyFrom(point);
@@ -576,7 +585,7 @@ export class GameRenderer {
     };
 
     for (const spot of view.spots) {
-      const piece = place(spot.position);
+      const piece = place(spot.position, [], this.spotLayer);
       const art = this.art.deposits[spot.resource];
       const width = 44 * u;
       if (spot.resource === 'gold') {
@@ -608,10 +617,9 @@ export class GameRenderer {
     }
 
     for (const chest of view.chests) {
-      const piece = place(
-        chest.position,
+      const piece = place(chest.position, [
         this.nameplate(`ab ${chest.troopsNeeded} Truppen`, null, u, { top: 16 * u, size: 10 * u }),
-      );
+      ]);
       piece.addChild(artSprite(this.art.chest, 34 * u));
       for (const [x, y, size] of [
         [-15, -14, 9],
@@ -645,7 +653,7 @@ export class GameRenderer {
           }),
         );
       }
-      const site = place(outpost.position, ...labels);
+      const site = place(outpost.position, labels);
       // Unowned outposts are ruins until someone takes them; owned ones a watchtower.
       const art = outpost.ownerId ? this.art.pieces.outpost(color) : this.art.ruin;
       if (art) site.addChild(artSprite(art, 40 * u, true));
@@ -655,10 +663,9 @@ export class GameRenderer {
       if (!player.castle) continue;
       const { color, style } = playerHeraldry(view, player.id);
       const home = player.id === view.self.id;
-      const castle = place(
-        player.castle,
+      const castle = place(player.castle, [
         this.nameplate(`${player.name} · ${player.homeTroops}`, color, u, { home }),
-      );
+      ]);
       const art = this.art.pieces.castle(color, style);
       const rings = new Graphics();
       if (home && art) {
@@ -822,7 +829,7 @@ export class GameRenderer {
         const route = army.route.map((p) => this.px(p));
         const to = route[route.length - 1]!;
         const alpha = faded ? 0.5 : 1;
-        this.routeLines.push({ points: route, color: carrying ? CARGO_GOLD : color, alpha });
+        this.routeLines.push({ points: route, color, alpha });
         // The route itself ends at the destination; only a planned ambush gets a mark.
         if (army.target?.kind === 'army') this.raidMarks.push({ ...to, color });
       }
@@ -1041,23 +1048,17 @@ export class GameRenderer {
     return { flame, light, scale: flame.scale.x };
   }
 
-  /** Route dashes, shifted by `routePhase` so they march toward the target. */
+  /**
+   * Route dashes in the owner's colour, shifted by `routePhase` so they march toward the target;
+   * each dash comes to a point at its leading end, so a standing route still shows its direction.
+   */
   private drawRoutes(): void {
     const u = this.unit;
     const g = this.routes.clear();
     for (const { points, color, alpha } of this.routeLines) {
-      dashedPolyline(this.routes, points, 7 * u, 5 * u, this.routePhase).stroke({
-        width: 4 * u,
-        color: INK,
-        alpha: alpha * 0.8,
-        cap: 'round',
-      });
-      dashedPolyline(this.routes, points, 7 * u, 5 * u, this.routePhase).stroke({
-        width: 2.4 * u,
-        color,
-        alpha,
-        cap: 'round',
-      });
+      pointedDashes(g, points, 8 * u, 4 * u, 1.3 * u, 2.6 * u, this.routePhase)
+        .fill({ color, alpha })
+        .stroke({ width: 1 * u, color: INK, alpha: alpha * 0.8, join: 'round' });
     }
     // Raid crosses grow with the pieces, like everything players act on.
     const s = u * this.pieceScale;
@@ -1287,27 +1288,29 @@ export class GameRenderer {
       sprite.cargo.addChild(chest);
     }
     if (!hasResources(army.cargo)) return;
+    // A small round token with the main resource, the load as a little figure beside it: enough to
+    // tell a convoy at a glance without outweighing the troops.
     const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
     const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);
-    const amount = this.label(`+${total}`, 10 * u, INK, true);
-    const icon = artSprite(this.art.resources[main], 15 * u);
-    const w = amount.width + 22 * u;
-    const h = 14 * u;
+    const r = CARGO_TOKEN * u;
     const tag = new Container();
-    // Tucked against the figure (drawn behind it): at the soldiers' heads, or on the tent's right
-    // slope.
-    if (mode === 'badge') tag.position.set(7 * u, -9 * u);
-    else if (mode === 'tent') tag.position.set(6 * u, -17 * u);
-    else if (mode === 'ship') tag.position.set(12 * u, -24 * u);
-    else tag.position.set(9 * u, -14 * u);
-    const plate = new Graphics()
-      .roundRect(0, -h / 2, w, h, h / 2)
+    // Just off the figure's right edge (tucked behind it): beside the soldiers, on the tent's
+    // right slope, at the ship's stern, or beside a gather shield.
+    if (mode === 'badge') tag.position.set(10 * u, -6 * u);
+    else if (mode === 'tent') tag.position.set(13 * u, -9 * u);
+    else if (mode === 'ship') tag.position.set(21 * u, -18 * u);
+    else tag.position.set(20 * u, -13 * u);
+    const token = new Graphics()
+      .circle(0, 0, r)
       .fill(PARCHMENT)
-      .stroke({ width: 0.8 * u, color: INK });
-    icon.position.set(8 * u, 0);
+      .stroke({ width: 0.7 * u, color: INK, alpha: 0.55 });
+    const icon = artSprite(this.art.resources[main], r * 1.5, true);
+    const amount = this.label(String(total), 7 * u, INK_SOFT, true);
+    amount.style.stroke = { color: PARCHMENT, width: 2 * u, join: 'round' };
     amount.anchor.set(0, 0.5);
-    amount.position.set(16 * u, 0);
-    tag.addChild(plate, icon, amount);
+    amount.position.set(r + 0.6 * u, 0.6 * u);
+    tag.addChild(token, icon, amount);
+    tag.alpha = 0.92;
     sprite.cargo.addChild(tag);
   }
 
@@ -1546,7 +1549,7 @@ export class GameRenderer {
           sprite.mode === 'soldiers' ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
       }
     }
-    for (const layer of [this.siteLayer, this.labelLayer]) {
+    for (const layer of [this.siteLayer, this.spotLayer, this.labelLayer]) {
       for (const piece of layer.children) piece.scale.set(k);
     }
     for (const alert of this.alerts) {
@@ -1556,6 +1559,7 @@ export class GameRenderer {
     // Night: moonlit pieces and labels, flickering campfires.
     const tint = this.night.update(ticker.deltaMS, seconds, k);
     this.siteLayer.tint = tint;
+    this.spotLayer.tint = tint;
     this.labelLayer.tint = tint;
     for (const { fire } of this.armies.values()) {
       if (!fire) continue;

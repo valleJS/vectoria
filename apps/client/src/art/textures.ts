@@ -1,6 +1,6 @@
 import { RESOURCES, type ResourceType } from '@vectoria/shared';
 import { CanvasSource, Texture } from 'pixi.js';
-import { INK, NEUTRAL_COLOR, PARCHMENT, PLAYER_PALETTE, SELF_COLOR, sepia } from '../game/palette';
+import { INK, NEUTRAL_COLOR, PARCHMENT, PLAYER_PALETTE, sepia } from '../game/palette';
 import {
   alarm,
   armyShip,
@@ -222,7 +222,7 @@ function pieceCache(): PieceCache {
 
 /** Waits until the given pieces are ready (used to preload the common colours). */
 async function preload(pieces: PieceCache): Promise<void> {
-  const colours = [SELF_COLOR, ...PLAYER_PALETTE, NEUTRAL_COLOR];
+  const colours = [...PLAYER_PALETTE, NEUTRAL_COLOR];
   const asks = () =>
     colours.flatMap((c) => [
       pieces.castle(c, 0),

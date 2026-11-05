@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-04
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 861910e4173be53ee514f4c1da9bfda5e83b9bd1
+sources_stamp: 27de36b184af866184df143a0b581a0e19a9cc1d
 ---
 
 # Game rules (prototype)
@@ -79,7 +79,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
-- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home.
+- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. An army with resource cargo may only be redirected to another own base (castle or own outpost; `redirectConvoy`): a returner stays a returner (`baseId` = new base, open, normal pace), a transport stays outbound with its cards; both at `LOADED_SPEED`. Chest bearers cannot be redirected; nor can an army to the target it already has.
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
@@ -114,7 +114,7 @@ on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
-A convoy cannot raid in turn: returning armies and armies with cargo cannot be redirected
+A convoy cannot raid in turn: armies with cargo can only be redirected to an own base
 (`redirectArmy`), and cargo may only be sent to an own base (`sendArmy`). VP are never stolen,
 and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and
 always keeps at least one troop (`raid`), so the chest always gets home.

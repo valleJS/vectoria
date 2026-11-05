@@ -182,6 +182,7 @@ function SendForm({
           position={position}
           verb={verb}
           minTroops={minTroops}
+          ownBase={allowCargo}
         />
       )}
       {bases.length > 1 && (
@@ -293,7 +294,9 @@ function SendForm({
 
 /**
  * Own armies in the field that could take this target instead: any status (also on the way
- * home), but without cargo or a chest, and not already heading here. Redirecting re-routes them from where they stand.
+ * home), not carrying a chest and not already heading here; armies with cargo only when the
+ * target is one of the player's own bases (`ownBase`). Redirecting re-routes them from where they
+ * stand; cargo slows them (same rule as the server).
  */
 function FieldRedirect({
   view,
@@ -301,19 +304,21 @@ function FieldRedirect({
   position,
   verb,
   minTroops,
+  ownBase,
 }: {
   view: GameView;
   target: ArmyTarget;
   position: Vec2;
   verb: string;
   minTroops: number;
+  ownBase: boolean;
 }) {
   const map = useGameStore((s) => s.map);
   if (!map) return null;
   const field = view.armies.filter(
     (a) =>
       a.ownerId === view.self.id &&
-      !hasResources(a.cargo) &&
+      (ownBase || !hasResources(a.cargo)) &&
       !a.chest &&
       !(a.target?.kind === target.kind && a.target.id === target.id),
   );
@@ -326,16 +331,19 @@ function FieldRedirect({
           const path = findPath(map, army.position, position);
           const troops = army.troops ?? 0;
           const enough = troops >= minTroops;
+          const loaded = hasResources(army.cargo);
+          const speed = (loaded ? LOADED_SPEED : 1) * (barefoot(view) ? BAREFOOT_SPEED : 1);
           return (
             <li key={army.id} className="flex items-center justify-between gap-2 py-1">
               <span className="min-w-0">
                 Zug ({troops}) → {describeTarget(view, army.target)}
+                {loaded && ` · mit ${formatResources(army.cargo)}`}
                 <span className="block text-xs text-ink-soft">
                   {!path
                     ? 'Kein Landweg dorthin.'
                     : !enough
                       ? `Zu wenige Truppen (mind. ${minTroops}).`
-                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, barefoot(view) ? BAREFOOT_SPEED : 1))}`}
+                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, speed))}`}
                 </span>
               </span>
               <Button

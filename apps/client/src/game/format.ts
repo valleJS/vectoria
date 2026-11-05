@@ -9,7 +9,7 @@ import {
   type Resources,
   type Vec2,
 } from '@vectoria/shared';
-import { PLAYER_PALETTE, SELF_COLOR } from './palette';
+import { PLAYER_PALETTE } from './palette';
 
 /** Game-clock duration as "3h 20m". */
 export function formatGameDuration(ms: number): string {
@@ -20,10 +20,10 @@ export function formatGameDuration(ms: number): string {
 }
 
 /**
- * Heraldic per-player colour: the viewer is always red, the others take palette slots in join
- * order (stable, since players are listed in registration order).
+ * Heraldic per-player colour, the same on every client (players are listed in registration
+ * order). The own pieces stand out by the gold star on the castle plate and the castle's base.
  */
-export function playerColor(view: Pick<GameView, 'players' | 'self'>, playerId: string): number {
+export function playerColor(view: Pick<GameView, 'players'>, playerId: string): number {
   return playerHeraldry(view, playerId).color;
 }
 
@@ -37,26 +37,20 @@ export interface Heraldry {
 }
 
 /**
- * Colour + castle style per player. The style follows the join order, so every client shows a
- * player's castle alike; it shifts once per lap of the palette. Colours run through the palette in
- * join order of the other players (the viewer is always red), so the first
- * `PLAYER_PALETTE.length × CASTLE_STYLES` players never share both colour and style.
+ * Colour + castle style per player, by join order, so every client shows a player alike. Colours
+ * run through the palette and the style shifts once per lap, so the first
+ * `PLAYER_PALETTE.length × CASTLE_STYLES` players never share both colour and style; anyone past
+ * that gets a colour hashed from the id.
  */
-export function playerHeraldry(
-  view: Pick<GameView, 'players' | 'self'>,
-  playerId: string,
-): Heraldry {
+export function playerHeraldry(view: Pick<GameView, 'players'>, playerId: string): Heraldry {
   const n = PLAYER_PALETTE.length;
   const joined = view.players.findIndex((p) => p.id === playerId);
   let hash = 0;
   for (const char of playerId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
   hash = Math.abs(hash);
   const style = (joined >= 0 ? joined + Math.floor(joined / n) : hash) % CASTLE_STYLES;
-  if (playerId === view.self.id) return { color: SELF_COLOR, style };
-  const index = view.players
-    .filter((p) => p.id !== view.self.id)
-    .findIndex((p) => p.id === playerId);
-  if (index >= 0 && index < n * CASTLE_STYLES) return { color: PLAYER_PALETTE[index % n]!, style };
+  if (joined >= 0 && joined < n * CASTLE_STYLES)
+    return { color: PLAYER_PALETTE[joined % n]!, style };
   return { color: hslToHex(hash % 360, 0.55, 0.45), style };
 }
 
