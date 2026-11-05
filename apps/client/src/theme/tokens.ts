@@ -44,12 +44,12 @@ export const ROCK = '#e2d3ad';
 export const RESOURCE = { wood: TIMBER.base, stone: GRANITE.base, gold: GOLD };
 
 /**
- * Heraldry. The viewer is always red; everyone else takes a colour in join order, combined with
- * one of the castle styles so 36 players stay distinct (format.ts `playerHeraldry`).
+ * Heraldry. Every player keeps one colour on every client: colours go out in join order, combined
+ * with one of the castle styles so 39 players stay distinct (format.ts `playerHeraldry`).
  */
-export const SELF_COLOR = '#d4472f';
 export const NEUTRAL_COLOR = '#8c8577';
 export const HERALDRY = [
+  '#d4472f', // red
   '#7a46b8', // violet
   '#1f8fa8', // teal
   '#d9a21b', // saffron
@@ -64,7 +64,7 @@ export const HERALDRY = [
   '#45454f', // charcoal
 ] as const;
 
-/** Routes and halos of armies carrying resources. */
+/** Treasure accent: the focus ring on a chest. */
 export const CARGO_GOLD = '#e0a919';
 
 export const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif';

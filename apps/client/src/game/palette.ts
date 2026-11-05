@@ -3,6 +3,7 @@ import * as T from '../theme/tokens';
 
 /** Pixi colours: the design tokens (theme/tokens.ts) as 0xrrggbb numbers. */
 export const INK = T.hex(T.INK);
+export const INK_SOFT = T.hex(T.INK_SOFT);
 export const PARCHMENT = T.hex(T.PARCHMENT);
 /** Alarm red for attacks (the HUD's `seal` token). */
 export const SEAL = T.hex(T.SEAL);
@@ -36,10 +37,9 @@ export const RESOURCE_COLORS: Record<ResourceType, number> = {
   gold: T.hex(T.RESOURCE.gold),
 };
 
-/** The viewer is always red; everyone else takes a heraldic colour in join order. */
-export const SELF_COLOR = T.hex(T.SELF_COLOR);
 /** Unowned outposts. */
 export const NEUTRAL_COLOR = T.hex(T.NEUTRAL_COLOR);
-/** Routes and halos of armies carrying resources. */
+/** Treasure accent: the focus ring on a chest. */
 export const CARGO_GOLD = T.hex(T.CARGO_GOLD);
+/** Heraldic player colours, handed out in join order (format.ts `playerHeraldry`). */
 export const PLAYER_PALETTE = T.HERALDRY.map(T.hex);
