@@ -981,39 +981,6 @@ export function ruin(): Art {
   return { svg: svg(84, 80, body), width: 84, height: 80, anchor: { x: 42, y: 72 }, centreY: 50 };
 }
 
-/** Compass rose for the HUD, 110×120 (centre at 55, 65). */
-export function compassRose(): string {
-  const cx = 55;
-  const cy = 65;
-  const point = (angle: number, length: number, half: number, dark: string, lit: string) => {
-    const a = (angle * Math.PI) / 180;
-    const tip = [cx + Math.sin(a) * length, cy - Math.cos(a) * length];
-    const left = [cx - Math.cos(a) * half, cy - Math.sin(a) * half];
-    const right = [cx + Math.cos(a) * half, cy + Math.sin(a) * half];
-    const f = (p: number[]) => `${p[0]!.toFixed(2)} ${p[1]!.toFixed(2)}`;
-    return `<path d="M${cx} ${cy}L${f(tip)}L${f(left)}Z" fill="${lit}"/>
-      <path d="M${cx} ${cy}L${f(tip)}L${f(right)}Z" fill="${dark}"/>
-      <path d="M${f(left)}L${f(tip)}L${f(right)}" fill="none" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`;
-  };
-  let ticks = '';
-  for (let i = 0; i < 32; i++) {
-    const a = (i * Math.PI) / 16;
-    const inner = i % 4 === 0 ? 37 : 39.5;
-    ticks += `<path d="M${(cx + Math.sin(a) * inner).toFixed(2)} ${(cy - Math.cos(a) * inner).toFixed(2)}L${(cx + Math.sin(a) * 42).toFixed(2)} ${(cy - Math.cos(a) * 42).toFixed(2)}"/>`;
-  }
-  const body = `
-    <circle cx="${cx}" cy="${cy}" r="47" fill="${PARCHMENT}" stroke="${INK}" stroke-width="2.2"/>
-    <circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="${INK}" stroke-width="1"/>
-    <circle cx="${cx}" cy="${cy}" r="24" fill="none" stroke="${INK}" stroke-width=".8" opacity=".5"/>
-    <g stroke="${INK}" stroke-width="1">${ticks}</g>
-    ${[45, 135, 225, 315].map((a) => point(a, 27, 6, '#8a7550', '#e9dcbc')).join('')}
-    ${[90, 180, 270].map((a) => point(a, 40, 8, INK, '#e9dcbc')).join('')}
-    ${point(0, 40, 8, '#9e2a1a', '#e2735f')}
-    <circle cx="${cx}" cy="${cy}" r="5" fill="${GOLD}" stroke="${INK}" stroke-width="1.6"/>
-    <text x="${cx}" y="15" text-anchor="middle" font-family="Georgia, serif" font-size="16" font-weight="bold" fill="${INK}">N</text>`;
-  return svg(110, 120, body);
-}
-
 // ---- Armies ----
 
 /** One foot soldier standing at (x, y): helmet, spear, tunic and shield in the owner's colour. */
