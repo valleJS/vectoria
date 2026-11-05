@@ -1,6 +1,7 @@
 import { RESOURCES, type CardType, type ResourceType, type SpotKind } from '@vectoria/shared';
 import {
   alarm,
+  caravanWagon,
   castle,
   chest,
   dataUrl,
@@ -119,7 +120,7 @@ function ArtIcon({ id, size, make }: { id: string; size: number; make: () => str
       width={size}
       height={size}
       alt=""
-      className="inline-block shrink-0"
+      className="inline-block shrink-0 object-contain"
       draggable={false}
     />
   );
@@ -154,6 +155,11 @@ export function OutpostIcon({ size = 24, color }: { size?: number; color: string
 /** The map's soldier group (an army, or troops) in the owner's colour. */
 export function SoldiersIcon({ size = 22, color }: { size?: number; color: string }) {
   return <ArtIcon id={`soldiers${color}`} size={size} make={() => soldiers(color).svg} />;
+}
+
+/** A wagon of the night caravan in the owner's colour. */
+export function CaravanIcon({ size = 22, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`caravan${color}`} size={size} make={() => caravanWagon(color).svg} />;
 }
 
 /** The map's treasure chest. */

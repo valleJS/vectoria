@@ -30,6 +30,7 @@ import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
 import {
   AlarmIcon,
+  CaravanIcon,
   SoldiersIcon,
   CardArt,
   CastleIcon,
@@ -290,8 +291,11 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
       <BaseStats view={view} base={base} />
       <div className="mt-1 text-xs text-ink-soft">Unterwegs: {field} Truppen</div>
       {hasResources(self.caravan) && (
-        <div className="mt-0.5 text-xs text-[#8a6410]">
-          Karawane unterwegs: {formatResources(self.caravan)} — morgen früh in der Basis
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#8a6410]">
+          <CaravanIcon color={cssColor(playerColor(view, self.id))} size={20} />
+          <span>
+            Karawane unterwegs: {formatResources(self.caravan)} — morgen früh in der Basis
+          </span>
         </div>
       )}
       <div className="mt-2 space-y-1.5">

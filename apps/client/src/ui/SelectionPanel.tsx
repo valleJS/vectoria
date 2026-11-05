@@ -38,10 +38,10 @@ import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
 import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
-import { Button, Tip } from './Panel';
+import { Button, SectionLabel, Tip } from './Panel';
 import { DuoForm } from './Duo';
 import { Locked } from './Routed';
-import { XIcon } from 'lucide-react';
+import { ArrowRightIcon, XIcon } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -181,42 +181,35 @@ function SendForm({
     setStone(0);
   };
 
-  return (
-    <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
-      {/* Raids list their own field armies (with meeting points) in RaidOptions; the trader
-          only takes stone straight from a store. */}
-      {target.kind !== 'army' && !trade && (
-        <FieldRedirect
-          view={view}
-          target={target}
-          position={position}
-          verb={verb}
-          minTroops={minTroops}
-        />
-      )}
-      {bases.length > 1 && (
-        <div className="flex items-center gap-2">
-          <Label htmlFor="send-from" className="text-ink-soft">
-            Von
-          </Label>
-          {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
-          <Select
-            value={base.id ?? HOME}
-            onValueChange={(value) => setFromId(value === HOME ? null : value)}
-          >
-            <SelectTrigger id="send-from" className="h-7 flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {bases.map((b) => (
-                <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
-                  {b.name} ({b.troops} Truppen)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+  const baseSelect = bases.length > 1 && (
+    <div className="flex items-center gap-2">
+      <Label htmlFor="send-from" className="text-ink-soft">
+        {trade ? 'Aus' : 'Von'}
+      </Label>
+      {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
+      <Select
+        value={base.id ?? HOME}
+        onValueChange={(value) => setFromId(value === HOME ? null : value)}
+      >
+        <SelectTrigger id="send-from" className="h-7 flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {bases.map((b) => (
+            <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
+              {trade
+                ? `${b.name} (${b.resources.stone} Stein · ${b.troops} Tr.)`
+                : `${b.name} (${b.troops} Truppen)`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const troopFields = (
+    <div className="space-y-1">
+      {trade && <SectionLabel>Träger</SectionLabel>}
       <Slider
         min={available > 0 ? 1 : 0}
         max={Math.max(available, 1)}
@@ -244,53 +237,131 @@ function SendForm({
           Alle
         </Button>
       </div>
-      {trade && (
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="trade-stone" className="gap-1">
-              <ResourceIcon resource="stone" size={16} title={RESOURCE_NAMES.stone} />
-              Stein
-            </Label>
-            <Input
-              id="trade-stone"
-              type="number"
-              min={0}
-              max={base.resources.stone}
-              value={stone}
-              onChange={(e) => setStone(Math.max(0, Math.floor(Number(e.target.value))))}
-              className="h-7 w-16 tabular-nums"
-            />
-            <span className="text-ink-soft">/ {base.resources.stone} im Lager</span>
-            <Button
-              size="sm"
-              onClick={() => setStone(base.resources.stone)}
-              disabled={base.resources.stone === 0}
-            >
-              Alles
-            </Button>
+    </div>
+  );
+
+  const store = base.resources.stone;
+  const tradeFields = trade && (
+    <div className="space-y-2">
+      {/* The deal at a glance: x stone in, y gold + z wood out. */}
+      <div className="flex items-center justify-center gap-2 border border-ink/30 bg-parchment-dark px-2 py-1.5 text-base tabular-nums">
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="stone" size={22} title={RESOURCE_NAMES.stone} />
+          <b>{stone}</b>
+        </span>
+        <ArrowRightIcon className="size-4 text-ink-soft" aria-hidden />
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="gold" size={22} title={RESOURCE_NAMES.gold} />
+          <b>{gold}</b>
+        </span>
+        <span className="text-ink-soft">+</span>
+        <span className="inline-flex items-center gap-1">
+          <ResourceIcon resource="wood" size={22} title={RESOURCE_NAMES.wood} />
+          <b>{wood}</b>
+        </span>
+      </div>
+      {baseSelect}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="trade-stone" className="gap-1">
+            <ResourceIcon resource="stone" size={16} title={RESOURCE_NAMES.stone} />
+            Stein
+          </Label>
+          <Slider
+            min={0}
+            max={Math.max(store, 1)}
+            step={1}
+            value={[stone]}
+            onValueChange={([value]) => setStone(value ?? 0)}
+            disabled={store === 0}
+            className="flex-1 py-1"
+            aria-label="Stein zum Tauschen"
+          />
+          <Input
+            id="trade-stone"
+            type="number"
+            min={0}
+            max={store}
+            value={stone}
+            onChange={(e) => setStone(Math.max(0, Math.floor(Number(e.target.value))))}
+            className="h-7 w-16 tabular-nums"
+          />
+          <Button size="sm" onClick={() => setStone(store)} disabled={store === 0}>
+            Alles
+          </Button>
+        </div>
+        {store === 0 && (
+          <div className="text-seal">
+            {bases.length > 1
+              ? 'Hier lagert kein Stein — wähle einen anderen Ort.'
+              : 'Kein Stein im Lager.'}
           </div>
+        )}
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex w-12 items-center gap-1">
+            <ResourceIcon resource="gold" size={16} title={RESOURCE_NAMES.gold} /> Gold
+          </span>
           <Slider
             min={0}
             max={1}
             step={0.01}
-            value={[goldShare]}
-            onValueChange={([value]) => setGoldShare(value ?? 0.5)}
-            disabled={stone === 0}
-            className="py-1"
-            aria-label="Anteil Gold"
+            value={[1 - goldShare]}
+            onValueChange={([value]) => setGoldShare(1 - (value ?? 0.5))}
+            className="flex-1 py-1"
+            aria-label="Aufteilung Gold / Holz"
           />
-          <div className="flex items-center justify-between tabular-nums">
-            <span className="inline-flex items-center gap-1">
-              <ResourceIcon resource="gold" size={16} title={RESOURCE_NAMES.gold} /> {gold} Gold
-            </span>
-            <span className="inline-flex items-center gap-1">
-              {wood} Holz <ResourceIcon resource="wood" size={16} title={RESOURCE_NAMES.wood} />
-            </span>
-          </div>
-          {base.resources.stone === 0 && (
-            <div className="text-seal">Hier lagert kein Stein — wähle eine andere Burg.</div>
-          )}
+          <span className="inline-flex w-12 items-center justify-end gap-1">
+            Holz <ResourceIcon resource="wood" size={16} title={RESOURCE_NAMES.wood} />
+          </span>
         </div>
+        <div className="flex gap-1">
+          {(
+            [
+              ['Alles Gold', 1],
+              ['Halb / halb', 0.5],
+              ['Alles Holz', 0],
+            ] as const
+          ).map(([label, share]) => (
+            <Button
+              key={label}
+              size="sm"
+              className="flex-1"
+              variant={goldShare === share ? 'selected' : 'default'}
+              onClick={() => setGoldShare(share)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
+      {/* Raids list their own field armies (with meeting points) in RaidOptions; the trader
+          only takes stone straight from a store. */}
+      {target.kind !== 'army' && !trade && (
+        <FieldRedirect
+          view={view}
+          target={target}
+          position={position}
+          verb={verb}
+          minTroops={minTroops}
+        />
+      )}
+      {trade ? (
+        <>
+          {tradeFields}
+          {troopFields}
+        </>
+      ) : (
+        <>
+          {baseSelect}
+          {troopFields}
+        </>
       )}
       {activeCard && cardUsable && (
         <Tip label={CARDS[activeCard].description}>
@@ -313,7 +384,9 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${stone > 0 ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
+            : trade
+              ? `Hin und zurück ${formatGameDuration(2 * (arrival ?? travel))} · beladen ${formatPercent(LOADED_SPEED)} Tempo${barefoot(view) ? ' · barfuß' : ''}`
+              : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${stone > 0 ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -704,11 +777,10 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       if (spot.resource === 'trader') {
         return (
           <>
-            <Title icon={<SpotIcon kind="trader" size={26} />}>Händler</Title>
+            <Title icon={<SpotIcon kind="trader" size={30} />}>Händler</Title>
             <div className="text-ink-soft">
-              Tauscht Stein 1:1 gegen Gold und Holz, die Aufteilung wählst du. Deine Truppen bringen
-              den Stein hin, der Handel geht sofort, und sie tragen Gold und Holz heim. Hin und
-              zurück sind sie beladen: nur {formatPercent(LOADED_SPEED)} Tempo und überfallbar.
+              Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin
+              und zurück — beladen langsamer und überfallbar.
             </div>
             <SendForm
               key={selection.id}

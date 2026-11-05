@@ -50,7 +50,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   (18:00, not while paused), every owned outpost's whole stock moves into `PlayerRecord.caravan`
   (`SelfState.caravan`; troop-free, neither spendable nor raidable/plunderable). `startGameday`
   adds it to the home castle; it also sends a caravan first if none left yet for the ending day
-  (`caravanDay`; `always` mode, or the server was down over the night).
+  (`caravanDay`; `always` mode, or the server was down over the night). `PlayerRecord.caravanTrip`
+  (`SelfState.caravanTrip`) keeps one wagon per outpost with stock (`from`, `load`) plus real
+  `departedAt` / `arrivesAt` (`calendar.nextGameTime`), so the owner's map shows the wagons rolling home.
 
 ## Economy
 

@@ -242,45 +242,42 @@ export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[]
 ];
 
 /**
- * The trader's market stall: posts, a striped awning, a timber counter with quarry stone on one
- * side and gold on the other (it swaps the one for the other).
+ * The trader: a striped pavilion with a pennant over a counter, stone on one side and gold on
+ * the other (it swaps the one for the other).
  */
-function traderStall(): string {
-  const stripes = [0, 1, 2, 3, 4, 5]
-    .map((i) => {
-      const x = 12 + i * 11;
-      return `<path d="M${x} 16H${x + 11}V26Q${x + 5.5} 31 ${x} 26Z" fill="${i % 2 ? PARCHMENT : SEAL}"/>`;
-    })
+function traderTent(): string {
+  const eaves = [14, 29, 44, 59, 74];
+  const wedges = eaves
+    .slice(0, -1)
+    .map((x, i) => `<path d="M44 8L${x} 28H${eaves[i + 1]}Z" fill="${i % 2 ? PARCHMENT : SEAL}"/>`)
     .join('');
-  return `${groundShadow(44, 58, 38, 7)}
-    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
-      <rect x="15" y="22" width="5" height="34" fill="${TIMBER.shade}"/>
-      <rect x="68" y="22" width="5" height="34" fill="${TIMBER.shade}"/>
+  const line = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
+  return `${groundShadow(44, 59, 36, 6)}
+    <path d="M19 28V56H69V28Z" fill="${PARCHMENT}" ${line}/>
+    <path d="M58 29V55H68V29Z" fill="${shade(PARCHMENT, 0.86)}"/>
+    <g ${line}>${wedges}<path d="M44 8L14 28H74Z" fill="none"/></g>
+    <path d="M42 11L20 25.6" stroke="${PARCHMENT}" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+    <path d="M44 8V1.5" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M44 2h9l-2.4 2.4 2.4 2.4H44Z" fill="${GOLD}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    <g ${line}>
+      <rect x="16" y="45" width="56" height="12" fill="${TIMBER.base}"/>
+      <path d="M16 45H72"/>
     </g>
-    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
-      ${stripes}
-      <path d="M12 16H78V26Q72.5 31 67 26Q61.5 31 56 26Q50.5 31 45 26Q39.5 31 34 26Q28.5 31 23 26Q17.5 31 12 26Z" fill="none"/>
-      <path d="M9 16L16 9H74L81 16Z" fill="${TIMBER.light}"/>
-    </g>
-    ${stoneChunk(30, 37, 18, 1)}
-    ${goldNugget(57, 38, 14, 2)}${goldNugget(64, 39, 10, 0)}
-    <g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round">
-      <rect x="11" y="42" width="66" height="14" fill="${TIMBER.base}"/>
-      <path d="M11 42H77" stroke-width="2.6"/>
-    </g>
-    <path d="M14 48H74M14 52H74" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
-    ${glint(66, 32, 4)}`;
+    <path d="M18 51H70" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
+    ${stoneChunk(30, 39, 20, 1)}
+    ${goldNugget(53, 40, 15, 2)}${goldNugget(61, 41, 11, 0)}
+    ${glint(64, 32, 3.6)}`;
 }
 
 /**
  * Map piece for a spot, 88×68, standing at (44, 58), centred on its tile at y 40: a woodpile
  * with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets, or the
- * trader's market stall.
+ * trader's pavilion.
  */
 export function deposit(resource: SpotKind): Art {
   let body: string;
   if (resource === 'trader') {
-    body = traderStall();
+    body = traderTent();
   } else if (resource === 'wood') {
     body = `${groundShadow(44, 58, 38, 7)}
       <g transform="translate(66 50)">
@@ -1004,6 +1001,37 @@ function soldier(x: number, y: number, scale: number, color: string): string {
 export function soldiers(color: string): Art {
   const body = `${soldier(17, 42, 0.82, color)}${soldier(43, 42, 0.82, color)}${soldier(30, 50, 1, color)}`;
   return { svg: svg(60, 56, body), width: 60, height: 56, anchor: { x: 30, y: 50 } };
+}
+
+// ---- Night caravan ----
+
+/** Where the caravan's lantern hangs (art px of `caravanWagon`): the map lights it at night. */
+export const CARAVAN_LANTERN = { x: 47, y: 15 };
+
+/**
+ * The night caravan: a covered wagon heading right, the canvas banded in the owner's colour, a
+ * lantern on the front hoop. 56×42, standing at (28, 38).
+ */
+export function caravanWagon(color: string): Art {
+  const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
+  const wheel = (cx: number, cy: number, r: number) =>
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${TIMBER.shade}" ${line}/>
+     <path d="M${cx - r * 0.7} ${cy}H${cx + r * 0.7}M${cx} ${cy - r * 0.7}V${cy + r * 0.7}" stroke="${INK}" stroke-width="1.4"/>
+     <circle cx="${cx}" cy="${cy}" r="1.8" fill="${IRON.base}" stroke="${INK}" stroke-width="1.1"/>`;
+  const body = `
+    ${groundShadow(28, 38.5, 25, 3)}
+    <path d="M42 28L54 30" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>
+    <rect x="6" y="22" width="36" height="9" fill="${TIMBER.base}" ${line}/>
+    <path d="M8 22V12Q8 3 17 3H31Q40 3 40 12V22Z" fill="${PARCHMENT}" ${line}/>
+    <path d="M32 3.6Q39.4 4 39.4 12V21.4H33Z" fill="${shade(PARCHMENT, 0.86)}"/>
+    <path d="M18.6 3.6V15M29.4 3.6V15" stroke="${shade(PARCHMENT, 0.72)}" stroke-width="1.3"/>
+    <path d="M10.4 13Q10.4 6 16 5.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" opacity=".7"/>
+    <path d="M8 15H40V22H8Z" fill="${color}" ${line}/>
+    <path d="M8 22V12Q8 3 17 3H31Q40 3 40 12V22Z" fill="none" ${line}/>
+    <path d="M40 8.4H47V12" fill="none" stroke="${INK}" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M45 12H49L48.4 18H45.6Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${wheel(14, 31, 7)}${wheel(35, 31, 7)}`;
+  return { svg: svg(56, 42, body), width: 56, height: 42, anchor: { x: 28, y: 38 }, centreY: 22 };
 }
 
 // ---- Night camp ----

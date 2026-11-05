@@ -207,9 +207,28 @@ export interface SelfState {
    * the home castle at the next gameday start. Not spendable, not plunderable meanwhile.
    */
   caravan: Resources;
+  /** The night caravan on its way (drawn on the map); null while none travels. */
+  caravanTrip: CaravanTrip | null;
   /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
   barefootUntil: number | null;
   log: LogEntry[];
+}
+
+/** One wagon of the night caravan: it sets out from an own outpost with that outpost's stock. */
+export interface CaravanWagon {
+  from: Vec2;
+  load: Resources;
+}
+
+/**
+ * The night caravan in real time (the game clock stands still at night): it set out at
+ * `departedAt` (18:00) and reaches the home castle at `arrivesAt` (the next gameday start), both
+ * epoch ms.
+ */
+export interface CaravanTrip {
+  wagons: CaravanWagon[];
+  departedAt: number;
+  arrivesAt: number;
 }
 
 export interface ClockState {

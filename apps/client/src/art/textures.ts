@@ -8,6 +8,7 @@ import {
   boulder,
   broadleaf,
   campfire,
+  caravanWagon,
   castle,
   chest,
   conifer,
@@ -64,6 +65,8 @@ export interface PieceCache {
   ship(color: number): ArtTexture | null;
   /** Badge of troops loading at a deposit. */
   shield(color: number): ArtTexture | null;
+  /** A wagon of the night caravan. */
+  caravan(color: number): ArtTexture | null;
   /** Called (once per batch) when textures asked for earlier have become ready. */
   onReady: (() => void) | null;
 }
@@ -196,6 +199,7 @@ function pieceCache(): PieceCache {
     tent: (color) => get(`tent:${color}`, () => tent(css(color))),
     ship: (color) => get(`ship:${color}`, () => armyShip(css(color))),
     shield: (color) => get(`shield:${color}`, () => gatherShield(css(color))),
+    caravan: (color) => get(`caravan:${color}`, () => caravanWagon(css(color))),
   };
   function get(key: string, make: () => Art): ArtTexture | null {
     const hit = ready.get(key);

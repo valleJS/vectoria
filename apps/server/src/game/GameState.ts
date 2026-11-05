@@ -48,6 +48,7 @@ import {
   type ArmyTarget,
   type ArmyView,
   type CardType,
+  type CaravanTrip,
   type Chest,
   type FeedEntry,
   type GamePhase,
@@ -66,7 +67,14 @@ import {
   type DuoSourcePick,
   type PactView,
 } from '@vectoria/shared';
-import { dayKey, gameTimeBetween, isGameTime, WEEKDAY_SCHEDULE, type Schedule } from './calendar';
+import {
+  dayKey,
+  gameTimeBetween,
+  isGameTime,
+  nextGameTime,
+  WEEKDAY_SCHEDULE,
+  type Schedule,
+} from './calendar';
 import { generateMap } from './mapgen';
 import { createRandom } from './random';
 import { placeBalancedSpots } from './spots';
@@ -128,6 +136,8 @@ interface PlayerRecord {
   routed?: boolean;
   /** Outpost stock on the night caravan, home at the next gameday start. Absent in older saves. */
   caravan?: Resources;
+  /** Where the caravan's wagons set out and when it arrives (real time); absent when none travels. */
+  caravanTrip?: CaravanTrip;
   log: LogEntry[];
 }
 
@@ -1151,7 +1161,7 @@ export class GameState {
     this.running = inHours && !this.data.paused;
     if (this.running) this.advance(realDtMs * this.options.timeScale);
     // 18:00: the gameday is over, the night caravans set out.
-    if (!inHours && !this.data.paused) this.sendCaravans();
+    if (!inHours && !this.data.paused) this.sendCaravans(now);
 
     if (!this.data.paused) {
       const key =
@@ -1735,20 +1745,31 @@ export class GameState {
    * night caravan, troop-free, and reaches the home castle at the next gameday start. Without a
    * night (`always`, or the server was down over it) `startGameday` sends it first.
    */
-  private sendCaravans(): void {
+  private sendCaravans(now = Date.now()): void {
     if (this.data.phase !== 'running' || this.data.gameday === 0) return;
     if ((this.data.caravanDay ?? 0) >= this.data.gameday) return;
     this.data.caravanDay = this.data.gameday;
+    // Arrives with the next gameday start: real time, as the game clock stands still at night.
+    const arrivesAt = this.options.hours === 'always' ? now : nextGameTime(this.schedule, now);
     for (const player of this.data.players) {
       const load = emptyResources();
+      const wagons: CaravanTrip['wagons'] = [];
       for (const outpost of this.data.outposts) {
         if (outpost.ownerId !== player.id) continue;
+        if (hasResources(outpost.resources)) {
+          wagons.push({ from: { ...outpost.position }, load: { ...outpost.resources } });
+        }
         addResources(load, outpost.resources);
         outpost.resources = emptyResources();
       }
       if (!hasResources(load)) continue;
       player.caravan = player.caravan ?? emptyResources();
       addResources(player.caravan, load);
+      player.caravanTrip = {
+        wagons: [...(player.caravanTrip?.wagons ?? []), ...wagons],
+        departedAt: now,
+        arrivesAt,
+      };
       this.addLog(
         player,
         `Feierabend: Die Karawane bringt ${formatResources(load)} aus deinen Stützpunkten heim — morgen früh liegt es in der Burg.`,
@@ -1779,6 +1800,7 @@ export class GameState {
       const caravan = player.caravan ?? emptyResources();
       addResources(player.resources, caravan);
       player.caravan = emptyResources();
+      delete player.caravanTrip;
       if (hasResources(caravan)) {
         this.addLog(player, `Die Karawane ist da: ${formatResources(caravan)} in der Burg.`);
       }
@@ -2005,6 +2027,9 @@ export class GameState {
         fortifiedUntil: self.fortifiedUntil,
         harvestDays: self.harvestDays ?? 0,
         caravan: self.caravan ?? emptyResources(),
+        caravanTrip: hasResources(self.caravan ?? emptyResources())
+          ? (self.caravanTrip ?? null)
+          : null,
         pacts: (this.data.pacts ?? [])
           .filter((pact) => this.inPact(pact, self.id))
           .map(({ meet: _meet, ...pact }) => ({
