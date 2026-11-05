@@ -1162,7 +1162,7 @@ function Book({
                   </span>
                   <span className="min-w-0 italic">{c.title}</span>
                   <span className="min-w-2 flex-1 translate-y-[-3px] border-b border-dotted border-ink/50" />
-                  <span className="shrink-0 text-xs text-ink-soft tabular-nums">{i * 2 + 3}</span>
+                  <span className="shrink-0 text-xs text-ink-soft tabular-nums">{i + 1}</span>
                 </Button>
               </li>
             ))}
@@ -1219,7 +1219,7 @@ function Book({
               <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
               <span className="md:hidden">Zurück</span>
             </Button>
-            <span className="text-xs text-ink-soft tabular-nums">— {index * 2 + 3} —</span>
+            <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
             <Button
               variant="ghost"
               size="sm"
