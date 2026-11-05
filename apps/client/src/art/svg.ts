@@ -216,6 +216,31 @@ export function resourceIcon(resource: ResourceType): string {
   return svg(64, 64, RESOURCE_BODY[resource]);
 }
 
+/** Gold veins glinting in the mine's mound: ink-edged seams, lit in pale gold. */
+const GOLD_VEINS = [
+  'M15 44L20 40L19 35L24 31',
+  'M64 28L68 33L67 38L72 42',
+  'M27 27L32 29L35 25',
+  'M57 44L62 47',
+]
+  .map(
+    (d) =>
+      `<path d="${d}" fill="none" stroke="${INK}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+       <path d="${d}" fill="none" stroke="${GOLD}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+       <path d="${d}" fill="none" stroke="${GOLD_LIGHT}" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  )
+  .join('');
+
+/** Where the gold mine (`deposit('gold')`) catches the light, art px: the map twinkles there. */
+export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[] = [
+  { x: 16, y: 40, size: 9 },
+  { x: 68, y: 40, size: 10 },
+  { x: 41, y: 51, size: 8 },
+  { x: 24, y: 28, size: 7 },
+  { x: 62, y: 22, size: 7 },
+  { x: 60, y: 50, size: 6 },
+];
+
 /**
  * Map piece for a resource deposit, 88×68, standing at (44, 58), centred on its tile at y 40:
  * a woodpile with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets.
@@ -267,8 +292,10 @@ export function deposit(resource: ResourceType): Art {
         <rect x="27" y="30" width="34" height="6" rx="1" fill="${TIMBER.light}"/>
       </g>
       <path d="M31.6 38v16M54 38v16" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
+      ${GOLD_VEINS}
       ${goldNugget(22, 52, 20, 1)}${goldNugget(60, 54, 18, 2)}${goldNugget(41, 56, 22, 0)}${goldNugget(30, 58, 14, 3)}${goldNugget(70, 57, 12, 4)}
-      ${glint(16, 40, 4.5)}${glint(68, 42, 5)}${glint(46, 47, 3.5)}`;
+      <path d="M38 22l-1.4 2.8" stroke="#fffbe6" stroke-width="1.6" stroke-linecap="round"/>
+      ${glint(16, 40, 5)}${glint(68, 40, 5.5)}${glint(46, 47, 3.8)}${glint(24, 28, 3.6)}${glint(62, 22, 3.2)}`;
   }
   return { svg: svg(88, 68, body), width: 88, height: 68, anchor: { x: 44, y: 58 }, centreY: 40 };
 }
@@ -609,6 +636,60 @@ export function boat(): Art {
     <path d="M7 26Q20 28.5 35 24.5" fill="none" stroke="${line}" stroke-width=".9" opacity=".7"/>
     <path d="M9 24H32" stroke="${TIMBER.light}" stroke-width="1.2"/>`;
   return { svg: svg(40, 34, body), width: 40, height: 34, anchor: { x: 20, y: 28 } };
+}
+
+/**
+ * An army at sea (Seeweg card): a cog with a sail in the owner's colour and helmets and spear tips
+ * over the gunwale. 72×60, floating at (36, 50), bow to the left; outlined in INK like every
+ * piece players act on.
+ */
+export function armyShip(color: string): Art {
+  const dark = shade(color, 0.7);
+  const light = shade(color, 1.3);
+  const line = `stroke="${INK}" stroke-linejoin="round"`;
+  const helmet = (x: number) =>
+    `<path d="M${x + 3} 36V15" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>
+     <path d="M${x + 3} 36V15" stroke="${TIMBER.light}" stroke-width="1" stroke-linecap="round"/>
+     <path d="M${x + 3} 9L${x + 4.7} 15H${x + 1.3}Z" fill="${STEEL}" ${line} stroke-width="1"/>
+     <path d="M${x - 5} 38a4.6 4.4 0 0 1 9.2 0Z" fill="${GRANITE.base}" ${line} stroke-width="1.4"/>`;
+  const body = `
+    ${groundShadow(37, 50, 30, 4, INK, 0.18)}
+    <path d="M38 50V5" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M38 50V5" stroke="${TIMBER.base}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M38 3l12 3.4-12 3.4z" fill="${color}" ${line} stroke-width="1.3"/>
+    <path d="M22 11Q38 7.6 54 11L53 31Q38 34.4 23 31Z" fill="${color}" ${line} stroke-width="2"/>
+    <path d="M45 10Q50 10.4 54 11L53 31Q49 32.2 45 32.6Z" fill="${dark}"/>
+    <path d="M23.6 13Q24 22 23.8 30" stroke="${light}" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+    <path d="M33.5 9.6V33.4" stroke="${PARCHMENT}" stroke-width="3" opacity=".85"/>
+    <path d="M22 11Q38 7.6 54 11L53 31Q38 34.4 23 31Z" fill="none" ${line} stroke-width="2"/>
+    <path d="M20 10.5Q38 6.6 56 10.5" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>
+    ${helmet(20)}${helmet(29)}${helmet(47)}
+    <path d="M51 38V30H64V36" fill="${TIMBER.light}" ${line} stroke-width="2"/>
+    <path d="M53 30v-3M58 30v-3M62 30v-3" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M4 35L12 38H58L68 33Q65 48 37 50Q11 49 4 35Z" fill="${TIMBER.base}" ${line} stroke-width="2.4"/>
+    <path d="M44 49.4Q63 46.6 67 35L58 38H48Z" fill="${TIMBER.shade}"/>
+    <path d="M8 41Q32 45.6 66 39.4M12 45.4Q34 49 61 44.4" fill="none" stroke="${TIMBER.grain}" stroke-width="1.1" opacity=".8"/>
+    <path d="M12 38H58" stroke="${TIMBER.light}" stroke-width="1.6"/>
+    <circle cx="20" cy="42" r="2.6" fill="${color}" stroke="${INK}" stroke-width="1.2"/>
+    <circle cx="30" cy="43.4" r="2.6" fill="${color}" stroke="${INK}" stroke-width="1.2"/>
+    <circle cx="40" cy="43.6" r="2.6" fill="${color}" stroke="${INK}" stroke-width="1.2"/>
+    <path d="M4 35L12 38H58L68 33Q65 48 37 50Q11 49 4 35Z" fill="none" ${line} stroke-width="2.4"/>`;
+  return { svg: svg(72, 60, body), width: 72, height: 60, anchor: { x: 36, y: 50 }, centreY: 30 };
+}
+
+/**
+ * Badge of troops loading at a deposit: a heraldic shield in the owner's colour, lit from the top
+ * left, with room for the troop count. 30×34, centred at (15, 16).
+ */
+export function gatherShield(color: string): Art {
+  const outline = 'M4 4.5H26V15.5Q26 26.5 15 31Q4 26.5 4 15.5Z';
+  const body = `
+    <path d="${outline}" fill="${color}"/>
+    <path d="M15 4.5V31Q26 26.5 26 15.5V4.5Z" fill="${shade(color, 0.82)}"/>
+    <path d="M6.6 7.4H23.4V15.5Q23.4 24.6 15 28.2Q6.6 24.6 6.6 15.5Z" fill="none" stroke="${shade(color, 1.45)}" stroke-width="1.1" opacity=".75"/>
+    <path d="${outline}" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M3 4.5H27" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`;
+  return { svg: svg(30, 34, body), width: 30, height: 34, anchor: { x: 15, y: 16 } };
 }
 
 // ---- Sites ----

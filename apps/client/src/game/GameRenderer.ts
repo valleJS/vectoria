@@ -1,8 +1,10 @@
 import {
+  getTile,
   hasResources,
   HOUR_MS,
   pointAlong,
   RESOURCES,
+  TileType,
   type ArmyView,
   type GameView,
   type MapData,
@@ -18,18 +20,19 @@ import {
   type Ticker,
 } from 'pixi.js';
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
-import { CASTLE_WINDOWS, OUTPOST_WINDOWS, type LitWindow } from '../art/svg';
+import { CASTLE_WINDOWS, GOLD_MINE_GLINTS, OUTPOST_WINDOWS, type LitWindow } from '../art/svg';
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
-import { formatResources, outpostLabel, playerColor, playerHeraldry } from './format';
-import { dashedCircle, dashedPolyline } from './glyphs';
+import { formatResources, playerColor, playerHeraldry, playerName } from './format';
+import { dashedPolyline } from './glyphs';
 import {
   CARGO_GOLD,
   FORTIFY_BLUE,
   INK,
   NEUTRAL_COLOR,
   PARCHMENT,
+  RESOURCE_COLORS,
   SEA,
   SEAL,
   SERIF,
@@ -43,8 +46,9 @@ const UNIT_SMOOTHING_MS = 150;
 const PICK_RADIUS_TILES = 0.9;
 /** A click this close to the previous one (tiles) cycles to the next thing stacked there. */
 const REPICK_RADIUS_TILES = 0.5;
-/** Selection ring rotation, radians per second. */
-const SELECTION_SPIN = 0.6;
+/** Focus ring: studs orbit at this many radians per second; the ring locks on over LOCK_MS. */
+const SELECTION_SPIN = 0.35;
+const LOCK_MS = 260;
 /** Route dashes march toward the target at this many glyph units per second. */
 const ROUTE_FLOW = 14;
 /** At night the armies rest in camp, so their route dashes creep at this share of ROUTE_FLOW. */
@@ -58,16 +62,23 @@ const RECENT_ATTACK_MS = HOUR_MS;
 const PIECE_ZOOM = 0.9;
 const PIECE_MAX_SCALE = 1.7;
 /**
- * A gathering army is a bubble in its owner's colour with the troop count, on a ring around the
- * deposit (glyph units from the spot centre); gatherers at one spot line up clockwise from the
- * top right, a wider ring takes the rest once one is full.
+ * A gathering army is a heraldic shield in its owner's colour with the troop count, on a ring
+ * around the deposit (glyph units from the spot centre); gatherers at one spot line up clockwise
+ * from the top right, a wider ring takes the rest once one is full. GATHER_BADGE is the shield's
+ * half width.
  */
-const GATHER_RING = 27;
-const GATHER_RING_STEP = 18;
-const GATHER_BUBBLE = 8;
+const GATHER_RING = 28;
+const GATHER_RING_STEP = 20;
+const GATHER_BADGE = 9;
 const GATHER_START_ANGLE = -Math.PI / 3;
+/** Foam rings behind a ship: one every WAKE_EVERY_S, fading over WAKE_LIFE_S. */
+const WAKE_EVERY_S = 0.3;
+const WAKE_LIFE_S = 1.8;
+const FOAM = 0xf4e7c4;
+/** A Seeweg army boards / lands once it has been past the coastline this long (seconds). */
+const SHORE_S = 0.25;
 /**
- * Serif with lining figures for counts centred in a bubble: Georgia's old-style figures rise and
+ * Serif with lining figures for counts centred in a badge: Georgia's old-style figures rise and
  * dip (a 5 hangs below the line), so they never sit in the middle.
  */
 const LINING_SERIF = '"Times New Roman", Times, serif';
@@ -75,9 +86,6 @@ const LINING_SERIF = '"Times New Roman", Times, serif';
 const STACK_RADIUS_TILES = 0.7;
 /** Horizontal spacing (glyph units) of fanned-out armies. */
 const STACK_STEP = 27;
-/** Selection ring: ink by day, pale moonlight at night. */
-const RING_DAY = INK;
-const RING_NIGHT = 0xf3e6c4;
 /** On load the camera starts this much closer than the whole-map fit, framed on the own castle. */
 const START_ZOOM_IN = 1.6;
 
@@ -115,9 +123,29 @@ function windowLights(
   }));
 }
 
+/**
+ * How an army is drawn: a shield badge while loading at a deposit, soldiers on the march, a tent
+ * at night, a ship while a Seeweg leg crosses water.
+ */
+type FigureMode = 'badge' | 'soldiers' | 'tent' | 'ship';
+
+/** Per figure: lift of its visual centre above the ground point and focus ring radius, glyph units. */
+const FIGURE_FOCUS: Record<FigureMode, readonly [number, number]> = {
+  badge: [0, 13],
+  soldiers: [-12, 22],
+  tent: [-9, 20],
+  ship: [-15, 27],
+};
+
 interface ArmySprite {
   container: Container;
-  /** Holds the soldiers (or tent), or the bubble while gathering. */
+  /** The latest server state of the army. */
+  army: ArmyView;
+  color: number;
+  /** Night camp (marching armies pitch tents). */
+  camp: boolean;
+  mode: FigureMode;
+  /** Holds the soldiers, tent, ship or badge. */
   figure: Container;
   /** Troop count nameplate, rebuilt when `text` changes. */
   plate: Container;
@@ -137,10 +165,19 @@ interface ArmySprite {
   look: string;
   /** Cargo the marker was last drawn for. */
   cargoKey: string;
-  /** Marching (not loading at a spot): the soldiers bob as they walk. */
-  marching: boolean;
-  /** Offsets the walking bob so armies don't step in unison. */
+  /** Offsets the walking bob (and the ship's roll) so armies don't move in unison. */
   stride: number;
+  /** Travel direction along x (1 = right), so a ship sails bow first; taken from the route. */
+  heading: number;
+  /**
+   * On a Seeweg leg: currently drawn as a ship. Flips only once the drawn position has been on
+   * the other side of the coastline for SHORE_S (`shoreAt` = since when), so easing and server
+   * corrections at the water's edge never make the figure flicker.
+   */
+  afloat: boolean;
+  shoreAt: number;
+  /** Seconds timestamp of the last foam ring left behind a ship. */
+  wakeAt: number;
   /** Display offset (world px at piece scale 1) the container eases toward: fan-out or gather ring slot. */
   offset: PointData;
   /** At night: the campfire's flame and light, flickered in `animate`. */
@@ -156,8 +193,15 @@ interface RouteLine {
 
 /** Animated marks on a castle or outpost that is under attack or was attacked recently. */
 interface SiteAlert {
-  /** Below the site: pulsing ring for an incoming attack, shock waves after one. */
+  /**
+   * Below the site: the warning ring for an incoming attack (redrawn every frame, with an
+   * arrowhead toward each attacker), shock waves after one.
+   */
   under: Container;
+  /** The site, world px. */
+  at: PointData;
+  /** Armies marching on the site. */
+  attackers: string[];
   /** Above the site: swords badge and smoke. */
   over: Container;
   ring: Graphics;
@@ -181,22 +225,39 @@ export class GameRenderer {
   private readonly terrain = new Container();
   /** Marching route dashes (redrawn every frame) and their static target marks. */
   private readonly routes = new Graphics();
-  private readonly routeMarks = new Graphics();
   private routeLines: RouteLine[] = [];
+  /** Crossed strokes where a raid plans its ambush (world px, raider's colour). */
+  private raidMarks: { x: number; y: number; color: number }[] = [];
   private routePhase = 0;
   private readonly alertUnderLayer = new Container();
-  private readonly siteLayer = new Container();
-  /** Resource deposits, in front of everything else so no piece or label ever hides one. */
-  private readonly spotLayer = new Container();
+  /** Foam rings left behind ships at sea. */
+  private readonly wakes = new Graphics();
+  private wakeRings: { x: number; y: number; born: number; scale: number }[] = [];
+  /**
+   * Castles, outposts, chests and deposits, painted back to front by their map y, so a piece
+   * further down always stands in front of the one behind it.
+   */
+  private readonly siteLayer = new Container({ sortableChildren: true });
+  /** Site nameplates, above every site so no piece hides a label; armies walk in front. */
+  private readonly labelLayer = new Container({ sortableChildren: true });
   private readonly alertLayer = new Container();
   private alerts: SiteAlert[] = [];
   private alertsKey = '';
-  /** Glints twinkling around chests, each with its own phase. */
-  private sparkles: { sprite: Sprite; phase: number; size: number }[] = [];
+  /** Glints twinkling on chests and gold mines, each with its own phase. */
+  private sparkles: { sprite: Sprite; phase: number; size: number; speed: number }[] = [];
+  /** Warm shine pulsing under gold mines. */
+  private shines: { sprite: Sprite; phase: number }[] = [];
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
-  private readonly selectionRing = new Graphics();
-  private readonly armyLayer = new Container();
+  /**
+   * Focus ring around the selection: a parchment band with orbiting studs on the ground under
+   * the piece, and four arrowheads over the sites (under labels and armies) that point at it.
+   */
+  private readonly focusGround = new Graphics();
+  private readonly focusTop = new Graphics();
+  private focus: { key: string; radius: number; color: number; since: number } | null = null;
+  /** Armies, painted back to front; gather badges always on top. */
+  private readonly armyLayer = new Container({ sortableChildren: true });
   private readonly armies = new Map<string, ArmySprite>();
   /** Night rest: darkness, lights, fireflies, stars (see night.ts). */
   private readonly night: NightScene;
@@ -241,21 +302,25 @@ export class GameRenderer {
     this.app = app;
     this.art = art;
     this.night = new NightScene(art);
+    // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus ring),
+    // sites and their lamp light, the focus arrows (over every site, under every label), labels,
+    // alarms, armies, fireflies.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
       this.night.stars,
-      this.routes,
-      this.routeMarks,
       this.alertUnderLayer,
+      this.routes,
+      this.wakes,
+      this.focusGround,
       this.night.glowUnder,
       this.siteLayer,
       this.night.glowOver,
+      this.focusTop,
+      this.labelLayer,
       this.alertLayer,
-      this.selectionRing,
       this.armyLayer,
       this.night.fireflies,
-      this.spotLayer,
     );
     app.stage.addChild(this.world);
 
@@ -281,13 +346,9 @@ export class GameRenderer {
     const initial = useGameStore.getState();
     this.setMap(initial.map);
     this.setView(initial.view, initial.playerId);
-    this.drawSelection(initial.selection);
     this.unsubscribe = useGameStore.subscribe((state, previous) => {
       if (state.map !== previous.map) this.setMap(state.map);
       if (state.view !== previous.view) this.setView(state.view, state.playerId);
-      if (state.view !== previous.view || state.selection !== previous.selection) {
-        this.drawSelection(state.selection);
-      }
     });
   }
 
@@ -353,19 +414,39 @@ export class GameRenderer {
   }
 
   /**
-   * Where an army is clicked: where it is drawn (fanned out of a stack), and its bubble for a
+   * Where an army is clicked: where it is drawn (fanned out of a stack), and its badge for a
    * gathering army (the deposit itself selects the spot).
    */
   private armyPickPosition(army: ArmyView): Vec2 {
     const sprite = this.armies.get(army.id);
     if (!sprite || !this.map) return army.position;
-    const { container } = sprite;
-    const size = this.map.tileSize;
-    const lift = army.status === 'gathering' ? 0 : -10 * this.unit;
+    const { x, y } = this.armyFocus(sprite);
+    return { x: x / this.map.tileSize, y: y / this.map.tileSize };
+  }
+
+  /**
+   * Centre and radius (world px, at the current piece scale) of an army as it is drawn right now:
+   * fanned out of a stack, as a badge on the ring around a deposit, or the body of its soldiers,
+   * tent or ship.
+   */
+  private armyFocus(sprite: ArmySprite): { x: number; y: number; radius: number } {
+    const { position, pivot, scale } = sprite.container;
+    const u = this.unit;
+    const [lift, radius] = FIGURE_FOCUS[sprite.mode];
     return {
-      x: army.position.x - (container.pivot.x * container.scale.x) / size,
-      y: army.position.y + ((lift - container.pivot.y) * container.scale.y) / size,
+      x: position.x - pivot.x * scale.x,
+      y: position.y + (lift * u - pivot.y) * scale.y,
+      radius: radius * u * scale.x,
     };
+  }
+
+  /** Whether a world point lies on water as drawn (off the map counts as sea). */
+  private isWater(point: PointData): boolean {
+    if (this.built) return this.built.isWater(point.x, point.y);
+    if (!this.map) return false;
+    const size = this.map.tileSize;
+    const tile = getTile(this.map, Math.floor(point.x / size), Math.floor(point.y / size));
+    return tile === undefined || tile === TileType.Water;
   }
 
   private setMap(map: MapData | null): void {
@@ -460,10 +541,11 @@ export class GameRenderer {
       : '';
     if (key === this.sitesKey) return;
     this.sitesKey = key;
-    for (const layer of [this.siteLayer, this.spotLayer]) {
+    for (const layer of [this.siteLayer, this.labelLayer]) {
       for (const child of layer.removeChildren()) child.destroy({ children: true });
     }
     this.sparkles = [];
+    this.shines = [];
     if (!view || !this.map) return;
     this.buildGround(view);
     const u = this.unit;
@@ -475,21 +557,62 @@ export class GameRenderer {
       ...view.chests.map((c) => ({ ...this.px(c.position), radius: 22 * u })),
     ]);
 
-    // Every piece is its own container at its map position, so `animate` can scale it.
-    for (const spot of view.spots) {
+    // Every piece is its own container at its map position, so `animate` can scale it, and its
+    // labels another one at the same spot in the label layer. Both sort by map y.
+    const place = (at: Vec2, ...labels: Container[]): Container => {
+      const point = this.px(at);
       const piece = new Container();
-      piece.position.copyFrom(this.px(spot.position));
-      piece.addChild(artSprite(this.art.deposits[spot.resource], 44 * u, true));
-      this.spotLayer.addChild(piece);
+      piece.position.copyFrom(point);
+      piece.zIndex = point.y;
+      this.siteLayer.addChild(piece);
+      if (labels.length > 0) {
+        const plate = new Container();
+        plate.position.copyFrom(point);
+        plate.zIndex = point.y;
+        plate.addChild(...labels);
+        this.labelLayer.addChild(plate);
+      }
+      return piece;
+    };
+
+    for (const spot of view.spots) {
+      const piece = place(spot.position);
+      const art = this.art.deposits[spot.resource];
+      const width = 44 * u;
+      if (spot.resource === 'gold') {
+        // The mine shines: a warm glow breathing under it and glints twinkling on the gold.
+        const shine = new Sprite(this.art.glow);
+        shine.anchor.set(0.5);
+        shine.tint = RESOURCE_COLORS.gold;
+        shine.blendMode = 'add';
+        shine.scale.set((62 * u) / this.art.glow.width);
+        shine.position.set(0, 4 * u);
+        piece.addChild(shine);
+        this.shines.push({ sprite: shine, phase: Math.random() * Math.PI * 2 });
+      }
+      piece.addChild(artSprite(art, width, true));
+      if (spot.resource === 'gold') {
+        const k = width / (art.width - art.pad * 2);
+        for (const g of GOLD_MINE_GLINTS) {
+          const glint = artSprite(this.art.sparkle, g.size * k);
+          glint.position.set((g.x + art.pad - art.anchor.x) * k, (g.y + art.pad - art.centreY) * k);
+          piece.addChild(glint);
+          this.sparkles.push({
+            sprite: glint,
+            phase: Math.random() * Math.PI * 2,
+            size: g.size * k,
+            speed: 2.6 + Math.random() * 1.6,
+          });
+        }
+      }
     }
 
     for (const chest of view.chests) {
-      const piece = new Container();
-      piece.position.copyFrom(this.px(chest.position));
-      piece.addChild(artSprite(this.art.chest, 34 * u));
-      piece.addChild(
+      const piece = place(
+        chest.position,
         this.nameplate(`ab ${chest.troopsNeeded} Truppen`, null, u, { top: 16 * u, size: 10 * u }),
       );
+      piece.addChild(artSprite(this.art.chest, 34 * u));
       for (const [x, y, size] of [
         [-15, -14, 9],
         [16, -9, 7],
@@ -498,40 +621,67 @@ export class GameRenderer {
         const glint = artSprite(this.art.sparkle, size * u);
         glint.position.set(x * u, y * u);
         piece.addChild(glint);
-        this.sparkles.push({ sprite: glint, phase: Math.random() * Math.PI * 2, size: size * u });
+        this.sparkles.push({
+          sprite: glint,
+          phase: Math.random() * Math.PI * 2,
+          size: size * u,
+          speed: 2.2,
+        });
       }
-      this.siteLayer.addChild(piece);
     }
 
     for (const outpost of view.outposts) {
       const color = outpost.ownerId ? playerColor(view, outpost.ownerId) : NEUTRAL_COLOR;
-      const site = new Container();
-      site.position.copyFrom(this.px(outpost.position));
+      // The watchtower already says "Stützpunkt": the plate names only the owner (or the ruin).
+      const name = outpost.ownerId ? playerName(view, outpost.ownerId) : 'Ruine';
+      const labels = [
+        this.nameplate(`${name} · ${outpost.troops}`, color, u, { top: 17 * u, size: 10 * u }),
+      ];
+      if (hasResources(outpost.resources)) {
+        labels.push(
+          this.nameplate(`Lager: ${formatResources(outpost.resources)}`, null, u, {
+            top: 31 * u,
+            size: 8.5 * u,
+          }),
+        );
+      }
+      const site = place(outpost.position, ...labels);
       // Unowned outposts are ruins until someone takes them; owned ones a watchtower.
       const art = outpost.ownerId ? this.art.pieces.outpost(color) : this.art.ruin;
       if (art) site.addChild(artSprite(art, 40 * u, true));
-      const plate = this.nameplate(`${outpostLabel(view, outpost)} · ${outpost.troops}`, color, u, {
-        top: 17 * u,
-      });
-      site.addChild(plate);
-      if (hasResources(outpost.resources)) {
-        const stock = this.nameplate(`Lager: ${formatResources(outpost.resources)}`, null, u, {
-          top: 37 * u,
-          size: 10 * u,
-        });
-        site.addChild(stock);
-      }
-      this.siteLayer.addChild(site);
     }
 
     for (const player of view.players) {
       if (!player.castle) continue;
       const { color, style } = playerHeraldry(view, player.id);
-      const castle = new Container();
-      castle.position.copyFrom(this.px(player.castle));
+      const home = player.id === view.self.id;
+      const castle = place(
+        player.castle,
+        this.nameplate(`${player.name} · ${player.homeTroops}`, color, u, { home }),
+      );
+      const art = this.art.pieces.castle(color, style);
       const rings = new Graphics();
-      if (player.id === view.self.id) {
-        dashedCircle(rings, 34 * u, 20).stroke({ width: 2 * u, color });
+      if (home && art) {
+        // The own castle stands on a base in its colour, like a game piece on the board, in a
+        // soft glow of the same colour: a wide ellipse at its ground line, rimmed in ink with a
+        // parchment inlay, reaching past the walls on both sides.
+        const glow = new Sprite(this.art.glow);
+        glow.anchor.set(0.5);
+        glow.tint = color;
+        glow.alpha = 0.32;
+        glow.scale.set((120 * u) / this.art.glow.width, (84 * u) / this.art.glow.width);
+        glow.position.set(0, 4 * u);
+        castle.addChild(glow);
+        const k = (58 * u) / (art.width - art.pad * 2);
+        const y = (art.anchor.y - art.centreY) * k;
+        rings
+          .ellipse(0, y, 45 * u, 16 * u)
+          .fill({ color, alpha: 0.32 })
+          .stroke({ width: 4 * u, color: INK, alpha: 0.8 })
+          .ellipse(0, y, 45 * u, 16 * u)
+          .stroke({ width: 2.4 * u, color })
+          .ellipse(0, y, 39.5 * u, 12.6 * u)
+          .stroke({ width: 1.2 * u, color: PARCHMENT, alpha: 0.9 });
       }
       if (player.fortified) {
         rings
@@ -542,11 +692,8 @@ export class GameRenderer {
       }
       castle.addChild(rings);
       // Centre the castle body, not its ground line, on the castle tile.
-      const art = this.art.pieces.castle(color, style);
       if (art) castle.addChild(artSprite(art, 58 * u, true));
-      castle.addChild(this.nameplate(`${player.name} · ${player.homeTroops}`, color, u));
       if (!player.online) castle.alpha = 0.85;
-      this.siteLayer.addChild(castle);
     }
 
     // Lamp light for the night: castles and held outposts glow from their windows, chests shimmer.
@@ -575,16 +722,22 @@ export class GameRenderer {
   /**
    * The one label style on the map: italic ink on a parchment plate, with ribbon tails in the
    * owner's colour (none for `null`). `top` is the plate's top edge, `size` the font size; all
-   * proportions follow the font size, so castle, outpost and army plates match.
+   * proportions follow the font size, so castle, outpost and army plates match. `home` puts a
+   * gold star before the text (the viewer's own castle).
    */
   private nameplate(
     text: string,
     color: number | null,
     u: number,
-    { top = 23 * u, size = 13 * u }: { top?: number; size?: number } = {},
+    {
+      top = 23 * u,
+      size = 13 * u,
+      home = false,
+    }: { top?: number; size?: number; home?: boolean } = {},
   ): Container {
     const label = this.label(text, size, INK, true);
-    const w = label.width + size * 1.1;
+    const star = home ? size * 1.05 : 0;
+    const w = label.width + size * 1.1 + star;
     const h = size * 1.3;
     const line = Math.max(0.7 * u, size * 0.07);
     const plate = new Graphics();
@@ -614,7 +767,21 @@ export class GameRenderer {
       .rect(-w / 2, top, w, h)
       .fill(PARCHMENT)
       .stroke({ width: line, color: INK });
-    label.position.set(0, top + h / 2);
+    if (home) {
+      const cx = -w / 2 + size * 0.95;
+      const cy = top + h / 2;
+      const points: number[] = [];
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = (i % 2 ? 0.2 : 0.47) * size;
+        points.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      }
+      plate
+        .poly(points)
+        .fill(RESOURCE_COLORS.gold)
+        .stroke({ width: line, color: INK, join: 'round' });
+    }
+    label.position.set(star / 2, top + h / 2);
     const container = new Container();
     container.addChild(plate, label);
     return container;
@@ -625,7 +792,7 @@ export class GameRenderer {
     const u = this.unit;
     const seen = new Set<string>();
     this.routeLines = [];
-    this.routeMarks.clear();
+    this.raidMarks = [];
     const offsets = this.armyOffsets(view.armies, u);
 
     // A deposit someone is loading at glows at night: lanterns of the working troops.
@@ -656,23 +823,8 @@ export class GameRenderer {
         const to = route[route.length - 1]!;
         const alpha = faded ? 0.5 : 1;
         this.routeLines.push({ points: route, color: carrying ? CARGO_GOLD : color, alpha });
-        if (army.target?.kind === 'army') {
-          // Raid: crossed strokes where the ambush is planned.
-          const r = 8 * u;
-          this.routeMarks
-            .moveTo(to.x - r, to.y - r)
-            .lineTo(to.x + r, to.y + r)
-            .moveTo(to.x + r, to.y - r)
-            .lineTo(to.x - r, to.y + r)
-            .stroke({ width: 3.2 * u, color: INK, cap: 'round' })
-            .moveTo(to.x - r, to.y - r)
-            .lineTo(to.x + r, to.y + r)
-            .moveTo(to.x + r, to.y - r)
-            .lineTo(to.x - r, to.y + r)
-            .stroke({ width: 1.8 * u, color, cap: 'round' });
-        } else if (army.status === 'outbound') {
-          this.routeMarks.circle(to.x, to.y, 14 * u).stroke({ width: 1.6 * u, color, alpha: 0.9 });
-        }
+        // The route itself ends at the destination; only a planned ambush gets a mark.
+        if (army.target?.kind === 'army') this.raidMarks.push({ ...to, color });
       }
 
       let sprite = this.armies.get(army.id);
@@ -688,6 +840,10 @@ export class GameRenderer {
         this.armyLayer.addChild(container);
         sprite = {
           container,
+          army,
+          color,
+          camp: false,
+          mode: 'soldiers',
           figure,
           plate,
           text: '',
@@ -696,17 +852,21 @@ export class GameRenderer {
           motion: null,
           look: '',
           cargoKey: '',
-          marching: false,
           stride: Math.random() * Math.PI * 2,
+          heading: 1,
+          afloat: army.sea && army.status !== 'gathering' && this.isWater(target),
+          shoreAt: 0,
+          wakeAt: 0,
           offset,
           fire: null,
         };
         this.armies.set(army.id, sprite);
       }
+      sprite.army = army;
+      sprite.color = color;
       sprite.target = target;
       // At night marching armies pitch camp: a tent with a campfire instead of soldiers.
-      const camp = this.night.night && !gathering;
-      sprite.marching = !gathering && !camp;
+      sprite.camp = this.night.night && !gathering;
       sprite.offset = offsets.get(army.id) ?? { x: 0, y: 0 };
       sprite.motion =
         !gathering && army.route && army.route.length > 1 && army.arriveClock > view.clock.clock
@@ -716,57 +876,87 @@ export class GameRenderer {
               to: army.arriveClock,
             }
           : null;
-      const look = `${color}:${gathering}:${camp}:${this.night.night}`;
-      if (look !== sprite.look) {
-        for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
-        sprite.fire = null;
-        if (gathering) {
-          // At a deposit the resource stays in view: the army is a bubble on the ring around it.
-          sprite.look = look;
-          sprite.figure.addChild(
-            new Graphics()
-              .circle(0, 0, GATHER_BUBBLE * u)
-              .fill(color)
-              .stroke({ width: 1.2 * u, color: INK })
-              .circle(0, 0, (GATHER_BUBBLE - 1.6) * u)
-              .stroke({ width: 0.8 * u, color: PARCHMENT, alpha: 0.7 }),
-          );
-        } else {
-          const art = camp ? this.art.pieces.tent(color) : this.art.pieces.soldiers(color);
-          sprite.look = art ? look : '';
-          if (art && camp) {
-            sprite.fire = this.campfire(sprite.figure, u, { x: 12 * u, y: 2 * u }, 0.9);
-            sprite.figure.addChildAt(artSprite(art, 28 * u), 1);
-          } else if (art) {
-            sprite.figure.addChild(artSprite(art, 38 * u));
-          }
-        }
-        // The plate's position depends on the look.
-        sprite.text = '';
-      }
       sprite.container.alpha = faded ? 0.75 : 1;
-      const cargoKey = JSON.stringify([army.cargo, army.chest, gathering, camp]);
-      if (cargoKey !== sprite.cargoKey) {
-        sprite.cargoKey = cargoKey;
-        this.drawCargo(sprite, army, u, camp);
-      }
-      const troops = army.troops === null ? '?' : String(army.troops);
-      const text = `${gathering}:${troops}`;
-      if (text !== sprite.text) {
-        sprite.text = text;
-        for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
-        sprite.plate.addChild(
-          gathering
-            ? this.label(troops, (troops.length > 3 ? 6.5 : 8) * u, PARCHMENT, false, LINING_SERIF)
-            : this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }),
-        );
-      }
+      this.drawFigure(sprite);
     }
 
     for (const [id, sprite] of this.armies) {
       if (seen.has(id)) continue;
       sprite.container.destroy({ children: true });
       this.armies.delete(id);
+    }
+  }
+
+  /** What an army looks like right now; a Seeweg leg sails where it crosses water. */
+  private figureMode(sprite: ArmySprite): FigureMode {
+    const { army } = sprite;
+    if (army.status === 'gathering') return 'badge';
+    if (army.sea && sprite.afloat) return 'ship';
+    return sprite.camp ? 'tent' : 'soldiers';
+  }
+
+  /**
+   * Brings an army's figure, troop plate and cargo up to date with its state; each part is only
+   * rebuilt when what it shows has changed. Runs on every server update and, for armies on a
+   * Seeweg leg, every frame (they board and land as they cross the coast).
+   */
+  private drawFigure(sprite: ArmySprite): void {
+    const u = this.unit;
+    const { army, color } = sprite;
+    const mode = this.figureMode(sprite);
+    const look = `${color}:${mode}`;
+    if (look !== sprite.look) {
+      for (const child of sprite.figure.removeChildren()) child.destroy({ children: true });
+      sprite.fire = null;
+      sprite.mode = mode;
+      sprite.figure.rotation = 0;
+      sprite.figure.scale.set(1);
+      const art =
+        mode === 'badge'
+          ? this.art.pieces.shield(color)
+          : mode === 'ship'
+            ? this.art.pieces.ship(color)
+            : mode === 'tent'
+              ? this.art.pieces.tent(color)
+              : this.art.pieces.soldiers(color);
+      // Not rasterised yet in this colour: try again once it is (`onReady`).
+      sprite.look = art ? look : '';
+      if (art && mode === 'badge') {
+        // At a deposit the resource stays in view: the army is a shield on the ring around it.
+        sprite.figure.addChild(artSprite(art, GATHER_BADGE * 2 * u, true));
+      } else if (art && mode === 'tent') {
+        sprite.fire = this.campfire(sprite.figure, u, { x: 12 * u, y: 2 * u }, 0.9);
+        sprite.figure.addChildAt(artSprite(art, 28 * u), 1);
+      } else if (art && mode === 'ship') {
+        sprite.figure.addChild(artSprite(art, 46 * u));
+      } else if (art) {
+        sprite.figure.addChild(artSprite(art, 38 * u));
+      }
+    }
+    const cargoKey = JSON.stringify([army.cargo, army.chest, mode]);
+    if (cargoKey !== sprite.cargoKey) {
+      sprite.cargoKey = cargoKey;
+      this.drawCargo(sprite, army, u, mode);
+    }
+    const troops = army.troops === null ? '?' : String(army.troops);
+    const text = `${mode === 'badge'}:${troops}`;
+    if (text !== sprite.text) {
+      sprite.text = text;
+      for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
+      if (mode === 'badge') {
+        const count = this.label(
+          troops,
+          (troops.length > 2 ? 7 : 8.5) * u,
+          PARCHMENT,
+          false,
+          LINING_SERIF,
+        );
+        count.style.stroke = { color: INK, width: 1.6 * u, join: 'round' };
+        count.position.set(0, 0.6 * u);
+        sprite.plate.addChild(count);
+      } else {
+        sprite.plate.addChild(this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }));
+      }
     }
   }
 
@@ -787,7 +977,7 @@ export class GameRenderer {
         // Fill ring after ring, bubbles just apart on each.
         let radius = GATHER_RING;
         for (;;) {
-          const fits = Math.floor((2 * Math.PI * radius) / (2 * GATHER_BUBBLE + 3));
+          const fits = Math.floor((2 * Math.PI * radius) / (2 * GATHER_BADGE + 3));
           if (slot < fits) {
             const angle = GATHER_START_ANGLE + (slot * 2 * Math.PI) / Math.max(fits, 1);
             offsets.set(army.id, {
@@ -854,7 +1044,7 @@ export class GameRenderer {
   /** Route dashes, shifted by `routePhase` so they march toward the target. */
   private drawRoutes(): void {
     const u = this.unit;
-    this.routes.clear();
+    const g = this.routes.clear();
     for (const { points, color, alpha } of this.routeLines) {
       dashedPolyline(this.routes, points, 7 * u, 5 * u, this.routePhase).stroke({
         width: 4 * u,
@@ -869,6 +1059,21 @@ export class GameRenderer {
         cap: 'round',
       });
     }
+    // Raid crosses grow with the pieces, like everything players act on.
+    const s = u * this.pieceScale;
+    for (const mark of this.raidMarks) {
+      const r = 8 * s;
+      for (const [width, color] of [
+        [3.2, INK],
+        [1.8, mark.color],
+      ] as const) {
+        g.moveTo(mark.x - r, mark.y - r)
+          .lineTo(mark.x + r, mark.y + r)
+          .moveTo(mark.x + r, mark.y - r)
+          .lineTo(mark.x - r, mark.y + r)
+          .stroke({ width: width * s, color, cap: 'round' });
+      }
+    }
   }
 
   /**
@@ -880,18 +1085,20 @@ export class GameRenderer {
       id: string;
       position: Vec2;
       radius: number;
-      incoming: boolean;
+      attackers: string[];
       attackedAt: number | null;
     }[] = [];
     if (view && this.map) {
       const incoming = (kind: 'castle' | 'outpost', id: string, ownerId: string | null) =>
-        view.armies.some(
-          (a) =>
-            a.status === 'outbound' &&
-            a.ownerId !== ownerId &&
-            a.target?.kind === kind &&
-            a.target.id === id,
-        );
+        view.armies
+          .filter(
+            (a) =>
+              a.status === 'outbound' &&
+              a.ownerId !== ownerId &&
+              a.target?.kind === kind &&
+              a.target.id === id,
+          )
+          .map((a) => a.id);
       const recent = (at: number | null | undefined) =>
         at != null && view.clock.clock - at < RECENT_ATTACK_MS ? at : null;
       for (const p of view.players) {
@@ -899,8 +1106,8 @@ export class GameRenderer {
         sites.push({
           id: p.id,
           position: p.castle,
-          radius: 36,
-          incoming: incoming('castle', p.id, p.id),
+          radius: 40,
+          attackers: incoming('castle', p.id, p.id),
           attackedAt: recent(p.attackedAt),
         });
       }
@@ -908,13 +1115,13 @@ export class GameRenderer {
         sites.push({
           id: o.id,
           position: o.position,
-          radius: 27,
-          incoming: incoming('outpost', o.id, o.ownerId),
+          radius: 29,
+          attackers: incoming('outpost', o.id, o.ownerId),
           attackedAt: recent(o.attackedAt),
         });
       }
     }
-    const active = sites.filter((s) => s.incoming || s.attackedAt !== null);
+    const active = sites.filter((s) => s.attackers.length > 0 || s.attackedAt !== null);
     const key = JSON.stringify([active, this.map?.tileSize]);
     if (key === this.alertsKey) return;
     this.alertsKey = key;
@@ -929,11 +1136,8 @@ export class GameRenderer {
       const over = new Container();
       under.position.copyFrom(at);
       over.position.copyFrom(at);
-      const ring = new Graphics()
-        .circle(0, 0, radius)
-        .stroke({ width: 3.2 * u, color: SEAL })
-        .circle(0, 0, radius)
-        .fill({ color: SEAL, alpha: 0.12 });
+      const incoming = site.attackers.length > 0;
+      const ring = new Graphics();
       const wave = new Graphics().circle(0, 0, radius).stroke({ width: 2.6 * u, color: SEAL });
       const swords = artSprite(this.art.alarm, 24 * u);
       const burnt = site.attackedAt !== null;
@@ -950,8 +1154,8 @@ export class GameRenderer {
         sprite.visible = burnt;
         return { sprite, size };
       });
-      ring.visible = site.incoming;
-      swords.visible = site.incoming;
+      ring.visible = incoming;
+      swords.visible = incoming;
       wave.visible = burnt;
       under.addChild(ring, wave);
       over.addChild(...flames.map((f) => f.sprite), ...smoke.map((p) => p.sprite), swords);
@@ -959,6 +1163,8 @@ export class GameRenderer {
       this.alertLayer.addChild(over);
       this.alerts.push({
         under,
+        at,
+        attackers: site.attackers,
         over,
         ring,
         wave,
@@ -967,9 +1173,63 @@ export class GameRenderer {
         smoke,
         flames,
         radius,
-        incoming: site.incoming,
+        incoming,
         attackedAt: site.attackedAt,
       });
+    }
+  }
+
+  /**
+   * Warning ring of a site under threat, in the focus ring's style but in alarm red: a red band
+   * edged in ink on a faint red ground, alarm ripples rolling outward from it, and outside it an
+   * arrowhead toward each attacker (from where it is drawn right now), thrusting at the site.
+   */
+  private drawWarning(alert: SiteAlert, seconds: number): void {
+    const u = this.unit;
+    const r = alert.radius;
+    const g = alert.ring.clear();
+    const beat = 0.5 + 0.5 * Math.sin(seconds * 4.5);
+    g.circle(0, 0, r).fill({ color: SEAL, alpha: 0.08 + 0.07 * beat });
+    for (let i = 0; i < 2; i++) {
+      const q = (seconds / 1.5 + i / 2) % 1;
+      g.circle(0, 0, r * (1 + 0.5 * q)).stroke({
+        width: (2.4 - 1.6 * q) * u,
+        color: SEAL,
+        alpha: 0.7 * (1 - q),
+      });
+    }
+    g.circle(0, 0, r)
+      .stroke({ width: 5.4 * u, color: INK, alpha: 0.85 })
+      .circle(0, 0, r)
+      .stroke({ width: 3.4 * u, color: SEAL })
+      .circle(0, 0, r)
+      .stroke({ width: 0.9 * u, color: PARCHMENT, alpha: 0.55 + 0.35 * beat });
+    const thrust = Math.abs(Math.sin(seconds * 3)) * 3 * u;
+    for (const id of alert.attackers) {
+      const sprite = this.armies.get(id);
+      if (!sprite) continue;
+      const from = this.armyFocus(sprite);
+      const angle = Math.atan2(from.y - alert.at.y, from.x - alert.at.x);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const tip = r + 4 * u + thrust;
+      const back = tip + 10 * u;
+      const half = 6 * u;
+      const points = [
+        cos * tip,
+        sin * tip,
+        cos * back - sin * half,
+        sin * back + cos * half,
+        cos * (back - 3 * u),
+        sin * (back - 3 * u),
+        cos * back + sin * half,
+        sin * back - cos * half,
+      ];
+      g.poly(points)
+        .stroke({ width: 4.4 * u, color: PARCHMENT, join: 'round' })
+        .poly(points)
+        .fill(SEAL)
+        .stroke({ width: 1.4 * u, color: INK, join: 'round' });
     }
   }
 
@@ -978,11 +1238,10 @@ export class GameRenderer {
     const clock = this.clock;
     for (const alert of this.alerts) {
       if (alert.incoming) {
-        const pulse = 0.5 + 0.5 * Math.sin(seconds * 6);
-        alert.ring.scale.set(1 + 0.07 * pulse);
-        alert.ring.alpha = 0.45 + 0.55 * pulse;
-        alert.swords.y = -alert.radius * 1.35 - Math.abs(Math.sin(seconds * 3)) * 4 * u;
-        alert.swords.scale.set(alert.swordsScale * (1 + 0.08 * pulse));
+        this.drawWarning(alert, seconds);
+        const pulse = 0.5 + 0.5 * Math.sin(seconds * 4.5);
+        alert.swords.y = -alert.radius * 1.3 - Math.abs(Math.sin(seconds * 2.25)) * 3 * u;
+        alert.swords.scale.set(alert.swordsScale * (1 + 0.06 * pulse));
       }
       if (alert.attackedAt !== null) {
         // Fades out over RECENT_ATTACK_MS; the alert is rebuilt once the server view moves on.
@@ -1017,12 +1276,11 @@ export class GameRenderer {
   }
 
   /**
-   * A parchment tag with the main resource's icon and the total load (beside the soldiers, or
-   * the bubble while gathering); a small chest while the army brings one home.
+   * A parchment tag with the main resource's icon and the total load (beside the soldiers, the
+   * ship or the badge while gathering); a small chest while the army brings one home.
    */
-  private drawCargo(sprite: ArmySprite, army: ArmyView, u: number, camp: boolean): void {
+  private drawCargo(sprite: ArmySprite, army: ArmyView, u: number, mode: FigureMode): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
-    const gathering = army.status === 'gathering';
     if (army.chest) {
       const chest = artSprite(this.art.chest, 20 * u);
       chest.position.set(16 * u, -24 * u);
@@ -1038,8 +1296,9 @@ export class GameRenderer {
     const tag = new Container();
     // Tucked against the figure (drawn behind it): at the soldiers' heads, or on the tent's right
     // slope.
-    if (gathering) tag.position.set(13 * u, -9 * u);
-    else if (camp) tag.position.set(6 * u, -17 * u);
+    if (mode === 'badge') tag.position.set(7 * u, -9 * u);
+    else if (mode === 'tent') tag.position.set(6 * u, -17 * u);
+    else if (mode === 'ship') tag.position.set(12 * u, -24 * u);
     else tag.position.set(9 * u, -14 * u);
     const plate = new Graphics()
       .roundRect(0, -h / 2, w, h, h / 2)
@@ -1052,34 +1311,145 @@ export class GameRenderer {
     sprite.cargo.addChild(tag);
   }
 
-  private drawSelection(selection: Selection | null): void {
-    this.selectionRing.clear();
-    if (!selection || !this.view || !this.map) return;
-    const position = this.selectionPosition(selection, this.view);
-    if (!position) return;
-    this.selectionRing.position.copyFrom(this.px(position));
-    const radius = selection.kind === 'castle' ? 38 : selection.kind === 'outpost' ? 30 : 22;
-    const scaled = radius * this.unit;
-    // Drawn white and tinted in `animate`: ink by day, moonlight at night.
-    dashedCircle(this.selectionRing, scaled, 14).stroke({
-      width: 2.5 * this.unit,
-      color: 0xffffff,
-      cap: 'round',
-    });
+  /**
+   * Where the focus ring goes this frame: the selected piece as it is drawn (so it follows
+   * fanned-out, gathering, sailing and walking armies exactly), its radius and accent colour.
+   */
+  private focusTarget(
+    selection: Selection,
+    view: GameView,
+  ): { x: number; y: number; radius: number; color: number } | null {
+    const k = this.unit * this.pieceScale;
+    const site = (at: Vec2 | null | undefined, radius: number, color: number) =>
+      at ? { ...this.px(at), radius: radius * k, color } : null;
+    switch (selection.kind) {
+      case 'army': {
+        const sprite = this.armies.get(selection.id);
+        return sprite ? { ...this.armyFocus(sprite), color: sprite.color } : null;
+      }
+      case 'castle': {
+        const castle = view.players.find((p) => p.id === selection.id)?.castle;
+        return site(castle, 41, playerColor(view, selection.id));
+      }
+      case 'outpost': {
+        const outpost = view.outposts.find((o) => o.id === selection.id);
+        const color = outpost?.ownerId ? playerColor(view, outpost.ownerId) : NEUTRAL_COLOR;
+        return site(outpost?.position, 28, color);
+      }
+      case 'spot': {
+        const spot = view.spots.find((s) => s.id === selection.id);
+        return site(spot?.position, 26, spot ? RESOURCE_COLORS[spot.resource] : INK);
+      }
+      case 'chest':
+        return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);
+    }
   }
 
-  private selectionPosition(selection: Selection, view: GameView): Vec2 | null {
-    switch (selection.kind) {
-      case 'army':
-        return view.armies.find((a) => a.id === selection.id)?.position ?? null;
-      case 'castle':
-        return view.players.find((p) => p.id === selection.id)?.castle ?? null;
-      case 'outpost':
-        return view.outposts.find((o) => o.id === selection.id)?.position ?? null;
-      case 'spot':
-        return view.spots.find((s) => s.id === selection.id)?.position ?? null;
-      case 'chest':
-        return view.chests.find((c) => c.id === selection.id)?.position ?? null;
+  /**
+   * Focus ring, redrawn every frame: on the ground a soft disc and a parchment band edged in ink
+   * with a thread and four orbiting studs in the accent colour; over the sites four arrowheads
+   * on the diagonals that breathe toward the piece. A new selection locks on: the ring shrinks
+   * onto it from a little wider while fading in.
+   */
+  private drawFocus(seconds: number, now: number, tint: number): void {
+    const ground = this.focusGround.clear();
+    const top = this.focusTop.clear();
+    const selection = useGameStore.getState().selection;
+    const target = selection && this.view ? this.focusTarget(selection, this.view) : null;
+    if (!selection || !target) {
+      this.focus = null;
+      return;
+    }
+    const key = `${selection.kind}:${selection.id}`;
+    if (this.focus?.key !== key) {
+      this.focus = { key, radius: target.radius, color: target.color, since: now };
+    }
+    const lock = 1 - Math.pow(1 - Math.min(1, (now - this.focus.since) / LOCK_MS), 3);
+    const s = this.unit * this.pieceScale;
+    const r = target.radius * (1 + 0.4 * (1 - lock));
+    const { color } = target;
+    for (const g of [ground, top]) {
+      g.position.set(target.x, target.y);
+      g.alpha = lock;
+      g.tint = tint;
+    }
+
+    ground
+      .circle(0, 0, r)
+      .fill({ color, alpha: 0.14 })
+      .circle(0, 0, r)
+      .stroke({ width: 5.4 * s, color: INK, alpha: 0.85 })
+      .circle(0, 0, r)
+      .stroke({ width: 3.4 * s, color: PARCHMENT })
+      .circle(0, 0, r)
+      .stroke({ width: 1.1 * s, color });
+    const spin = seconds * SELECTION_SPIN;
+    for (let i = 0; i < 4; i++) {
+      const a = spin + (i * Math.PI) / 2;
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      const d = 3.6 * s;
+      const along = { x: Math.cos(a) * d, y: Math.sin(a) * d };
+      const across = { x: -Math.sin(a) * d * 0.7, y: Math.cos(a) * d * 0.7 };
+      ground
+        .poly([
+          x + along.x,
+          y + along.y,
+          x + across.x,
+          y + across.y,
+          x - along.x,
+          y - along.y,
+          x - across.x,
+          y - across.y,
+        ])
+        .fill(color)
+        .stroke({ width: 1.1 * s, color: INK, join: 'round' });
+    }
+
+    // Small targets (a gather badge) get smaller arrows.
+    const a = s * Math.min(1, Math.max(0.6, target.radius / (28 * s)));
+    const breathe = (0.5 + 0.5 * Math.sin(seconds * 4)) * 2.4 * a;
+    for (let i = 0; i < 4; i++) {
+      const angle = Math.PI / 4 + (i * Math.PI) / 2;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const tip = r + 4 * a + breathe;
+      const back = tip + 8 * a;
+      const half = 5 * a;
+      const points = [
+        cos * tip,
+        sin * tip,
+        cos * back - sin * half,
+        sin * back + cos * half,
+        cos * (back - 2.4 * a),
+        sin * (back - 2.4 * a),
+        cos * back + sin * half,
+        sin * back - cos * half,
+      ];
+      top
+        .poly(points)
+        .stroke({ width: 4.2 * a, color: PARCHMENT, join: 'round' })
+        .poly(points)
+        .fill(color)
+        .stroke({ width: 1.3 * a, color: INK, join: 'round' });
+    }
+  }
+
+  /** Foam rings spreading and fading behind ships. */
+  private drawWakes(seconds: number, tint: number): void {
+    const s = this.unit;
+    this.wakeRings = this.wakeRings.filter((w) => seconds - w.born < WAKE_LIFE_S);
+    const g = this.wakes.clear();
+    g.tint = tint;
+    for (const w of this.wakeRings) {
+      const age = (seconds - w.born) / WAKE_LIFE_S;
+      if (age < 0) continue;
+      const r = (3 + 13 * age) * s * w.scale;
+      g.ellipse(w.x, w.y, r, r * 0.38).stroke({
+        width: 1.3 * s * w.scale,
+        color: FOAM,
+        alpha: 0.85 * (1 - age),
+      });
     }
   }
 
@@ -1107,36 +1477,86 @@ export class GameRenderer {
 
   private readonly animate = (ticker: Ticker): void => {
     const t = 1 - Math.exp(-ticker.deltaMS / UNIT_SMOOTHING_MS);
-    const seconds = performance.now() / 1000;
+    const now = performance.now();
+    const seconds = now / 1000;
     const u = this.unit;
     const k = this.pieceScale;
     const clock = this.clock;
     for (const sprite of this.armies.values()) {
-      const { container, figure, marching, stride, motion, offset } = sprite;
+      const { container, figure, stride, motion, offset } = sprite;
       // Walk on along the known route by the game clock; the server corrects once a second.
       const target = motion
         ? pointAlong(motion.route, (clock - motion.from) / (motion.to - motion.from))
         : sprite.target;
       container.x += (target.x - container.x) * t;
       container.y += (target.y - container.y) * t;
+      if (motion) {
+        // Bow toward where the route goes, not where the easing nudges: a server correction that
+        // pulls the army back a little must not turn the ship around. Near-vertical legs keep it.
+        const p = (clock - motion.from) / (motion.to - motion.from);
+        const a = pointAlong(motion.route, p);
+        const b = pointAlong(motion.route, Math.min(1, p + 0.02));
+        if (Math.abs(b.x - a.x) > 0.25 * Math.abs(b.y - a.y)) sprite.heading = Math.sign(b.x - a.x);
+      }
       // Fanned-out stacks and gather ring slots slide into place instead of jumping.
       container.pivot.x += (-offset.x - container.pivot.x) * t;
       container.pivot.y += (-offset.y - container.pivot.y) * t;
       container.scale.set(k);
-      figure.y = marching ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
+      // Badges on top, the rest back to front.
+      container.zIndex = container.y + (sprite.mode === 'badge' ? 1e7 : 0);
+      // A Seeweg army boards at the coast and lands on the far side, with a splash.
+      if (sprite.army.sea && sprite.army.status !== 'gathering') {
+        const ground = {
+          x: container.x - container.pivot.x * k,
+          y: container.y - container.pivot.y * k,
+        };
+        const wet = this.isWater(ground);
+        if (wet === sprite.afloat) sprite.shoreAt = 0;
+        else if (sprite.shoreAt === 0) sprite.shoreAt = seconds;
+        else if (seconds - sprite.shoreAt > SHORE_S) {
+          sprite.afloat = wet;
+          sprite.shoreAt = 0;
+          for (const [delay, size] of [
+            [0, 1.3],
+            [0.25, 1.7],
+          ] as const) {
+            this.wakeRings.push({ ...ground, born: seconds + delay, scale: k * size });
+          }
+          this.drawFigure(sprite);
+        }
+      }
+      if (sprite.mode === 'ship') {
+        // Rolls on the swell, sails bow first and leaves foam behind.
+        figure.y = Math.sin(seconds * 2.1 + stride) * 1.3 * u;
+        figure.rotation = Math.sin(seconds * 1.4 + stride) * 0.06;
+        figure.scale.x = sprite.heading > 0 ? -1 : 1;
+        if (motion && seconds - sprite.wakeAt > WAKE_EVERY_S) {
+          sprite.wakeAt = seconds;
+          const { x, y } = this.armyFocus(sprite);
+          this.wakeRings.push({
+            x: x - sprite.heading * 18 * u * k,
+            y: y + 15 * u * k,
+            born: seconds,
+            scale: k,
+          });
+        }
+      } else {
+        figure.rotation = 0;
+        figure.y =
+          sprite.mode === 'soldiers' ? -Math.abs(Math.sin(seconds * 7 + stride)) * 1.8 * u : 0;
+      }
     }
-    for (const layer of [this.siteLayer, this.spotLayer]) {
+    for (const layer of [this.siteLayer, this.labelLayer]) {
       for (const piece of layer.children) piece.scale.set(k);
     }
     for (const alert of this.alerts) {
       alert.under.scale.set(k);
       alert.over.scale.set(k);
     }
-    this.selectionRing.scale.set(k);
-    // Night: moonlit pieces, flickering campfires, ring in moonlight.
-    this.siteLayer.tint = this.night.update(ticker.deltaMS, seconds, k);
-    this.spotLayer.tint = this.siteLayer.tint;
-    this.selectionRing.tint = mix(RING_DAY, RING_NIGHT, this.night.amount);
+    // Night: moonlit pieces and labels, flickering campfires.
+    const tint = this.night.update(ticker.deltaMS, seconds, k);
+    this.siteLayer.tint = tint;
+    this.labelLayer.tint = tint;
     for (const { fire } of this.armies.values()) {
       if (!fire) continue;
       const flicker =
@@ -1144,39 +1564,22 @@ export class GameRenderer {
       fire.flame.scale.set(fire.scale * (2 - flicker), fire.scale * flicker * 1.1);
       fire.light.alpha = 0.35 + 0.4 * flicker;
     }
-    for (const { sprite, phase, size } of this.sparkles) {
-      const twinkle = Math.max(0, Math.sin(seconds * 2.2 + phase));
+    for (const { sprite, phase, size, speed } of this.sparkles) {
+      const twinkle = Math.max(0, Math.sin(seconds * speed + phase));
       sprite.alpha = twinkle;
       sprite.scale.set(((0.4 + 0.6 * twinkle) * size) / this.art.sparkle.width);
       sprite.rotation = seconds * 0.8 + phase;
+    }
+    for (const { sprite, phase } of this.shines) {
+      // Brighter in the dark, where the gold catches the moon.
+      sprite.alpha = (0.22 + 0.14 * Math.sin(seconds * 1.6 + phase)) * (1 + this.night.amount);
     }
     // Eases with the dusk/dawn fade instead of jumping.
     const flow = ROUTE_FLOW * (1 - (1 - ROUTE_FLOW_NIGHT) * this.night.amount);
     this.routePhase += (flow * u * ticker.deltaMS) / 1000;
     this.drawRoutes();
+    this.drawWakes(seconds, tint);
     this.animateAlerts(seconds);
-    this.selectionRing.rotation += (SELECTION_SPIN * ticker.deltaMS) / 1000;
-    // A selected army moves; keep the ring on it.
-    const selection = useGameStore.getState().selection;
-    if (selection?.kind === 'army') {
-      const sprite = this.armies.get(selection.id);
-      if (sprite) {
-        const { position, pivot, scale } = sprite.container;
-        this.selectionRing.position.set(
-          position.x - pivot.x * scale.x,
-          position.y - (pivot.y + 10 * u) * scale.y,
-        );
-      }
-    }
+    this.drawFocus(seconds, now, tint);
   };
-}
-
-/** Blends two 0xrrggbb colours, `t` = 0 → a, 1 → b. */
-function mix(a: number, b: number, t: number): number {
-  const ch = (shift: number) => {
-    const x = (a >> shift) & 255;
-    const y = (b >> shift) & 255;
-    return Math.round(x + (y - x) * t) << shift;
-  };
-  return ch(16) | ch(8) | ch(0);
 }

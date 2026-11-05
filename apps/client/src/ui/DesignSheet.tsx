@@ -2,6 +2,7 @@ import { RESOURCE_NAMES, RESOURCES } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   alarm,
+  armyShip,
   boat,
   boulder,
   broadleaf,
@@ -13,6 +14,7 @@ import {
   deposit,
   flame,
   FOLIAGE,
+  gatherShield,
   grassTuft,
   outpost,
   resourceIcon,
@@ -406,13 +408,25 @@ export function DesignSheet() {
           ))}
           {HERALDRY.slice(0, 5).map((c) => (
             <Tile key={`f${c}`} label="Sammelnd">
-              {/* Mirrors the Pixi bubble in GameRenderer (gathering armies around a deposit). */}
-              <span
-                className="grid size-8 place-items-center rounded-full border border-ink text-[11px] font-bold text-parchment shadow-[inset_0_0_0_2px_rgba(246,238,219,0.7)]"
-                style={{ background: c, fontFamily: '"Times New Roman", Times, serif' }}
-              >
-                120
+              {/* The Pixi count sits on the shield the same way (GameRenderer `drawFigure`). */}
+              <span className="relative inline-grid place-items-center">
+                <MapArt art={gatherShield(c)} options={{ outline: true }} height={40} />
+                <span
+                  className="absolute text-[13px] font-bold text-parchment"
+                  style={{
+                    fontFamily: '"Times New Roman", Times, serif',
+                    WebkitTextStroke: '2px #3b2a18',
+                    paintOrder: 'stroke',
+                  }}
+                >
+                  30
+                </span>
               </span>
+            </Tile>
+          ))}
+          {HERALDRY.slice(0, 5).map((c) => (
+            <Tile key={`s${c}`} label="Seeweg" ground={T.SEA}>
+              <MapArt art={armyShip(c)} options={{ outline: true }} height={60} />
             </Tile>
           ))}
           {HERALDRY.slice(0, 5).map((c) => (
