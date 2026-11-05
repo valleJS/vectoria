@@ -41,11 +41,16 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - After downtime the server catches the clock up (`calendar.gameTimeBetween`); only one daily
   payout is granted for missed days.
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
-  (always). Then: the **night caravan** moves every owned outpost's whole stock into the home
-  castle (instant, troop-free, not raidable — the clock is frozen at night), pending activity
+  (always). Then: the night caravan arrives (see below), pending activity
   becomes active, every player gets 1 of each resource and 3 of the active one plus
   `OUTPOST_DAILY_INCOME` (1) of each per owned outpost, all straight into the home castle, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
   (one per player, at least `CHESTS_PER_GAMEDAY`).
+
+- **Night caravan** (`sendCaravans`): once per gameday, on the first tick outside game hours
+  (18:00, not while paused), every owned outpost's whole stock moves into `PlayerRecord.caravan`
+  (`SelfState.caravan`; troop-free, neither spendable nor raidable/plunderable). `startGameday`
+  adds it to the home castle; it also sends a caravan first if none left yet for the ending day
+  (`caravanDay`; `always` mode, or the server was down over the night).
 
 ## Economy
 
@@ -55,7 +60,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
 | Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
-| Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (gameday start) |
+| Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (leaves 18:00, arrives at the next gameday start) |
 | Start | 50 troops, 2 of each resource |
 | Spot layout | `spots.placeBalancedSpots`: for every castle, real walk to nearest wood + stone + gold sums to about the same (spread ≤ `SPOT_BALANCE_TOLERANCE_HOURS`), one of the three ≥ `SPOT_FAR_HOURS`, no spot within `SPOT_NEAR_HOURS` of any castle (hard rule: candidates pre-filtered on the grid, heavy penalty on real routes, polish never breaks it, a layout keeping it always wins); the count is a cap — each spot costs a little and same-resource spots within `SAME_GAP` are penalised, so only spots that help the balance stay (≥ 1 per resource); annealing on `distanceField`, polish on `findPath` routes. `relayoutSpots` (once per running game): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
 | Gathering | round trip: march to a spot, load `GATHER_DURATION_MS` (1 h), carry `gatherYield(troops)` (10 per 100 troops) back to the base the army left from, at `LOADED_SPEED` (0.75×) |
@@ -82,7 +87,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
-- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home.
+- Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. A loaded army (cargo or chest) may only switch to another own base (`redirectHome`: new `baseId`, then `startReturn`, so it stays loaded-slow and raidable); stock that reached a base stays there (castle until spent, outpost until the night caravan).
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
 - The way home is never hidden (stealth is dropped on return); cargo is always visible.
@@ -120,7 +125,7 @@ on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
-A convoy cannot raid in turn: returning armies and armies with cargo cannot be redirected
+A convoy cannot raid in turn: armies with cargo can only be redirected to an own base
 (`redirectArmy`), and `sendArmy` takes no cargo at all. VP are never stolen,
 and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and
 always keeps at least one troop (`raid`), so the chest always gets home.

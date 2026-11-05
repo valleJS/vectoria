@@ -4,7 +4,6 @@ import {
   RESOURCES,
   type AdminAction,
   type AdminState,
-  type ResourceType,
 } from '@vectoria/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
@@ -69,10 +68,6 @@ export function AdminPanel() {
   const [state, setState] = useState<AdminState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [swap, setSwap] = useState<{ a: string; b: string }>({ a: '', b: '' });
-  const [grant, setGrant] = useState<{ resource: ResourceType; amount: number }>({
-    resource: 'wood',
-    amount: 5,
-  });
 
   useEffect(() => {
     if (!token) return;
@@ -233,31 +228,6 @@ export function AdminPanel() {
           </Panel>
 
           <Panel title="Spieler:innen">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-ink-soft">
-              Gutschrift:
-              <Input
-                type="number"
-                value={grant.amount}
-                onChange={(e) => setGrant({ ...grant, amount: Math.trunc(Number(e.target.value)) })}
-                aria-label="Menge"
-                className="h-7 w-16"
-              />
-              <Select
-                value={grant.resource}
-                onValueChange={(value) => setGrant({ ...grant, resource: value as ResourceType })}
-              >
-                <SelectTrigger className="h-7 w-28" aria-label="Rohstoff">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESOURCES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {RESOURCE_NAMES[r]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             {state.phase === 'running' && state.players.length > 1 && (
               <div className="mb-2 flex flex-wrap items-center gap-2 text-ink-soft">
                 Hauptburgen tauschen:
@@ -348,12 +318,6 @@ export function AdminPanel() {
                     Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
                   </div>
                   <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                      size="sm"
-                      onClick={() => run({ action: 'grant', playerId: p.id, ...grant })}
-                    >
-                      +{grant.amount} {RESOURCE_NAMES[grant.resource]}
-                    </Button>
                     <Button
                       size="sm"
                       variant="danger"

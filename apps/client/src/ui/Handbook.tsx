@@ -179,7 +179,7 @@ const CHAPTERS: Chapter[] = [
         <List
           items={[
             `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität, dazu +${OUTPOST_DAILY_INCOME} jeder Ressource pro eigenem Stützpunkt — alles direkt in die Basis.`,
-            'Über Nacht bringt eine Karawane das ganze Lager deiner Stützpunkte in die Basis.',
+            'Die Karawane vom Vorabend kommt an: Was um 18 Uhr aus deinen Stützpunkten aufgebrochen ist, liegt jetzt in der Basis.',
             'Die tags zuvor gewählte Basisaktivität tritt in Kraft.',
             `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen auf der Karte.`,
           ]}
@@ -263,7 +263,8 @@ const CHAPTERS: Chapter[] = [
         </P>
         <List
           items={[
-            'Ressourcen im Stützpunkt kannst du nicht ausgeben. Tagsüber lassen sie sich nicht zwischen deinen Burgen verlagern — über Nacht bringt eine Karawane das ganze Lager in die Basis, am Morgen kannst du es ausgeben.',
+            'Ressourcen im Stützpunkt kannst du nicht ausgeben, und von Hand lassen sie sich nicht zwischen deinen Burgen verschieben. Um 18 Uhr bricht eine Karawane mit dem ganzen Lager aller Stützpunkte auf; am nächsten Morgen liegt es in der Basis und lässt sich ausgeben.',
+            'Was ein Lager (Basis oder Stützpunkt) erreicht hat, bleibt dort: in der Basis, bis du es ausgibst, im Stützpunkt bis zur Karawane um 18 Uhr.',
             'Truppen kannst du auch tagsüber abziehen („Heimholen“), die Ressourcen bleiben dann im Stützpunkt zurück.',
             'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort zur Burg um — mit ihrer Ladung.',
             'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
@@ -276,7 +277,7 @@ const CHAPTERS: Chapter[] = [
             'Wer einen Stützpunkt erobert, bleibt mit allen überlebenden Truppen als Besatzung dort; der Zug kehrt nicht heim.',
             'Das Bollwerk schützt nur die Basis, nie einen Stützpunkt.',
             'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Absprungpunkt, sonst nichts.',
-            'Die Karawane braucht keine Truppen und kann nicht überfallen werden: Nachts ruht die Spieluhr. Was bis dahin erobert wird, gehört aber dem Eroberer.',
+            'Die Karawane braucht keine Truppen und kann nicht überfallen oder geplündert werden: Nachts ruht die Spieluhr. Was vor 18 Uhr mit einem Stützpunkt erobert wird, gehört aber dem Eroberer.',
             'Truppen zu der Burg schicken, in der sie schon stehen, geht nicht.',
             'Fällt ein Stützpunkt, laufen deine Züge, die von dort aufgebrochen sind, später zur Basis statt dorthin zurück.',
           ]}
@@ -306,7 +307,8 @@ const CHAPTERS: Chapter[] = [
             <>
               <b>Umleiten:</b> ein Zug ohne Ladung (auch auf dem Heimweg) kann im Feld ein neues
               Ziel bekommen — wähle das Ziel auf der Karte, unter „Zug im Feld umleiten“ stehen
-              deine Züge.
+              deine Züge. Ein beladener Zug (Sammler, Beute, Truhe) lässt sich jederzeit zu einem
+              anderen eigenen Lager umleiten: wähle ihn an, dann „Abliefern in“.
             </>,
             <>
               <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
@@ -318,7 +320,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Zurückgerufen wird von der aktuellen Position aus, zur Burg, aus der der Zug kam.',
             'Wer schon heimkehrt, kann nicht zurückgerufen werden — ohne Ladung aber umgeleitet.',
-            'Umleiten geht nicht mit Ladung oder Truhe. Ein umgeleiteter Zug behält Nebel, Tarnung und Eilmarsch.',
+            'Mit Ladung oder Truhe geht Umleiten nur zu einer eigenen Burg (Basis oder Stützpunkt). Ein umgeleiteter Zug ohne Ladung behält Nebel, Tarnung und Eilmarsch.',
             'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
             'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe; unterwegs kann niemand dazustoßen.',
             'Truhenträger ohne Ladung marschieren normal schnell, nur Ressourcen bremsen.',
@@ -442,7 +444,7 @@ const CHAPTERS: Chapter[] = [
         </P>
         <P>
           Ein Zug, der selbst Ressourcen heimbringt, kann niemanden überfallen: Wer Ladung trägt,
-          lässt sich weder umleiten noch mit Ressourcen auf einen Überfall schicken.
+          lässt sich nur zu einem eigenen Lager umleiten, nie auf einen Überfall.
         </P>
         <Details
           items={[
@@ -488,7 +490,7 @@ const CHAPTERS: Chapter[] = [
             'Kommen zwei Züge an, gewinnt, wer zuerst da ist. Der zweite findet nichts und kehrt leer um.',
             'Ist die Karte schon voll (so viele Truhen wie Spieler, mindestens drei), erscheinen am neuen Spieltag entsprechend weniger.',
             'Truhen erscheinen möglichst weit weg von Burgen, Stützpunkten, Vorkommen und anderen Truhen.',
-            'Ein Truhenträger kann nicht umgeleitet werden und kehrt immer heim — zu der Burg, aus der er kam. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
+            'Ein Truhenträger kehrt heim — zu der Burg, aus der er kam, oder zu einem anderen eigenen Lager, wenn du ihn umleitest. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
             'Eine normal geborgene Truhe ist nie überfallbar, weil ihr Zug keine Ressourcen trägt. Nur eine Truhe aus einem Burgsturm reist zusammen mit Beute — dann kann man die Beute rauben, die Truhe nie.',
             'Ungeöffnete Truhen daheim kann dir niemand nehmen, auch nicht beim Sturm auf deine Burg.',
             `Welche Karte in einer Truhe liegt, ist Zufall: ${CARD_TYPES.map((c) => `${CARDS[c].name} ${formatPercent(cardChance(c))}`).join(', ')}.`,

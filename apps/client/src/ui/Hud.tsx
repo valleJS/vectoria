@@ -287,6 +287,11 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     <>
       <BaseStats view={view} base={base} />
       <div className="mt-1 text-xs text-ink-soft">Unterwegs: {field} Truppen</div>
+      {hasResources(self.caravan) && (
+        <div className="mt-0.5 text-xs text-[#8a6410]">
+          Karawane unterwegs: {formatResources(self.caravan)} — morgen früh in der Basis
+        </div>
+      )}
       <div className="mt-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
@@ -337,8 +342,8 @@ function OutpostBase({ view, base }: { view: GameView; base: BaseInfo }) {
     <>
       <BaseStats view={view} base={base} />
       <p className="mt-1 text-xs text-ink-soft">
-        Ausgeben lässt sich nur, was in der Basis lagert. Das Lager hier bringt die Karawane nachts
-        heim.
+        Ausgeben lässt sich nur, was in der Basis lagert. Um 18 Uhr bringt die Karawane das Lager
+        hier heim.
       </p>
       <div className="mt-1.5 flex gap-1.5">
         <Button className="flex-1 px-1" onClick={() => select({ kind: 'outpost', id: base.id! })}>

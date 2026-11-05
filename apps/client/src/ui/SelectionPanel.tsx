@@ -444,6 +444,7 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
             .join(' · ')}
         </div>
       )}
+      {own && (carrying || army.chest) && <StoreRedirect view={view} army={army} />}
       {own && army.status !== 'returning' && (
         <Locked className="mt-2">
           <Button onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}>
@@ -458,6 +459,42 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       )}
       {!own && isRaidable(army, ownerRouted) && <RaidOptions view={view} convoy={army} />}
     </>
+  );
+}
+
+/** A loaded own army can switch to any other own store (castle or outpost) to unload there. */
+function StoreRedirect({ view, army }: { view: GameView; army: ArmyView }) {
+  const current =
+    army.status === 'returning' && army.target
+      ? army.target.kind === 'castle'
+        ? null
+        : army.target.id
+      : undefined;
+  const stores = ownBases(view).filter((b) => b.id !== current);
+  if (stores.length === 0) return null;
+  return (
+    <Locked className="mt-2">
+      <div className="text-ink-soft">Abliefern in:</div>
+      <div className="mt-0.5 flex flex-wrap gap-1.5">
+        {stores.map((b) => (
+          <Button
+            key={b.id ?? 'home'}
+            onClick={() =>
+              gameSocket.send({
+                type: 'redirectArmy',
+                armyId: army.id,
+                target:
+                  b.id === null
+                    ? { kind: 'castle', id: view.self.id }
+                    : { kind: 'outpost', id: b.id },
+              })
+            }
+          >
+            {b.name}
+          </Button>
+        ))}
+      </div>
+    </Locked>
   );
 }
 
@@ -508,7 +545,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
               <>
                 <p className="mt-1 text-xs text-ink-soft">
                   Truppen heimholen geht jederzeit, Ressourcen bleiben im Stützpunkt. Die Karawane
-                  bringt sie nachts in die Burg.
+                  bringt sie um 18 Uhr in die Burg, ausgeben lassen sie sich am nächsten Morgen.
                 </p>
                 <SendForm
                   key={selection.id}
@@ -561,7 +598,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
           <p className="mt-1 text-xs text-ink-soft">
             {own
-              ? `Bringt täglich +${OUTPOST_DAILY_INCOME} jedes Rohstoffs in die Burg. Das Lager zieht nachts per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.`
+              ? `Bringt täglich +${OUTPOST_DAILY_INCOME} jedes Rohstoffs in die Burg. Das Lager zieht um 18 Uhr per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.`
               : outpost.ownerId
                 ? 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'
                 : 'Wer die Ruine einnimmt, baut sie als eigenen Stützpunkt wieder auf.'}

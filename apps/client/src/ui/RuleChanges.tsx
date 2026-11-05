@@ -54,11 +54,12 @@ const RULE_CHANGES: RuleChange[] = [
     body: (
       <>
         Jeder eigene Stützpunkt bringt zu Beginn jedes Spieltags{' '}
-        <b>+{OUTPOST_DAILY_INCOME} Holz, Stein und Gold</b> direkt in deine Basis. Ressourcen lassen
-        sich <b>tagsüber nicht mehr</b> zwischen deinen Burgen verlagern. Dafür bringt{' '}
-        <b>über Nacht eine Karawane</b> das ganze Lager aller Stützpunkte in die Basis, am Morgen
-        kannst du es ausgeben. Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann
-        im Stützpunkt. Sammler bringen ihre Ladung wie bisher zu ihrer Burg.
+        <b>+{OUTPOST_DAILY_INCOME} Holz, Stein und Gold</b> direkt in deine Basis.{' '}
+        <b>Manuelle Transporte gibt es nicht mehr.</b> Dafür bricht <b>um 18 Uhr eine Karawane</b>{' '}
+        mit dem ganzen Lager aller Stützpunkte auf, am nächsten Morgen liegt es in der Basis.
+        Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann im Stützpunkt. Sammler
+        bringen ihre Ladung wie bisher zu ihrer Burg und lassen sich jetzt unterwegs zu jedem
+        eigenen Lager umleiten.
       </>
     ),
   },

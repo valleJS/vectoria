@@ -44,7 +44,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm; a target picker for cards with `CardInfo.target`) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (base picker, cargo, ETA over land; `FieldRedirect` lists own cargo-free field armies to re-route to this target) / recall / raid (redirect or send, meeting point) for the selected object |
-| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails; players as cards that stack on phones, with −/+ 10 troops and −/+ 1 of every resource) |
+| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails; players as cards that stack on phones, with −/+ 10 troops and −/+ 1 of every resource; no free-form grant) |
 | `src/ui/Panel.tsx` | Game vocabulary over shadcn/ui: `Panel` (Card), `SectionLabel`, `Button` (`default`/`primary`/`danger`/`selected`/`ghost`/`outline`/`link`/`plain`), `Tip` (Tooltip) |
 | `src/components/ui/` | shadcn/ui components (button incl. `plain` variant for illustrated buttons, card, tabs, dialog incl. `bare` content, badge incl. `plate`, input, label, select, slider, checkbox, collapsible, toggle-group, progress, separator, tooltip), restyled for parchment; `components.json` configures the CLI (`npx shadcn add …`, alias `@/`) |
 | `src/lib/utils.ts` | `cn()` class merge |

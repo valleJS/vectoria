@@ -153,6 +153,11 @@ export interface SelfState {
   fortifiedUntil: number | null;
   /** Gameday starts still paying the Füllhorn bonus. */
   harvestDays: number;
+  /**
+   * Outpost stock on the night caravan: it set out at the end of the gameday (18:00) and reaches
+   * the home castle at the next gameday start. Not spendable, not plunderable meanwhile.
+   */
+  caravan: Resources;
   /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
   barefootUntil: number | null;
   log: LogEntry[];

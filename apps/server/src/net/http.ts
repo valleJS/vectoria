@@ -72,8 +72,6 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.swapCastles(action.playerId, action.otherId);
     case 'setEmail':
       return state.setEmail(action.playerId, action.email);
-    case 'grant':
-      return state.grant(action.playerId, action.resource, action.amount);
     case 'grantAll':
       return state.grantAll(action.playerId, action.amount);
     case 'grantTroops':

@@ -118,6 +118,8 @@ interface PlayerRecord {
   attackedAt?: number;
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
   routed?: boolean;
+  /** Outpost stock on the night caravan, home at the next gameday start. Absent in older saves. */
+  caravan?: Resources;
   log: LogEntry[];
 }
 
@@ -156,6 +158,8 @@ export interface SavedGame {
   paused: boolean;
   gameday: number;
   lastDayKey: string | null;
+  /** Last gameday whose night caravan set out; absent in older saves. */
+  caravanDay?: number;
   winnerId: string | null;
   nextId: number;
   players: PlayerRecord[];
@@ -415,10 +419,12 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
-    // Empty-handed armies can be re-routed anywhere, even on their way home.
+    // Loaded armies (yield, plunder, a chest) may only switch to another own store.
     if (hasResources(army.cargo) || army.chest) {
-      throw new RuleError('Ein Zug mit Ladung kann nicht umgeleitet werden.');
+      this.redirectHome(player, army, target);
+      return;
     }
+    // Empty-handed armies can be re-routed anywhere, even on their way home.
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
     const destination = this.destination(
       player,
@@ -437,6 +443,28 @@ export class GameState {
     this.addFeed(
       target.kind === 'army' ? 'battle' : 'march',
       `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
+      army.id,
+    );
+    this.dirty = true;
+  }
+
+  /** A loaded army heads for another own base (castle or outpost) to store its load there. */
+  private redirectHome(player: PlayerRecord, army: ArmyRecord, target: ArmyTarget): void {
+    const outpost =
+      target.kind === 'outpost' ? this.data.outposts.find((o) => o.id === target.id) : undefined;
+    const ownCastle = target.kind === 'castle' && target.id === player.id;
+    if (!ownCastle && outpost?.ownerId !== player.id) {
+      throw new RuleError('Ein beladener Zug kann nur zu einer eigenen Burg umgeleitet werden.');
+    }
+    const baseId = ownCastle ? null : outpost!.id;
+    if (army.status === 'returning' && army.baseId === baseId) {
+      throw new RuleError('Der Zug ist schon dorthin unterwegs.');
+    }
+    army.baseId = baseId;
+    this.startReturn(army, this.armyPosition(army));
+    this.addFeed(
+      'march',
+      `${this.armyLabel(army)} schwenkt um und zieht zu einem anderen Lager.`,
       army.id,
     );
     this.dirty = true;
@@ -585,6 +613,8 @@ export class GameState {
     const inHours = this.options.hours === 'always' || isGameTime(this.schedule, new Date(now));
     this.running = inHours && !this.data.paused;
     if (this.running) this.advance(realDtMs * this.options.timeScale);
+    // 18:00: the gameday is over, the night caravans set out.
+    if (!inHours && !this.data.paused) this.sendCaravans();
 
     if (!this.data.paused) {
       const key =
@@ -1142,26 +1172,48 @@ export class GameState {
   }
 
   /**
-   * A new gameday (after the night): the overnight caravans bring every outpost's stock into the
-   * home castle, then the daily income is paid there — the activity, the Füllhorn and
-   * `OUTPOST_DAILY_INCOME` per owned outpost.
+   * End of the gameday (18:00), once per gameday: every owned outpost's whole stock leaves on the
+   * night caravan, troop-free, and reaches the home castle at the next gameday start. Without a
+   * night (`always`, or the server was down over it) `startGameday` sends it first.
+   */
+  private sendCaravans(): void {
+    if (this.data.phase !== 'running' || this.data.gameday === 0) return;
+    if ((this.data.caravanDay ?? 0) >= this.data.gameday) return;
+    this.data.caravanDay = this.data.gameday;
+    for (const player of this.data.players) {
+      const load = emptyResources();
+      for (const outpost of this.data.outposts) {
+        if (outpost.ownerId !== player.id) continue;
+        addResources(load, outpost.resources);
+        outpost.resources = emptyResources();
+      }
+      if (!hasResources(load)) continue;
+      player.caravan = player.caravan ?? emptyResources();
+      addResources(player.caravan, load);
+      this.addLog(
+        player,
+        `Feierabend: Die Karawane bringt ${formatResources(load)} aus deinen Stützpunkten heim — morgen früh liegt es in der Burg.`,
+      );
+    }
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /**
+   * A new gameday: the night caravans arrive in the home castles, then the daily income is paid
+   * there — the activity, the Füllhorn and `OUTPOST_DAILY_INCOME` per owned outpost.
    */
   private startGameday(): void {
+    this.sendCaravans();
     this.revision++;
     this.data.gameday++;
     for (const player of this.data.players) {
       const outposts = this.data.outposts.filter((o) => o.ownerId === player.id);
-      const caravan = emptyResources();
-      for (const outpost of outposts) {
-        addResources(caravan, outpost.resources);
-        outpost.resources = emptyResources();
-      }
+      const caravan = player.caravan ?? emptyResources();
       addResources(player.resources, caravan);
+      player.caravan = emptyResources();
       if (hasResources(caravan)) {
-        this.addLog(
-          player,
-          `Die Karawane hat über Nacht ${formatResources(caravan)} aus deinen Stützpunkten in die Burg gebracht.`,
-        );
+        this.addLog(player, `Die Karawane ist da: ${formatResources(caravan)} in der Burg.`);
       }
 
       player.activity = player.pendingActivity ?? player.activity;
@@ -1313,7 +1365,7 @@ export class GameState {
     this.dirty = true;
   }
 
-  grant(playerId: string, resource: ResourceType, amount: number): void {
+  private grant(playerId: string, resource: ResourceType, amount: number): void {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
     player.resources[resource] = Math.max(0, player.resources[resource] + amount);
@@ -1379,6 +1431,7 @@ export class GameState {
         chests: self.chests ?? 0,
         fortifiedUntil: self.fortifiedUntil,
         harvestDays: self.harvestDays ?? 0,
+        caravan: self.caravan ?? emptyResources(),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
         log: self.log,
       },
