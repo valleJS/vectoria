@@ -71,11 +71,15 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
 | C→S | `buy` | Troop batches or victory points |
-| C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (must be empty: the server refuses base-to-base stock moves) |
+| C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
 | C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id or player id, for cards that aim); march card: armed for the next army; `null` disarms |
 | C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
+| C→S | `duoOffer` | Duo attack offer: `partnerId`, `target` (enemy castle/outpost), own `sources` (`{from, troops}[]`), `partnerTroops` |
+| C→S | `duoAnswer` | Partner accepts (with own `sources` summing to the asked troops) or declines |
+| C→S | `duoWithdraw` | Initiator takes back an unanswered offer |
+| C→S | `duoAbort` | Ask to call a running duo off, agree to the other's request, or take the own request back |
 | S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
 | S→C | `map` | Map changed (game start / reset) |
 | S→C | `state` | Every tick: this player's filtered `GameView` |
