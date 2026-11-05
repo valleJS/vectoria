@@ -1467,8 +1467,10 @@ export class GameState {
     const anchors = [...castles, ...this.data.outposts.map((o) => o.position)];
     const old = new Map(this.data.spots.map((s) => [s.id, s.resource]));
     // Castles of a running game stay where they are: always search, even around a cramped one.
+    // This runs during server start, so the first layout keeping every rule is taken.
     const layout = placeBalancedSpots(map, castles, innerLand(map), taken, anchors, random, {
       force: true,
+      quick: true,
     });
     if (!layout.valid) {
       console.warn(`Spot re-layout: not every hard rule kept (cramped castles: ${layout.cramped})`);
