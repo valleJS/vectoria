@@ -203,6 +203,20 @@ export class GameServer {
         case 'openChest':
           this.send(ws, { type: 'chestOpened', card: this.state.openChest(playerId) });
           return;
+        case 'duoOffer':
+          return this.state.offerDuo(
+            playerId,
+            message.partnerId,
+            message.target,
+            message.sources,
+            message.partnerTroops,
+          );
+        case 'duoWithdraw':
+          return this.state.withdrawDuo(playerId, message.pactId);
+        case 'duoAnswer':
+          return this.state.answerDuo(playerId, message.pactId, message.accept, message.sources);
+        case 'duoAbort':
+          return this.state.abortDuo(playerId, message.pactId);
       }
     } catch (error) {
       if (!(error instanceof RuleError)) throw error;

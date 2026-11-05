@@ -36,6 +36,20 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'duo-attacks',
+    date: '2026-11-05',
+    title: 'Neu: Duo-Angriffe',
+    body: (
+      <>
+        Greift zu zweit an: Wähle eine fremde Burg oder einen Stützpunkt und dann{' '}
+        <b>„Duo-Angreifen“</b>. Dein Partner bekommt den Plan in den neuen <b>Posteingang</b> (unter
+        dem Liveticker, am Handy oben im Ticker) und kann annehmen oder ablehnen. Eure Züge treffen
+        sich auf kürzestem Weg, erst dann wird das Ziel sichtbar. Beute und Truhe teilt ihr nach
+        Truppen. Abbrechen geht nur, wenn <b>beide</b> zustimmen.
+      </>
+    ),
+  },
+  {
     id: 'trader',
     date: '2026-11-05',
     title: 'Neu: der Händler',

@@ -39,6 +39,7 @@ import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
 import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
 import { Button, Tip } from './Panel';
+import { DuoForm } from './Duo';
 import { Locked } from './Routed';
 import { XIcon } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -62,6 +63,7 @@ const STATUS_NAMES: Record<ArmyView['status'], string> = {
   outbound: 'unterwegs',
   gathering: 'sammelt',
   returning: 'auf dem Heimweg',
+  waiting: 'wartet am Duo-Treffpunkt',
 };
 
 /** Convoy movement as seen now: the remaining route, walked until its arrival clock. */
@@ -343,6 +345,7 @@ function FieldRedirect({
   const field = view.armies.filter(
     (a) =>
       a.ownerId === view.self.id &&
+      a.duoWith === null &&
       !hasResources(a.cargo) &&
       !a.chest &&
       !(a.target?.kind === target.kind && a.target.id === target.id),
@@ -398,7 +401,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
   const track = trackOf(view, convoy);
   if (!map || !track) return null;
   const field = view.armies.filter(
-    (a) => a.ownerId === view.self.id && !hasResources(a.cargo) && !a.chest,
+    (a) => a.ownerId === view.self.id && a.duoWith === null && !hasResources(a.cargo) && !a.chest,
   );
   const strength = (troops: number) =>
     convoy.troops === null ? null : troops > convoy.troops ? 'überlegen' : 'unterlegen';
@@ -475,7 +478,9 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   return (
     <>
       <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
-        Heerzug von {own ? 'dir' : playerName(view, army.ownerId)}
+        {army.duoWith
+          ? `Duo-Zug: ${own ? 'du' : playerName(view, army.ownerId)} + ${army.duoWith === view.self.id ? 'du' : playerName(view, army.duoWith)}`
+          : `Heerzug von ${own ? 'dir' : playerName(view, army.ownerId)}`}
       </Title>
       <div>
         {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
@@ -512,7 +517,12 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         </div>
       )}
       {own && (carrying || army.chest) && <StoreRedirect view={view} army={army} />}
-      {own && army.status !== 'returning' && (
+      {army.duoWith && (army.ownerId === view.self.id || army.duoWith === view.self.id) && (
+        <div className="mt-1 text-xs text-ink-soft italic">
+          Duo-Pakt: abbrechen nur gemeinsam, im Posteingang.
+        </div>
+      )}
+      {own && army.status !== 'returning' && !army.duoWith && (
         <Locked className="mt-2">
           <Button onClick={() => gameSocket.send({ type: 'recallArmy', armyId: army.id })}>
             Zurückrufen
@@ -643,6 +653,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
                 verb="Angreifen"
                 bases={bases}
               />
+              <DuoForm key={`duo-${selection.id}`} view={view} target={selection} />
             </>
           )}
         </>
@@ -678,6 +689,9 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             verb={own ? 'Verlegen' : outpost.ownerId ? 'Angreifen' : 'Einnehmen'}
             bases={bases.filter((b) => b.id !== outpost.id)}
           />
+          {!own && outpost.ownerId && (
+            <DuoForm key={`duo-${selection.id}`} view={view} target={selection} />
+          )}
         </>
       );
     }

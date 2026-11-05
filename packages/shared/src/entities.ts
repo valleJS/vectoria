@@ -86,8 +86,11 @@ export interface Chest {
   troopsNeeded: number;
 }
 
-/** `gathering`: loading at a resource spot; the army heads home with its yield afterwards. */
-export type ArmyStatus = 'outbound' | 'gathering' | 'returning';
+/**
+ * `gathering`: loading at a resource spot; the army heads home with its yield afterwards.
+ * `waiting`: a duo group at the meeting point, waiting for the others to arrive.
+ */
+export type ArmyStatus = 'outbound' | 'gathering' | 'returning' | 'waiting';
 
 /** An army as one player sees it; card effects null out details for everyone but the owner. */
 export interface ArmyView {
@@ -115,6 +118,11 @@ export interface ArmyView {
   forcedMarch: boolean;
   /** Seeweg card: this leg runs straight to the target, over water too. */
   sea: boolean;
+  /**
+   * Duo attack: the other participant. On the united army always shown; on a group heading for
+   * the meeting point only to the two participants.
+   */
+  duoWith: string | null;
 }
 
 /**
@@ -126,6 +134,38 @@ export function isRaidable(
   ownerRouted: boolean,
 ): boolean {
   return !ownerRouted && army.status !== 'gathering' && hasResources(army.cargo);
+}
+
+/** Where duo troops come from: an own outpost id, or null for the home castle. */
+export interface DuoSourcePick {
+  from: string | null;
+  troops: number;
+}
+
+/**
+ * A duo attack pact, as its two participants see it (nobody else does). `offered`: waiting for
+ * the partner's answer; `marching`: the groups head for the meeting point; `united`: the duo
+ * army is on its way to the target.
+ */
+export interface PactView {
+  id: string;
+  initiatorId: string;
+  partnerId: string;
+  /** An enemy castle or outpost. */
+  target: ArmyTarget;
+  /** How the initiator's share is put together. */
+  initiatorSources: DuoSourcePick[];
+  initiatorTroops: number;
+  partnerTroops: number;
+  status: 'offered' | 'marching' | 'united';
+  /** Gameday the offer was made; unanswered, it lapses when the following gameday ends. */
+  gameday: number;
+  /** Once marching: when the last group reaches the meeting point (the target is revealed). */
+  meetClock: number | null;
+  /** Once marching: when the duo army reaches the target. */
+  attackClock: number | null;
+  /** Participant who asked to call the attack off; the other one has to agree. */
+  abortBy: string | null;
 }
 
 export interface LogEntry {
@@ -153,6 +193,8 @@ export interface SelfState {
   pendingActivity: ResourceType | null;
   /** Cards in hand; owned by the player, not by a base. */
   cards: CardType[];
+  /** Duo attack offers and pacts the player is part of (the inbox). */
+  pacts: PactView[];
   /** March card armed for the next army sent (still in `cards` until used). */
   activeCard: CardType | null;
   /** Chests brought home but not yet opened; opened by the player via `openChest`. */

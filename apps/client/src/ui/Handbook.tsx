@@ -437,6 +437,59 @@ const CHAPTERS: Chapter[] = [
     ),
   },
   {
+    id: 'duo',
+    title: 'Duo-Angriff',
+    body: () => (
+      <>
+        <P>
+          Zu zweit gegen eine fremde <b>Burg</b> oder einen fremden <b>Stützpunkt</b>: Wähle das
+          Ziel auf der Karte und dann „Duo-Angreifen“. Du wählst einen Partner, stellst deine
+          Truppen aus deinen Burgen zusammen und legst fest, wie viele Truppen der Partner
+          beisteuern soll (höchstens alles, was er stationiert hat). Das Angebot landet in seinem{' '}
+          <b>Posteingang</b> (unter dem Liveticker, am Handy oben im Ticker), mit Ziel, Anteilen und
+          Dauer.
+        </P>
+        <P>
+          Der Partner kann nur <b>annehmen oder ablehnen</b>, am Plan nichts ändern. Er wählt
+          lediglich, aus welchen seiner Burgen seine Truppen kommen. Mit dem Annehmen geht es los.
+        </P>
+        <H>Treffpunkt und Angriff</H>
+        <P>
+          Alle Teilzüge laufen auf direktem Weg zum <b>Treffpunkt</b>: dem Ort, den sie gemeinsam am
+          schnellsten erreichen, egal wo das Ziel liegt. Das kann ein Umweg sein. Bis dahin sieht
+          niemand außer euch das Ziel. Am Treffpunkt vereinen sie sich zum Duo-Zug, und ab da ist es
+          ein ganz normaler Angriff, offen für alle sichtbar.
+        </P>
+        <List
+          items={[
+            'Gekämpft wird nach den üblichen Regeln, mit allen Truppen des Duo-Zugs.',
+            'Verluste und Beute teilt ihr nach den Truppen, die jeder gestellt hat.',
+            'Die Truhe einer gestürmten Burg wird nach Truppenanteil zugelost.',
+            'Ein eroberter Stützpunkt gehört dem, der mehr Truppen gestellt hat (bei Gleichstand 50:50 gelost). Er bleibt mit seinen Überlebenden als Besatzung dort und behält seinen Anteil am Lager; der andere zieht mit seinem Anteil heim.',
+            'Nach dem Kampf zieht jeder mit seinen Überlebenden einzeln zu seiner Basis zurück.',
+          ]}
+        />
+        <H>Der Pakt</H>
+        <List
+          items={[
+            'Abbrechen geht nur gemeinsam: Einer schlägt den Abbruch im Posteingang vor, der andere stimmt zu. Dann ziehen alle heim.',
+            'Zurückrufen oder Umleiten geht für Duo-Züge nicht.',
+            'Selbst wenn die Burg eines Teilnehmers fällt, läuft der Duo-Angriff weiter. Handlungsfähig ist er erst wieder, wenn auch seine Duo-Truppen daheim sind.',
+          ]}
+        />
+        <Details
+          items={[
+            'Im Duo gibt es keine Marschkarten. Wer barfuß ist, läuft langsamer; der vereinte Zug geht im Tempo des Langsameren.',
+            'Ein Angebot bleibt den Rest seines Spieltags und den ganzen nächsten offen, dann verfällt es. Bis zur Antwort kannst du es zurückziehen.',
+            'Steht beim Annehmen nicht mehr genug Truppen bereit, geht das Annehmen nicht.',
+            'Ist das Ziel bei der Ankunft nicht mehr angreifbar (die Burg ist gefallen und geschützt, oder der Stützpunkt gehört inzwischen einem von euch), ziehen alle heim.',
+            'Duo-Züge tragen keine Ressourcen und lassen sich daher nicht überfallen, solange sie nicht mit Beute heimziehen.',
+          ]}
+        />
+      </>
+    ),
+  },
+  {
     id: 'raids',
     title: 'Überfälle',
     body: () => (

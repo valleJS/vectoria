@@ -60,6 +60,11 @@ import {
   type Resources,
   type ResourceType,
   type Vec2,
+  planDuo,
+  splitByShare,
+  type DuoPlan,
+  type DuoSourcePick,
+  type PactView,
 } from '@vectoria/shared';
 import { dayKey, gameTimeBetween, isGameTime, WEEKDAY_SCHEDULE, type Schedule } from './calendar';
 import { generateMap } from './mapgen';
@@ -150,6 +155,15 @@ interface ArmyRecord {
   trade?: { gold: number; wood: number };
   /** Carrying an opened chest home (cannot be raided); absent in older saves. */
   chest?: boolean;
+  /** Part of a duo attack (`PactRecord`): a group on its way to the meeting point, or the united army. */
+  pactId?: string;
+}
+
+/** A duo attack between two players; see `PactView` for the fields. */
+interface PactRecord extends Omit<PactView, 'initiatorSources'> {
+  initiatorSources: DuoSourcePick[];
+  /** Once marching: the meeting point. */
+  meet?: Vec2;
 }
 
 /** Everything needed to restore a game; written to disk by `Persistence`. */
@@ -165,6 +179,8 @@ export interface SavedGame {
   lastDayKey: string | null;
   /** Last gameday whose night caravan set out; absent in older saves. */
   caravanDay?: number;
+  /** Duo attack offers and pacts; absent in older saves. */
+  pacts?: PactRecord[];
   winnerId: string | null;
   nextId: number;
   players: PlayerRecord[];
@@ -478,6 +494,7 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
+    if (army.pactId) throw new RuleError('Ein Duo-Zug lässt sich nicht umleiten.');
     // Stone bound for the trader goes there or back (recall), never to another store.
     if (army.trade && army.status === 'outbound') {
       throw new RuleError('Ein Zug zum Händler lässt sich nur zurückrufen.');
@@ -540,6 +557,7 @@ export class GameState {
     this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
+    if (army.pactId) throw new RuleError('Einen Duo-Angriff könnt ihr nur gemeinsam abbrechen.');
     if (army.status === 'returning') throw new RuleError('Der Zug ist bereits auf dem Rückweg.');
     this.startReturn(army, this.armyPosition(army));
     this.addFeed('march', `${this.armyLabel(army)} kehrt um.`, army.id);
@@ -667,6 +685,459 @@ export class GameState {
     return card;
   }
 
+  // ---- Duo attacks ----
+
+  /** Offers a duo attack: own stationed troops from `sources`, `partnerTroops` asked of `partnerId`. */
+  offerDuo(
+    playerId: string,
+    partnerId: string,
+    target: ArmyTarget,
+    sources: DuoSourcePick[],
+    partnerTroops: number,
+  ): void {
+    const player = this.requirePlaying(playerId);
+    const partner = this.player(partnerId);
+    if (!partner?.castle || partner.id === player.id) {
+      throw new RuleError('Wähle jemand anderen als Partner.');
+    }
+    this.checkDuoTarget(target, player, partner);
+    const picks = this.duoGroups(player, sources);
+    if (partnerTroops > this.stationed(partner)) {
+      throw new RuleError(`So viele Truppen hat ${partner.name} nicht stationiert.`);
+    }
+    const pact: PactRecord = {
+      id: this.nextId('pact'),
+      initiatorId: player.id,
+      partnerId: partner.id,
+      target,
+      initiatorSources: picks.map((g) => ({ from: g.base.id, troops: g.troops })),
+      initiatorTroops: picks.reduce((sum, g) => sum + g.troops, 0),
+      partnerTroops,
+      status: 'offered',
+      gameday: this.data.gameday,
+      meetClock: null,
+      attackClock: null,
+      abortBy: null,
+    };
+    // The partner bringing everything from home is the plan the offer is shown with.
+    const home = { base: this.base(partner, null)!, troops: partnerTroops, player: partner };
+    if (!this.planPact(pact.target, [...picks, home])) {
+      throw new RuleError('Kein Landweg für diesen Duo-Angriff.');
+    }
+    (this.data.pacts ??= []).push(pact);
+    const plan = `${this.targetName(target)} mit ${pact.initiatorTroops} + ${partnerTroops} Truppen`;
+    this.addLog(player, `Duo-Angriff angeboten an ${partner.name}: ${plan}.`);
+    this.addLog(partner, `${player.name} bietet dir einen Duo-Angriff an: ${plan} (Posteingang).`);
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** The initiator takes back an unanswered offer. */
+  withdrawDuo(playerId: string, pactId: string): void {
+    const player = this.requirePlaying(playerId);
+    const pact = this.pact(pactId);
+    if (!pact || pact.initiatorId !== player.id || pact.status !== 'offered') {
+      throw new RuleError('Dieses Angebot gibt es nicht (mehr).');
+    }
+    this.dropPact(pact);
+    const partner = this.player(pact.partnerId);
+    if (partner) this.addLog(partner, `${player.name} hat das Duo-Angebot zurückgezogen.`);
+    this.dirty = true;
+  }
+
+  /** The partner declines, or accepts with own troops from `sources`: the attack starts at once. */
+  answerDuo(playerId: string, pactId: string, accept: boolean, sources: DuoSourcePick[]): void {
+    const partner = this.requirePlaying(playerId);
+    const pact = this.pact(pactId);
+    if (!pact || pact.partnerId !== partner.id || pact.status !== 'offered') {
+      throw new RuleError('Dieses Angebot gibt es nicht (mehr).');
+    }
+    const initiator = this.player(pact.initiatorId);
+    if (!accept || !initiator) {
+      this.dropPact(pact);
+      if (initiator) this.addLog(initiator, `${partner.name} lehnt deinen Duo-Angriff ab.`);
+      this.dirty = true;
+      return;
+    }
+    if (initiator.routed || !initiator.castle) {
+      throw new RuleError(`${initiator.name} kann gerade nicht handeln.`);
+    }
+    this.checkDuoTarget(pact.target, initiator, partner);
+    const own = this.duoGroups(initiator, pact.initiatorSources, `${initiator.name} hat`);
+    const theirs = this.duoGroups(partner, sources);
+    if (theirs.reduce((sum, g) => sum + g.troops, 0) !== pact.partnerTroops) {
+      throw new RuleError(`Verlangt sind genau ${pact.partnerTroops} Truppen.`);
+    }
+    const groups = [...own, ...theirs];
+    const plan = this.planPact(pact.target, groups);
+    if (!plan) throw new RuleError('Kein Landweg für diesen Duo-Angriff.');
+
+    groups.forEach((g, i) => {
+      g.base.setTroops(g.base.troops - g.troops);
+      const leg = plan.legs[i]!;
+      this.data.armies.push({
+        id: this.nextId('army'),
+        ownerId: g.player.id,
+        troops: g.troops,
+        status: 'outbound',
+        baseId: g.base.id,
+        path: leg.path,
+        target: pact.target,
+        departClock: this.data.clock,
+        arriveClock: this.data.clock + leg.ms,
+        fog: false,
+        stealth: false,
+        forcedMarch: false,
+        cargo: emptyResources(),
+        chest: false,
+        pactId: pact.id,
+      });
+    });
+    pact.status = 'marching';
+    pact.meet = plan.meet;
+    pact.meetClock = this.data.clock + plan.meetMs;
+    pact.attackClock = this.data.clock + plan.totalMs;
+    const reveal = formatSpan(plan.meetMs);
+    this.addLog(
+      initiator,
+      `${partner.name} macht mit: Duo-Angriff läuft, Treffpunkt in ${reveal}.`,
+    );
+    this.addLog(partner, `Duo-Angriff mit ${initiator.name} läuft, Treffpunkt in ${reveal}.`);
+    this.addFeed(
+      'march',
+      `${initiator.name} und ${partner.name} ziehen gemeinsam los — Ziel unbekannt.`,
+    );
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /**
+   * Calling a duo attack off takes both: the first call asks, the other participant's call
+   * agrees (then everyone heads home); the asker calling again takes the request back.
+   */
+  abortDuo(playerId: string, pactId: string): void {
+    const player = this.requirePlaying(playerId);
+    const pact = this.pact(pactId);
+    if (!pact || pact.status === 'offered' || !this.inPact(pact, player.id)) {
+      throw new RuleError('Diesen Duo-Angriff gibt es nicht (mehr).');
+    }
+    const other = this.player(pact.initiatorId === player.id ? pact.partnerId : pact.initiatorId);
+    if (pact.abortBy === null) {
+      pact.abortBy = player.id;
+      if (other)
+        this.addLog(other, `${player.name} möchte den Duo-Angriff abbrechen (Posteingang).`);
+    } else if (pact.abortBy === player.id) {
+      pact.abortBy = null;
+      if (other) this.addLog(other, `${player.name} will den Duo-Angriff doch fortsetzen.`);
+    } else {
+      this.disbandPact(pact, 'Duo-Angriff gemeinsam abgebrochen — alle Truppen ziehen heim.');
+    }
+    this.dirty = true;
+  }
+
+  /** A duo target: a castle (not protected after a fall) or owned outpost of a third player. */
+  private checkDuoTarget(target: ArmyTarget, a: PlayerRecord, b: PlayerRecord): void {
+    if (target.kind === 'castle') {
+      const owner = this.player(target.id);
+      if (!owner?.castle || owner.id === a.id || owner.id === b.id) {
+        throw new RuleError('Duo-Angriffe gehen nur gegen eine fremde Burg.');
+      }
+      if (owner.routed) {
+        throw new RuleError(`Die Burg von ${owner.name} ist gefallen und gerade geschützt.`);
+      }
+      return;
+    }
+    if (target.kind === 'outpost') {
+      const outpost = this.data.outposts.find((o) => o.id === target.id);
+      if (!outpost?.ownerId || outpost.ownerId === a.id || outpost.ownerId === b.id) {
+        throw new RuleError('Duo-Angriffe gehen nur gegen einen fremden Stützpunkt.');
+      }
+      return;
+    }
+    throw new RuleError('Duo-Angriffe gehen nur gegen Burgen und Stützpunkte.');
+  }
+
+  /** Validates troop picks from the player's bases (merged per base); stationed troops only. */
+  private duoGroups(
+    player: PlayerRecord,
+    sources: DuoSourcePick[],
+    who = 'Du hast',
+  ): { base: Base; troops: number; player: PlayerRecord }[] {
+    const merged = new Map<string | null, number>();
+    for (const s of sources) merged.set(s.from, (merged.get(s.from) ?? 0) + s.troops);
+    const groups = [...merged].map(([from, troops]) => {
+      const base = this.base(player, from);
+      if (!base) throw new RuleError(`${who} diesen Stützpunkt nicht mehr.`);
+      if (troops > base.troops) throw new RuleError(`${who} dort nicht mehr so viele Truppen.`);
+      return { base, troops, player };
+    });
+    if (groups.length === 0) throw new RuleError('Ohne Truppen kein Duo-Angriff.');
+    return groups;
+  }
+
+  /** Troops at home and in all own outposts. */
+  private stationed(player: PlayerRecord): number {
+    return (
+      player.homeTroops +
+      this.data.outposts
+        .filter((o) => o.ownerId === player.id)
+        .reduce((sum, o) => sum + o.troops, 0)
+    );
+  }
+
+  /** The duo plan for these groups (legs in the same order). */
+  private planPact(
+    target: ArmyTarget,
+    groups: { base: Base; player: PlayerRecord }[],
+  ): DuoPlan | null {
+    const to = this.targetPosition(target);
+    if (!to) return null;
+    return planDuo(
+      this.map!,
+      groups.map((g) => ({ position: g.base.position, speed: this.marchSpeed(g.player) })),
+      to,
+    );
+  }
+
+  private targetPosition(target: ArmyTarget): Vec2 | null {
+    if (target.kind === 'castle') return this.player(target.id)?.castle ?? null;
+    if (target.kind === 'outpost') {
+      return this.data.outposts.find((o) => o.id === target.id)?.position ?? null;
+    }
+    return null;
+  }
+
+  private targetName(target: ArmyTarget): string {
+    if (target.kind === 'castle') return `Burg von ${this.player(target.id)?.name ?? '?'}`;
+    return this.outpostName(target.id);
+  }
+
+  private pact(id: string): PactRecord | undefined {
+    return this.data.pacts?.find((p) => p.id === id);
+  }
+
+  private inPact(pact: PactRecord, playerId: string): boolean {
+    return pact.initiatorId === playerId || pact.partnerId === playerId;
+  }
+
+  private dropPact(pact: PactRecord): void {
+    this.data.pacts = (this.data.pacts ?? []).filter((p) => p !== pact);
+    this.revision++;
+  }
+
+  /** A duo group reached the meeting point; the last one to arrive unites them all. */
+  private arriveAtMeet(army: ArmyRecord, pact: PactRecord): void {
+    army.status = 'waiting';
+    army.path = [last(army.path)];
+    army.departClock = this.data.clock;
+    army.arriveClock = Math.max(this.data.clock, pact.meetClock ?? this.data.clock);
+    const groups = this.data.armies.filter((a) => a.pactId === pact.id);
+    if (groups.some((a) => a.status !== 'waiting')) return;
+
+    const initiator = this.player(pact.initiatorId);
+    const partner = this.player(pact.partnerId);
+    const to = this.targetPosition(pact.target);
+    const path = to && pact.meet ? findPath(this.map!, pact.meet, to) : null;
+    if (!initiator || !partner || !path) {
+      this.disbandPact(pact, 'Das Duo-Ziel ist nicht mehr erreichbar — alle ziehen heim.');
+      return;
+    }
+    const shares = this.pactShares(pact, groups);
+    pact.initiatorTroops = shares[0];
+    pact.partnerTroops = shares[1];
+    this.data.armies = this.data.armies.filter((a) => a.pactId !== pact.id);
+    const pace = Math.min(this.marchSpeed(initiator), this.marchSpeed(partner));
+    const duo: ArmyRecord = {
+      id: this.nextId('army'),
+      ownerId: initiator.id,
+      troops: shares[0] + shares[1],
+      status: 'outbound',
+      baseId: null,
+      path,
+      target: pact.target,
+      departClock: this.data.clock,
+      arriveClock: this.data.clock + travelMs(pathLength(path), this.map!.width, false, pace),
+      fog: false,
+      stealth: false,
+      forcedMarch: false,
+      cargo: emptyResources(),
+      chest: false,
+      pactId: pact.id,
+    };
+    this.data.armies.push(duo);
+    pact.status = 'united';
+    pact.attackClock = duo.arriveClock;
+    this.addFeed(
+      'march',
+      `${initiator.name} und ${partner.name} vereinen sich zum Duo-Zug (${duo.troops} Truppen) und ziehen gegen die ${this.targetName(pact.target)}.`,
+      duo.id,
+    );
+  }
+
+  /** Troops each participant has in the pact's armies: [initiator, partner]. */
+  private pactShares(pact: PactRecord, armies: ArmyRecord[]): [number, number] {
+    let a = 0;
+    let b = 0;
+    for (const army of armies) {
+      if (army.ownerId === pact.initiatorId) a += army.troops;
+      else b += army.troops;
+    }
+    return [a, b];
+  }
+
+  /**
+   * Ends a pact early (both agreed, the target is gone, a participant left): groups on the way to
+   * the meeting point turn back to where they set out, a united army splits by share and each
+   * part heads to its home castle.
+   */
+  private disbandPact(pact: PactRecord, text: string): void {
+    this.dropPact(pact);
+    for (const army of this.data.armies.filter((a) => a.pactId === pact.id)) {
+      delete army.pactId;
+      if (pact.status !== 'united') {
+        this.startReturn(army, this.armyPosition(army));
+        continue;
+      }
+      const where = this.armyPosition(army);
+      this.data.armies = this.data.armies.filter((a) => a !== army);
+      const parts = splitByShare(army.troops, [pact.initiatorTroops, pact.partnerTroops]);
+      [pact.initiatorId, pact.partnerId].forEach((id, i) => {
+        const owner = this.player(id);
+        if (owner?.castle && parts[i]! > 0) {
+          this.data.armies.push(this.fleeingArmy(owner, where, parts[i]!, emptyResources()));
+        }
+      });
+    }
+    for (const id of [pact.initiatorId, pact.partnerId]) {
+      const player = this.player(id);
+      if (player) {
+        this.addLog(player, text);
+        this.liftRout(player);
+      }
+    }
+  }
+
+  /**
+   * The duo army reaches its target: one battle by the usual rules, with losses, plunder and the
+   * chest shared out by the troops each brought. After it each side marches home on its own.
+   */
+  private duoAssault(army: ArmyRecord, pact: PactRecord): void {
+    const initiator = this.player(pact.initiatorId);
+    const partner = this.player(pact.partnerId);
+    const where = last(army.path);
+    const shares = [pact.initiatorTroops, pact.partnerTroops];
+    const castleOwner = pact.target.kind === 'castle' ? this.player(pact.target.id) : undefined;
+    const outpost =
+      pact.target.kind === 'outpost'
+        ? this.data.outposts.find((o) => o.id === pact.target.id)
+        : undefined;
+    const valid =
+      initiator &&
+      partner &&
+      (castleOwner
+        ? castleOwner.castle && !castleOwner.routed
+        : outpost && outpost.ownerId !== initiator.id && outpost.ownerId !== partner.id);
+    if (!valid) {
+      this.disbandPact(pact, 'Das Duo-Ziel ist nicht mehr angreifbar — alle ziehen heim.');
+      return;
+    }
+    const names = `${initiator.name} und ${partner.name}`;
+    const sides = [initiator, partner];
+    this.dropPact(pact);
+    this.data.armies = this.data.armies.filter((a) => a !== army);
+
+    const defending = castleOwner ? castleOwner.homeTroops : outpost!.troops;
+    const fortified = castleOwner ? (castleOwner.fortifiedUntil ?? 0) > this.data.clock : false;
+    const attackerWins = army.troops > defending * (fortified ? FORTIFY_MULTIPLIER : 1);
+    const losses = battleLosses(army.troops, defending, attackerWins);
+    const lost = splitByShare(losses.attacker, shares);
+    const survivors = shares.map((s, i) => (attackerWins ? Math.max(1, s - lost[i]!) : 0));
+    const label = castleOwner
+      ? `die Burg von ${castleOwner.name}`
+      : `den ${this.outpostName(outpost!.id)}`;
+
+    if (castleOwner) {
+      castleOwner.attackedAt = this.data.clock;
+      castleOwner.homeTroops -= losses.defender;
+    } else {
+      outpost!.attackedAt = this.data.clock;
+      outpost!.troops -= losses.defender;
+    }
+    if (!attackerWins) {
+      for (const p of sides) {
+        this.addLog(p, `Duo-Angriff auf ${label} gescheitert: der Duo-Zug ist gefallen.`);
+        this.liftRout(p);
+      }
+      const defender =
+        castleOwner ?? (outpost!.ownerId ? this.player(outpost!.ownerId) : undefined);
+      if (defender) {
+        this.addLog(defender, `Duo-Angriff von ${names} abgewehrt. ${losses.defender} Verluste.`);
+      }
+      this.addFeed(
+        'battle',
+        `${label[0]!.toUpperCase()}${label.slice(1)} wehrt den Duo-Angriff von ${names} ab.`,
+      );
+      return;
+    }
+
+    let loot: Resources;
+    if (castleOwner) {
+      loot = takeShare(castleOwner.resources, CASTLE_PLUNDER_SHARE);
+    } else {
+      const defender = outpost!.ownerId ? this.player(outpost!.ownerId) : undefined;
+      const kept = takeShare(outpost!.resources, 1 - OUTPOST_PLUNDER_SHARE);
+      if (defender?.castle && outpost!.troops > 0) {
+        this.data.armies.push(this.fleeingArmy(defender, outpost!.position, outpost!.troops, kept));
+      }
+      if (defender) {
+        this.recallFromLostOutpost(defender, outpost!.id, this.outpostName(outpost!.id));
+        this.addLog(defender, `${names} haben deinen Stützpunkt im Duo erobert.`);
+      }
+      loot = takeShare(outpost!.resources, 1);
+    }
+    const parts = shares.map(() => emptyResources());
+    for (const r of RESOURCES) {
+      splitByShare(loot[r], shares).forEach((amount, i) => (parts[i]![r] = amount));
+    }
+    // The chest (castle) and the outpost go by lot / by the larger share.
+    const lot = Math.random() * (shares[0]! + shares[1]!) < shares[0]! ? 0 : 1;
+    const keeper =
+      shares[0]! > shares[1]! ? 0 : shares[1]! > shares[0]! ? 1 : Math.random() < 0.5 ? 0 : 1;
+
+    sides.forEach((p, i) => {
+      if (!castleOwner && i === keeper) {
+        outpost!.ownerId = p.id;
+        outpost!.troops = survivors[i]!;
+        outpost!.resources = parts[i]!;
+        this.addLog(
+          p,
+          `Duo-Sieg: ${this.outpostName(outpost!.id)} gehört jetzt dir, samt ${formatResources(parts[i]!)}.`,
+        );
+        return;
+      }
+      const home = this.fleeingArmy(p, where, survivors[i]!, parts[i]!);
+      home.chest = Boolean(castleOwner) && i === lot;
+      this.data.armies.push(home);
+      this.addLog(
+        p,
+        `Duo-Sieg gegen ${label}: deine ${survivors[i]} Truppen ziehen heim mit ${formatResources(parts[i]!)}` +
+          (home.chest ? ' und der Truhe.' : '.'),
+      );
+    });
+    if (castleOwner) {
+      this.addLog(
+        castleOwner,
+        `${names} haben deine Burg im Duo gestürmt. ${losses.defender} Verteidiger gefallen.`,
+      );
+      this.addFeed('battle', `${names} stürmen im Duo die Burg von ${castleOwner.name}.`);
+      this.rout(castleOwner);
+      this.turnBackAssaults(castleOwner);
+    } else {
+      this.addFeed('outpost', `${names} erobern im Duo den ${this.outpostName(outpost!.id)}.`);
+    }
+    for (const p of sides) this.liftRout(p);
+  }
+
   // ---- Simulation ----
 
   /** Advances by one tick of real time. */
@@ -700,8 +1171,9 @@ export class GameState {
   private advance(dClock: number): void {
     const end = this.data.clock + dClock;
     for (;;) {
+      // Duo groups waiting at the meeting point move on when the last one arrives.
       const next = this.data.armies
-        .filter((a) => a.arriveClock <= end)
+        .filter((a) => a.status !== 'waiting' && a.arriveClock <= end)
         .sort((a, b) => a.arriveClock - b.arriveClock)[0];
       if (!next || this.data.phase !== 'running') break;
       this.data.clock = Math.max(this.data.clock, next.arriveClock);
@@ -716,6 +1188,14 @@ export class GameState {
     const owner = this.player(army.ownerId);
     if (!owner) {
       this.removeArmy(army);
+      return;
+    }
+    if (army.pactId && army.status === 'outbound') {
+      const pact = this.pact(army.pactId);
+      if (pact?.status === 'marching') return this.arriveAtMeet(army, pact);
+      if (pact?.status === 'united') return this.duoAssault(army, pact);
+      delete army.pactId;
+      this.startReturn(army, last(army.path));
       return;
     }
     if (army.status === 'gathering') {
@@ -897,7 +1377,8 @@ export class GameState {
    */
   private turnBackAssaults(defender: PlayerRecord): void {
     for (const army of this.data.armies) {
-      if (army.status !== 'outbound' || army.ownerId === defender.id) continue;
+      // Duo attacks keep their pact; they find the castle protected on arrival and go home.
+      if (army.status !== 'outbound' || army.ownerId === defender.id || army.pactId) continue;
       if (army.target.kind !== 'castle' || army.target.id !== defender.id) continue;
       this.startReturn(army, this.armyPosition(army));
       const owner = this.player(army.ownerId);
@@ -919,7 +1400,8 @@ export class GameState {
    */
   private rout(player: PlayerRecord): void {
     for (const army of this.data.armies) {
-      if (army.ownerId !== player.id) continue;
+      // A duo attack goes on whatever happens at home: the pact binds.
+      if (army.ownerId !== player.id || army.pactId) continue;
       if (army.status === 'returning' && army.baseId === null) continue;
       army.baseId = null;
       this.startReturn(army, this.armyPosition(army));
@@ -936,7 +1418,7 @@ export class GameState {
       outpost.troops = 0;
       abandoned++;
     }
-    player.routed = this.data.armies.some((a) => a.ownerId === player.id);
+    player.routed = this.hasArmies(player.id);
     if (abandoned > 0) {
       this.addLog(player, `Deine Burg ist gefallen: ${abandoned} Stützpunkt(e) aufgegeben.`);
       this.addFeed(
@@ -1282,6 +1764,14 @@ export class GameState {
    */
   private startGameday(): void {
     this.sendCaravans();
+    // An unanswered duo offer stays open the rest of its gameday and the whole next one.
+    for (const pact of [...(this.data.pacts ?? [])]) {
+      if (pact.status !== 'offered' || pact.gameday >= this.data.gameday) continue;
+      this.dropPact(pact);
+      const initiator = this.player(pact.initiatorId);
+      if (initiator)
+        this.addLog(initiator, 'Dein Duo-Angebot blieb unbeantwortet und ist verfallen.');
+    }
     this.revision++;
     this.data.gameday++;
     for (const player of this.data.players) {
@@ -1432,6 +1922,12 @@ export class GameState {
   }
 
   kick(playerId: string): void {
+    for (const pact of (this.data.pacts ?? []).filter((p) => this.inPact(p, playerId))) {
+      this.disbandPact(
+        pact,
+        'Ein Duo-Partner hat das Spiel verlassen — der Duo-Angriff ist abgebrochen.',
+      );
+    }
     this.data.players = this.data.players.filter((p) => p.id !== playerId);
     this.data.armies = this.data.armies.filter((a) => a.ownerId !== playerId);
     for (const outpost of this.data.outposts) {
@@ -1509,6 +2005,12 @@ export class GameState {
         fortifiedUntil: self.fortifiedUntil,
         harvestDays: self.harvestDays ?? 0,
         caravan: self.caravan ?? emptyResources(),
+        pacts: (this.data.pacts ?? [])
+          .filter((pact) => this.inPact(pact, self.id))
+          .map(({ meet: _meet, ...pact }) => ({
+            ...pact,
+            initiatorSources: [...pact.initiatorSources],
+          })),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
         log: self.log,
       },
@@ -1556,7 +2058,16 @@ export class GameState {
   }
 
   private armyView(army: ArmyRecord, viewerId: string): ArmyView {
-    const visible = army.ownerId === viewerId || !army.stealth;
+    const pact = army.pactId ? this.pact(army.pactId) : undefined;
+    const member = pact !== undefined && this.inPact(pact, viewerId);
+    const visible = army.ownerId === viewerId || member || !army.stealth;
+    // A duo group's target stays secret to outsiders until the groups unite.
+    const secret = pact !== undefined && pact.status !== 'united' && !member;
+    const other = pact
+      ? army.ownerId === pact.initiatorId
+        ? pact.partnerId
+        : pact.initiatorId
+      : null;
     return {
       id: army.id,
       ownerId: army.ownerId,
@@ -1566,7 +2077,7 @@ export class GameState {
       from: army.path[0]!,
       to: visible ? last(army.path) : null,
       route: visible ? remainingPath(army.path, this.legFraction(army)) : null,
-      target: visible ? army.target : null,
+      target: visible && !secret ? army.target : null,
       departClock: army.departClock,
       arriveClock: army.arriveClock,
       cargo: army.cargo,
@@ -1575,6 +2086,7 @@ export class GameState {
       forcedMarch: army.forcedMarch,
       sea: army.sea ?? false,
       chest: army.chest ?? false,
+      duoWith: pact && (member || pact.status === 'united') ? other : null,
     };
   }
 
@@ -1649,6 +2161,7 @@ export class GameState {
         player.routed = false;
       }
     }
+    data.pacts ??= [];
     data.chests = data.chests.map((c) => ({
       ...c,
       troopsNeeded: c.troopsNeeded ?? rollChestTroops(),
@@ -1856,7 +2369,21 @@ export class GameState {
   private removeArmy(army: ArmyRecord): void {
     this.data.armies = this.data.armies.filter((a) => a !== army);
     const owner = this.player(army.ownerId);
-    if (!owner?.routed || this.data.armies.some((a) => a.ownerId === owner.id)) return;
+    if (owner) this.liftRout(owner);
+  }
+
+  /** Armies in the field that count as the player's: own ones and duo armies they are part of. */
+  private hasArmies(playerId: string): boolean {
+    return this.data.armies.some((a) => {
+      if (a.ownerId === playerId) return true;
+      const pact = a.pactId ? this.pact(a.pactId) : undefined;
+      return pact !== undefined && this.inPact(pact, playerId);
+    });
+  }
+
+  /** A routed player whose troops are all home can act again. */
+  private liftRout(owner: PlayerRecord): void {
+    if (!owner.routed || this.hasArmies(owner.id)) return;
     owner.routed = false;
     this.addLog(owner, 'Alle Truppen sind heimgekehrt — du kannst wieder handeln.');
     this.addFeed('march', `${owner.name} hat alle Truppen wieder beisammen.`);
@@ -1931,6 +2458,12 @@ function takeShare(from: Resources, share: number): Resources {
 
 function addResources(into: Resources, add: Resources): void {
   for (const r of RESOURCES) into[r] += add[r];
+}
+
+/** Game duration as `h:mm h`, for log lines. */
+function formatSpan(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} h`;
 }
 
 function formatResources(resources: Resources): string {

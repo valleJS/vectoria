@@ -939,7 +939,8 @@ export class GameRenderer {
       sprite.cargoKey = cargoKey;
       this.drawCargo(sprite, army, u, mode);
     }
-    const troops = army.troops === null ? '?' : String(army.troops);
+    const count = army.troops === null ? '?' : String(army.troops);
+    const troops = army.duoWith && mode !== 'badge' ? `Duo · ${count}` : count;
     const text = `${mode === 'badge'}:${troops}`;
     if (text !== sprite.text) {
       sprite.text = text;

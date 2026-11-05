@@ -119,6 +119,23 @@ on the spot), `destination` refuses new attacks or redirects onto it, and one th
 turns back without a fight (`assaultCastle`). With no troops away there is no rout, hence no
 protection.
 
+**Duo attacks** (`offerDuo` / `answerDuo` / `withdrawDuo` / `abortDuo`, `PactRecord` in
+`data.pacts`, `SelfState.pacts` for the two participants only): against a third player's castle
+(not while it is protected after a fall) or owned outpost. The initiator picks own stationed
+troops per base and asks the partner for a number (≤ partner's stationed troops); the partner
+only accepts (choosing their own bases, sum must match) or declines; unanswered offers lapse when
+the following gameday ends. On accept every group marches to one meeting point (`planDuo` in
+`shared/duo.ts`: the land tile with the earliest latest arrival, target ignored); outsiders see
+no target until then. Groups that arrive wait (`status: 'waiting'`, skipped by `advance`); the
+last one unites them (`arriveAtMeet`) into one army (`ownerId` = initiator, `pactId`,
+`ArmyView.duoWith`) at the slower pace. No march cards. At the target `duoAssault` fights by the
+usual rules; losses, plunder (`splitByShare`) are shared by troops, a castle's chest by lot
+weighted by troops, a won outpost goes to the larger share (tie 50:50) with its survivors and
+stock share, everyone else marches home separately. Recall/redirect are refused; a pact ends
+early only when both call `abortDuo` (or the target is invalid on arrival, or a participant is
+kicked) — groups return to their bases, a united army splits by share. A participant's rout
+skips pact armies, and `hasArmies` counts them, so they stay routed until those are home.
+
 **Raids**: any marching army carrying resource cargo (`isRaidable` in `shared/entities.ts`: home
 from a spot or a win; base-to-base transfers no longer exist) can be ambushed — except while its owner
 is routed (all their armies are immune; raids already underway go empty). A robbed army walks

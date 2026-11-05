@@ -56,6 +56,8 @@ import { Progress } from '@/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Locked } from './Routed';
 import { SelectionContent } from './SelectionPanel';
+import { pactsToAnswer, useDuoNotices } from '../game/duo';
+import { Inbox } from './Duo';
 
 const STATUS_STYLES: Record<ConnectionStatus, { label: string; dot: string }> = {
   idle: { label: 'Offline', dot: 'bg-ink-soft' },
@@ -541,12 +543,17 @@ function armyStatusText(view: GameView, army: ArmyView): string {
       );
     case 'outbound':
       return `${army.target?.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${left}`;
+    case 'waiting':
+      return `wartet am Duo-Treffpunkt, noch ${left}`;
   }
 }
 
 function ArmiesList({ view }: { view: GameView }) {
   const select = useGameStore((s) => s.select);
-  const mine = view.armies.filter((a) => a.ownerId === view.self.id);
+  // Own armies, and a duo army the player is part of (led by the other side).
+  const mine = view.armies.filter(
+    (a) => a.ownerId === view.self.id || (a.duoWith === view.self.id && a.status === 'outbound'),
+  );
   if (mine.length === 0) {
     return (
       <p className="py-2 text-ink-soft italic">
@@ -566,7 +573,7 @@ function ArmiesList({ view }: { view: GameView }) {
             <b className="tabular-nums">{army.troops}</b> → {describeTarget(view, army.target)}
             <span className="block text-xs text-ink-soft">{armyStatusText(view, army)}</span>
           </Button>
-          {army.status !== 'returning' && (
+          {army.status !== 'returning' && !army.duoWith && (
             <Tip label="Zurückrufen">
               <Button
                 size="icon-sm"
@@ -860,7 +867,17 @@ function SheetContent({ view, tab }: { view: GameView; tab: SheetTab }) {
   );
   switch (tab) {
     case 'ticker':
-      return <Ticker view={view} collapsible={false} />;
+      // Phones: the inbox sits on top of the ticker sheet (the tab bar has no room for it).
+      return (
+        <div className="flex min-h-0 flex-col gap-1.5">
+          {view.self.pacts.length > 0 && (
+            <div className="flex max-h-[50%] min-h-0 flex-col">
+              <Inbox view={view} />
+            </div>
+          )}
+          <Ticker view={view} collapsible={false} />
+        </div>
+      );
     case 'selection':
       return titled('Auswahl', <SelectionContent view={view} />);
     case 'armies':
@@ -898,7 +915,12 @@ function CompactHud({ view }: { view: GameView }) {
   const color = cssColor(playerColor(view, view.self.id));
   const armies = view.armies.filter((a) => a.ownerId === view.self.id).length;
   const tabs: { id: SheetTab; label: string; icon: ReactNode; badge?: number }[] = [
-    { id: 'ticker', label: 'Ticker', icon: <AlarmIcon size={20} /> },
+    {
+      id: 'ticker',
+      label: 'Ticker',
+      icon: <AlarmIcon size={20} />,
+      badge: pactsToAnswer(view),
+    },
     {
       id: 'selection',
       label: 'Auswahl',
@@ -972,6 +994,7 @@ function CompactHud({ view }: { view: GameView }) {
 export function Hud() {
   const view = useGameStore((s) => s.view);
   const compact = useCompact();
+  useDuoNotices(view);
   if (!view) return null;
   return (
     <>
@@ -982,8 +1005,11 @@ export function Hud() {
           <TopBar view={view} compact={false} />
           <div className="relative flex min-h-0 flex-1 justify-between gap-4 p-3">
             <div className="flex w-80 min-h-0 flex-col gap-3">
-              <div className="flex max-h-[55%] min-h-0 flex-col">
+              <div className="flex max-h-[45%] min-h-0 flex-col">
                 <Ticker view={view} />
+              </div>
+              <div className="flex max-h-[35%] min-h-0 flex-col">
+                <Inbox view={view} />
               </div>
               <div className="mt-auto flex items-end gap-2">
                 <HandbookCorner />
