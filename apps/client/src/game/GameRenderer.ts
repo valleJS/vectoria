@@ -630,7 +630,7 @@ export class GameRenderer {
       );
       figure.addChild(light, sprite);
       const tag = this.cargoPile(wagon.load, u);
-      tag.position.set(-9 * u, -24 * u);
+      tag.position.set(-9 * u, -23 * u);
       container.addChild(figure, tag);
       this.armyLayer.addChild(container);
       this.caravans.push({

@@ -1048,61 +1048,49 @@ export function soldiers(color: string): Art {
 // ---- Night caravan ----
 
 /** Where the caravan's lantern hangs (art px of `caravanWagon`): the map lights it at night. */
-export const CARAVAN_LANTERN = { x: 50, y: 20 };
+export const CARAVAN_LANTERN = { x: 77, y: 13 };
 
 /**
- * The night caravan: a two-wheeled ox cart heading right, piled with crates, sacks and a barrel.
- * A banner pole at the back flies a pennon in the owner's colour, the ox wears a yoke cloth in
- * that colour, a lantern hangs at the front. 84×50, standing at (40, 46).
+ * The night caravan: a big wooden wagon heading right — a long plank bed on stakes with a stripe
+ * in the owner's colour, two large spoked wheels, a drawbar, and a lantern on a post at the
+ * front. 84×48, standing at (40, 44).
  */
 export function caravanWagon(color: string): Art {
   const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
-  const leg = (x: number) =>
-    `<path d="M${x} 33V44" stroke="${INK}" stroke-width="4.4" stroke-linecap="round"/>
-     <path d="M${x} 33V43.4" stroke="${TIMBER.light}" stroke-width="2.4" stroke-linecap="round"/>`;
-  const ox = `
-    ${leg(57)}${leg(61)}${leg(69)}${leg(73)}
-    <path d="M54 26Q50 30 51.5 37" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
-    <path d="M54 26Q50 30 51.5 37" fill="none" stroke="${TIMBER.shade}" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M54 22Q54 18 59 18H71Q76 18 76 23V31Q76 35 71 35H59Q54 35 54 31Z" fill="${TIMBER.light}" ${line}/>
-    <path d="M56 31Q63 34 74 31" fill="none" stroke="${TIMBER.base}" stroke-width="2" opacity=".6"/>
-    <path d="M73 20L79 21Q83 22 82.5 27L82 30Q81.5 32.5 79 32.5H76.5L74 28Z" fill="${TIMBER.light}" ${line}/>
-    <path d="M79.5 29.4H82" stroke="${INK}" stroke-width="1.2" stroke-linecap="round"/>
-    <circle cx="78" cy="24.4" r=".9" fill="${INK}"/>
-    <path d="M76 21Q75 16 78.5 15M80.5 21.6Q82.5 18 81.5 15.4" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
-    <path d="M76 21Q75 16 78.5 15M80.5 21.6Q82.5 18 81.5 15.4" fill="none" stroke="${MASONRY.light}" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M70 17.5H76V34H70Z" fill="${color}" ${line}/>
-    <path d="M71.6 19.5V32" stroke="${shade(color, 1.45)}" stroke-width="1" opacity=".8"/>
-    <path d="M68.5 17.5H77.5" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>
-    <path d="M68.5 17.5H77.5" stroke="${TIMBER.shade}" stroke-width="1.6" stroke-linecap="round"/>`;
+  const wheel = (cx: number, cy: number, r: number) => {
+    const spokes = [0, 1, 2, 3, 4, 5]
+      .map((k) => {
+        const a = (k * Math.PI) / 6;
+        const dx = Math.cos(a) * r * 0.78;
+        const dy = Math.sin(a) * r * 0.78;
+        return `M${n(cx - dx)} ${n(cy - dy)}L${n(cx + dx)} ${n(cy + dy)}`;
+      })
+      .join('');
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${TIMBER.shade}" ${line}/>
+      <circle cx="${cx}" cy="${cy}" r="${n(r - 2.4)}" fill="none" stroke="${TIMBER.base}" stroke-width="1.4"/>
+      <path d="${spokes}" stroke="${INK}" stroke-width="1.4"/>
+      <circle cx="${cx}" cy="${cy}" r="2.6" fill="${IRON.base}" stroke="${INK}" stroke-width="1.2"/>`;
+  };
+  const stakes = [6, 38, 70]
+    .map((x) => `<rect x="${x}" y="11" width="4" height="24" fill="${TIMBER.shade}" ${line}/>`)
+    .join('');
   const body = `
-    ${groundShadow(42, 46, 39, 3.4)}
-    ${ox}
-    <path d="M44 31L70 24" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
-    <path d="M44 31L70 24" stroke="${TIMBER.light}" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M6.5 36V3" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
-    <path d="M6.5 36V3" stroke="${TIMBER.light}" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M5 4.5H19" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M7.5 5.5H18V18L12.75 14.6L7.5 18Z" fill="${color}" ${line}/>
-    <path d="M14.4 6V15.4" stroke="${shade(color, 0.78)}" stroke-width="2.4"/>
-    <path d="M7.5 5.5H18V18L12.75 14.6L7.5 18Z" fill="none" ${line}/>
-    <g ${line}>
-      <rect x="9" y="16" width="12" height="12" fill="${TIMBER.light}"/>
-      <path d="M9 16L21 28M21 16L9 28" fill="none" stroke-width="1.2"/>
-      <path d="M33 28V19Q33 17 38 17Q43 17 43 19V28Z" fill="${TIMBER.base}"/>
-      <path d="M21 28Q19 20 24 18.6L26 16.6H30L31 18.6Q35 20 33.5 28Z" fill="${PARCHMENT}"/>
-    </g>
-    <path d="M33.6 21H42.4M33.6 25H42.4" stroke="${IRON.base}" stroke-width="1.4"/>
-    <path d="M25 18.4H31" stroke="${INK}" stroke-width="1.2"/>
-    <path d="M29 21Q31 24 30 27" fill="none" stroke="${shade(PARCHMENT, 0.8)}" stroke-width="1.3"/>
-    <rect x="4" y="28" width="42" height="7" fill="${TIMBER.base}" ${line}/>
-    <path d="M6 31.5H44" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
-    <path d="M46 31V17.5H50V19.5" fill="none" stroke="${INK}" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M48 19.5H52L51.4 25H48.6Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
-    <circle cx="25" cy="37" r="9" fill="${TIMBER.shade}" ${line}/>
-    <path d="M18.6 37H31.4M25 30.6V43.4M20.5 32.5L29.5 41.5M29.5 32.5L20.5 41.5" stroke="${INK}" stroke-width="1.2"/>
-    <circle cx="25" cy="37" r="2.2" fill="${IRON.base}" stroke="${INK}" stroke-width="1.1"/>`;
-  return { svg: svg(84, 50, body), width: 84, height: 50, anchor: { x: 40, y: 46 }, centreY: 25 };
+    ${groundShadow(42, 44, 39, 3.4)}
+    <path d="M72 31L82 36" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M72 31L82 36" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M80.5 33.5L83 38.5" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M7 14L75 14L72 17H4Z" fill="${TIMBER.grain}" ${line}/>
+    <rect x="4" y="17" width="72" height="17" fill="${TIMBER.base}" ${line}/>
+    <path d="M5 21.5H75M5 29.5H75" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
+    <rect x="4" y="23" width="72" height="5" fill="${color}" ${line}/>
+    <path d="M6 24.4H74" stroke="${shade(color, 1.45)}" stroke-width="1" opacity=".75"/>
+    ${stakes}
+    <path d="M3 16.2H77" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M3 16.2H77" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M74 16V6H78V9" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M75.5 9H80.5L79.8 15.5H76.2Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${wheel(17, 35, 9.5)}${wheel(60, 35, 9.5)}`;
+  return { svg: svg(84, 48, body), width: 84, height: 48, anchor: { x: 40, y: 44 }, centreY: 25 };
 }
 
 // ---- Night camp ----
