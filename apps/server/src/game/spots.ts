@@ -27,6 +27,11 @@ const MIN_GAP = 2;
 const SEARCH_STEPS = 100_000;
 const SEARCH_STEPS_PER_CASTLE = 6_000;
 const ATTEMPTS = 4;
+/**
+ * The search stops early once this many attempts kept every hard rule. A running game's re-layout
+ * (during server start, under the deploy health check) takes the first valid one (`quick`).
+ */
+const VALID_ATTEMPTS = 2;
 /** Real-route polish: local moves tried on the best grid layout. */
 const POLISH_MOVES = 300;
 /** Worst ratio of an 8-way grid walk to the straight line: at 22.5°, (1 + (√2 − 1)·tan) / sec. */
@@ -95,7 +100,7 @@ export function placeBalancedSpots(
   taken: Vec2[],
   anchors: Vec2[],
   random: () => number,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; quick?: boolean } = {},
 ): SpotLayout {
   const ctx = context(map, castles, land, taken, anchors);
   const cramped = crampedCastles(ctx);
@@ -103,11 +108,17 @@ export function placeBalancedSpots(
     return { spots: [], valid: false, spreadHours: Infinity, cramped };
   }
   let best: { layout: Layout; real: Evaluation } | null = null;
+  let valid = 0;
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     const layout = anneal(ctx, random);
     const real = polish(ctx, layout, random);
     if (!best || better(real, best.real)) best = { layout, real };
-    if (best.real.hard === 0 && best.real.spread <= ctx.tolerance) break;
+    if (real.hard === 0) valid++;
+    if (
+      best.real.hard === 0 &&
+      (best.real.spread <= ctx.tolerance || valid >= (options.quick ? 1 : VALID_ATTEMPTS))
+    )
+      break;
   }
   const { layout, real } = best!;
   return {
@@ -328,13 +339,36 @@ interface Evaluation {
   far: SpotKind[];
 }
 
-type Distance = (player: number, tile: number) => number;
+/** Per castle: walking distance (tiles) to every tile, filled at least for the spots' tiles. */
+type Distances = readonly ArrayLike<number>[];
 
 const better = (a: Evaluation, b: Evaluation) =>
   a.hard < b.hard - 1e-9 || (Math.abs(a.hard - b.hard) <= 1e-9 && a.soft < b.soft);
 
-function evaluate(ctx: Context, layout: Layout, dist: Distance, bounds: Bounds): Evaluation {
+/** Module-local copies: the hot loop below must not go through the shared module's exports. */
+const KINDS: readonly SpotKind[] = [...SPOT_KINDS];
+const KIND_INDEX: Record<SpotKind, number> = { wood: 0, stone: 1, gold: 2, trader: 3 };
+const FAR_INDEX: readonly number[] = SPOT_FAR_KINDS.map((k) => KIND_INDEX[k]);
+const nearest = new Float64Array(KINDS.length);
+
+/** Scores a layout: rule violation (tiles) first, then the soft score. The hot loop of the search. */
+function evaluate(ctx: Context, layout: Layout, dist: Distances, bounds: Bounds): Evaluation {
   const { spots } = layout;
+  const n = spots.length;
+  const width = ctx.map.width;
+  const tiles = new Int32Array(n);
+  const kinds = new Int8Array(n);
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = spots[i]!.tile;
+    tiles[i] = t;
+    kinds[i] = KIND_INDEX[spots[i]!.kind];
+    xs[i] = t % width;
+    ys[i] = (t - (t % width)) / width;
+  }
+  const players = ctx.castles.length;
+  const nearLimit = bounds.near - 1e-6; // strictly below: a hair of margin
   let hard = 0;
   const castleHard: number[] = [];
   const far: SpotKind[] = [];
@@ -342,23 +376,24 @@ function evaluate(ctx: Context, layout: Layout, dist: Distance, bounds: Bounds):
   let max = -Infinity;
   let sum = 0;
   let farWood = 0;
-  const nearest = { wood: MISSING, stone: MISSING, gold: MISSING, trader: MISSING };
-  for (let p = 0; p < ctx.castles.length; p++) {
-    nearest.wood = nearest.stone = nearest.gold = nearest.trader = MISSING;
+  for (let p = 0; p < players; p++) {
+    const row = dist[p]!;
+    nearest.fill(MISSING);
     let tooNear = 0;
-    for (const s of spots) {
-      const d = dist(p, s.tile);
-      if (d < nearest[s.kind]) nearest[s.kind] = d;
-      tooNear += Math.max(0, bounds.min - d);
+    for (let i = 0; i < n; i++) {
+      const d = row[tiles[i]!]!;
+      const k = kinds[i]!;
+      if (d < nearest[k]!) nearest[k] = d;
+      if (d < bounds.min) tooNear += bounds.min - d;
     }
     // The far kind is whichever of wood and gold fits better; the rest must be near.
     let bestV = Infinity;
-    let bestFar: SpotKind = SPOT_FAR_KINDS[0];
-    for (const f of SPOT_FAR_KINDS) {
-      let v = Math.max(0, bounds.far - nearest[f]) + Math.max(0, nearest[f] - bounds.max);
-      for (const k of SPOT_KINDS) {
-        // Strictly below: a hair of margin.
-        if (k !== f) v += Math.max(0, nearest[k] - (bounds.near - 1e-6));
+    let bestFar = FAR_INDEX[0]!;
+    for (const f of FAR_INDEX) {
+      const df = nearest[f]!;
+      let v = Math.max(0, bounds.far - df) + Math.max(0, df - bounds.max);
+      for (let k = 0; k < KINDS.length; k++) {
+        if (k !== f && nearest[k]! > nearLimit) v += nearest[k]! - nearLimit;
       }
       if (v < bestV) {
         bestV = v;
@@ -367,30 +402,36 @@ function evaluate(ctx: Context, layout: Layout, dist: Distance, bounds: Bounds):
     }
     const v = bestV + tooNear;
     castleHard.push(v);
-    far.push(bestFar);
+    far.push(KINDS[bestFar]!);
     hard += v;
-    if (bestFar === 'wood') farWood++;
-    const total = nearest.wood + nearest.stone + nearest.gold + nearest.trader;
-    min = Math.min(min, total);
-    max = Math.max(max, total);
+    if (bestFar === KIND_INDEX.wood) farWood++;
+    let total = 0;
+    for (let k = 0; k < KINDS.length; k++) total += nearest[k]!;
+    if (total < min) min = total;
+    if (total > max) max = total;
     sum += total;
   }
-  for (let i = 0; i < spots.length; i++) {
-    const a = centre(ctx.map, spots[i]!.tile);
-    for (let j = i + 1; j < spots.length; j++) {
-      const gap = distance(a, centre(ctx.map, spots[j]!.tile));
-      hard += Math.max(0, ctx.gap - gap);
-      if (spots[i]!.kind === spots[j]!.kind) hard += Math.max(0, ctx.sameGap - gap);
+  const gap = ctx.gap;
+  const sameGap = ctx.sameGap;
+  const reach = Math.max(gap, sameGap);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = xs[i]! - xs[j]!;
+      const dy = ys[i]! - ys[j]!;
+      const squared = dx * dx + dy * dy;
+      if (squared >= reach * reach) continue;
+      const d = Math.sqrt(squared);
+      if (d < gap) hard += gap - d;
+      if (kinds[i] === kinds[j] && d < sameGap) hard += sameGap - d;
     }
   }
   hard += HOLE_TILE * layout.holes;
-  const players = ctx.castles.length;
   const spread = max - min;
   const soft =
     10 * spread +
     40 * Math.max(0, spread - ctx.tolerance * 0.8) +
     (MEAN_WEIGHT * sum) / players +
-    SPOT_COST * spots.length +
+    SPOT_COST * n +
     FAR_SPLIT_WEIGHT * Math.abs(2 * farWood - players);
   return { hard: hard < 1e-9 ? 0 : hard, soft, spread, castleHard, far };
 }
@@ -478,7 +519,7 @@ function seed(ctx: Context, random: () => number): Layout {
 function anneal(ctx: Context, random: () => number): Layout {
   const { map } = ctx;
   const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)]!;
-  const dist: Distance = (p, tile) => ctx.grid[p]![tile]!;
+  const dist: Distances = ctx.grid;
   const value = (e: Evaluation) => HARD * e.hard + e.soft;
   const layout = seed(ctx, random);
   let current = evaluate(ctx, layout, dist, ctx.gridBounds);
@@ -561,20 +602,18 @@ function anneal(ctx: Context, random: () => number): Layout {
  */
 function polish(ctx: Context, layout: Layout, random: () => number): Evaluation {
   const { map, castles } = ctx;
-  const cache = new Map<number, number[]>();
-  const real: Distance = (player, tile) => {
-    let row = cache.get(tile);
-    if (!row) {
-      const to = centre(map, tile);
-      row = castles.map((c) => {
-        const path = findPath(map, c, to);
-        return path ? pathLength(path) : Infinity;
-      });
-      cache.set(tile, row);
-    }
-    return row[player]!;
-  };
   const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)]!;
+  // Real route lengths, per castle, filled for a tile when a spot first stands there.
+  const real = castles.map(() => new Float64Array(map.tiles.length).fill(NaN));
+  const measure = (tile: number) => {
+    if (!Number.isNaN(real[0]![tile]!)) return;
+    const to = centre(map, tile);
+    castles.forEach((c, p) => {
+      const path = findPath(map, c, to);
+      real[p]![tile] = path ? pathLength(path) : Infinity;
+    });
+  };
+  for (const s of layout.spots) measure(s.tile);
   let current = evaluate(ctx, layout, real, ctx.realBounds);
   for (let i = 0; i < POLISH_MOVES && layout.spots.length > 0; i++) {
     let undo: () => void;
@@ -587,6 +626,7 @@ function polish(ctx: Context, layout: Layout, random: () => number): Evaluation 
       const ring = kind === current.far[p] ? ctx.farRing[p]! : ctx.nearRing[p]!;
       if (ring.length === 0) continue;
       const tile = pick(ring);
+      measure(tile);
       let index = -1;
       for (let j = 0; j < layout.spots.length; j++) {
         const s = layout.spots[j]!;
@@ -606,6 +646,7 @@ function polish(ctx: Context, layout: Layout, random: () => number): Evaluation 
       const index = Math.floor(random() * layout.spots.length);
       const tile = nearbyTile(map, layout.spots[index]!.tile, 1 + Math.floor(random() * 2), random);
       if (!ctx.candidateSet.has(tile)) continue;
+      measure(tile);
       const from = layout.moveTo(index, tile);
       undo = () => layout.moveTo(index, from);
     }
