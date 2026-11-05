@@ -414,11 +414,17 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
-    // Empty-handed armies can be re-routed anywhere, even on their way home.
-    if (hasResources(army.cargo) || army.chest) {
-      throw new RuleError('Ein Zug mit Ladung kann nicht umgeleitet werden.');
-    }
+    if (army.chest) throw new RuleError('Ein Zug mit Truhe kann nicht umgeleitet werden.');
     if (target.kind === 'army' && target.id === army.id) throw new RuleError('Ungültiges Ziel.');
+    if (army.target.kind === target.kind && army.target.id === target.id) {
+      throw new RuleError('Der Zug ist schon dorthin unterwegs.');
+    }
+    // Empty-handed armies can be re-routed anywhere, even on their way home; convoys only to
+    // another base of their own, keeping how they travel (a way home stays one).
+    if (hasResources(army.cargo)) {
+      this.redirectConvoy(player, army, target);
+      return;
+    }
     const destination = this.destination(
       player,
       this.armyPosition(army),
@@ -436,6 +442,45 @@ export class GameState {
     this.addFeed(
       target.kind === 'army' ? 'battle' : 'march',
       `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
+      army.id,
+    );
+    this.dirty = true;
+  }
+
+  /**
+   * Sends an army carrying resources to another of the owner's bases. On the way home it stays a
+   * returner (open to see, normal pace, `baseId` = the new base); a transport stays outbound with
+   * its cards.
+   */
+  private redirectConvoy(player: PlayerRecord, army: ArmyRecord, target: ArmyTarget): void {
+    const baseId =
+      target.kind === 'castle' && target.id === player.id
+        ? null
+        : target.kind === 'outpost'
+          ? target.id
+          : undefined;
+    if (baseId === undefined || !this.base(player, baseId)) {
+      throw new RuleError(
+        'Ein Zug mit Ladung lässt sich nur zur eigenen Burg oder zu einem eigenen Stützpunkt umleiten.',
+      );
+    }
+    const position = this.armyPosition(army);
+    if (army.status === 'returning') {
+      army.baseId = baseId;
+      this.startReturn(army, position);
+    } else {
+      const speed = LOADED_SPEED * this.marchSpeed(player);
+      const destination = this.destination(player, position, target, army.forcedMarch, speed);
+      army.status = 'outbound';
+      army.sea = false;
+      army.path = destination.path;
+      army.target = target;
+      army.departClock = this.data.clock;
+      army.arriveClock = destination.arriveClock;
+    }
+    this.addFeed(
+      'march',
+      `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)} (mit ${formatResources(army.cargo)}).`,
       army.id,
     );
     this.dirty = true;

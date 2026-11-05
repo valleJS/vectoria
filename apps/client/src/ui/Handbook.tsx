@@ -301,7 +301,8 @@ const CHAPTERS: Chapter[] = [
             <>
               <b>Umleiten:</b> ein Zug ohne Ladung (auch auf dem Heimweg) kann im Feld ein neues
               Ziel bekommen — wähle das Ziel auf der Karte, unter „Zug im Feld umleiten“ stehen
-              deine Züge.
+              deine Züge. Ein Zug mit Ressourcen lässt sich nur zu deiner Burg oder einem deiner
+              Stützpunkte umleiten.
             </>,
             <>
               <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
@@ -313,7 +314,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Zurückgerufen wird von der aktuellen Position aus, zur Burg, aus der der Zug kam.',
             'Wer schon heimkehrt, kann nicht zurückgerufen werden — ohne Ladung aber umgeleitet.',
-            'Umleiten geht nicht mit Ladung oder Truhe. Ein umgeleiteter Zug behält Nebel, Tarnung und Eilmarsch.',
+            'Mit Ressourcen geht Umleiten nur zu einer eigenen Burg oder einem eigenen Stützpunkt; ein Heimweg bleibt dabei ein Heimweg (offen, beladenes Tempo). Mit Truhe geht Umleiten gar nicht. Ein umgeleiteter Zug behält Nebel, Tarnung und Eilmarsch.',
             'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
             'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe; unterwegs kann niemand dazustoßen.',
             'Truhenträger ohne Ladung marschieren normal schnell, nur Ressourcen bremsen.',
@@ -436,7 +437,8 @@ const CHAPTERS: Chapter[] = [
         </P>
         <P>
           Ein Zug, der selbst Ressourcen heimbringt, kann niemanden überfallen: Wer Ladung trägt,
-          lässt sich weder umleiten noch mit Ressourcen auf einen Überfall schicken.
+          lässt sich nur zu eigenen Burgen und Stützpunkten umleiten, und mit Ressourcen geht es
+          nicht auf einen Überfall.
         </P>
         <Details
           items={[

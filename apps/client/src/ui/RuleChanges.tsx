@@ -33,6 +33,32 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'redirect-convoys',
+    date: '2026-11-05',
+    title: 'Züge mit Ladung umleiten',
+    body: (
+      <>
+        Züge, die Ressourcen heimbringen oder zu einem Stützpunkt tragen, lassen sich jetzt{' '}
+        <b>umleiten</b> — aber nur zu deiner <b>Burg</b> oder einem deiner <b>Stützpunkte</b>. Wähle
+        das Ziel auf der Karte, der Zug steht unter „Zug im Feld umleiten“. Ein Heimweg bleibt dabei
+        offen sichtbar und überfallbar; Züge mit Truhe lassen sich weiter nicht umleiten.
+      </>
+    ),
+  },
+  {
+    id: 'universal-colors',
+    date: '2026-11-05',
+    title: 'Feste Farben für alle',
+    body: (
+      <>
+        Jede Person hat jetzt bei allen <b>dieselbe Farbe</b> — Burg, Züge und Wege sehen überall
+        gleich aus, du bist also nicht mehr automatisch rot. Deine eigene Burg erkennst du am{' '}
+        <b>goldenen Stern</b> im Namensschild und am farbigen Sockel. Wege tragen immer die Farbe
+        ihres Zuges, auch mit Ladung; die Striche zeigen spitz in Laufrichtung.
+      </>
+    ),
+  },
+  {
     id: 'cards-sea-harvest-shoes-relocate',
     date: '2026-11-05',
     title: 'Vier neue Karten',
