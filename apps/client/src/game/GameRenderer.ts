@@ -287,9 +287,9 @@ export class GameRenderer {
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
   /**
-   * Focus ring around the selection: a soft disc on the ground under the piece, and over every
-   * site and label the parchment band with orbiting studs and four arrowheads that point at it,
-   * so no castle or nameplate hides it. Armies stay on top, so troop counts remain readable.
+   * Focus ring around the selection: a soft disc on the ground under the piece, and over
+   * everything else on the map the parchment band with orbiting studs and four arrowheads that
+   * point at it, so no site, label or army ever hides it.
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
@@ -345,7 +345,7 @@ export class GameRenderer {
     this.art = art;
     this.night = new NightScene(art);
     // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
-    // sites and their lamp light, deposits, labels, alarms, the focus ring, armies, fireflies.
+    // sites and their lamp light, deposits, labels, alarms, armies, fireflies, the focus ring.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -360,9 +360,9 @@ export class GameRenderer {
       this.spotLayer,
       this.labelLayer,
       this.alertLayer,
-      this.focusTop,
       this.armyLayer,
       this.night.fireflies,
+      this.focusTop,
     );
     app.stage.addChild(this.world);
 
@@ -1483,7 +1483,7 @@ export class GameRenderer {
   }
 
   /**
-   * Focus ring, redrawn every frame: on the ground a soft disc; over sites and labels a parchment
+   * Focus ring, redrawn every frame: on the ground a soft disc; on top of the map a parchment
    * band edged in ink with a thread and four orbiting studs in the accent colour, and four
    * arrowheads on the diagonals that breathe toward the piece. A new selection locks on: the ring
    * shrinks onto it from a little wider while fading in.
