@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-05
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
-sources_stamp: ded2265f60538f3112162ba2bf47f6c957d55a57
+sources_stamp: 8543f10ad6dca748e451c1d47de2b98bc37e3849
 ---
 
 # Client codemap (`apps/client`)
