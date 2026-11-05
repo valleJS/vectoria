@@ -202,7 +202,7 @@ interface ArmySprite {
 }
 
 /** Drawn width of a night caravan wagon, world px at piece scale 1. */
-const CARAVAN_WIDTH = 32;
+const CARAVAN_WIDTH = 48;
 
 /**
  * A wagon of the own night caravan, rolling from its outpost to the home castle by real time
@@ -215,6 +215,8 @@ interface CaravanSprite {
   route: PointData[];
   /** Lantern light at the front hoop, brighter the darker it is. */
   light: Sprite;
+  /** Cargo roundel over the canvas; follows the canvas when the wagon turns. */
+  tag: Container;
   stride: number;
 }
 
@@ -504,7 +506,11 @@ export class GameRenderer {
   private caravanFocus(wagon: CaravanSprite): { x: number; y: number; radius: number } {
     const { position, scale } = wagon.container;
     const u = this.unit;
-    return { x: position.x, y: position.y - 9 * u * scale.y, radius: 21 * u * scale.x };
+    return {
+      x: position.x + u * scale.x,
+      y: position.y - 12 * u * scale.y,
+      radius: 27 * u * scale.x,
+    };
   }
 
   /** Whether a world point lies on water as drawn (off the map counts as sea). */
@@ -624,7 +630,7 @@ export class GameRenderer {
       );
       figure.addChild(light, sprite);
       const tag = this.cargoPile(wagon.load, u);
-      tag.position.set(14 * u, -22 * u);
+      tag.position.set(-9 * u, -24 * u);
       container.addChild(figure, tag);
       this.armyLayer.addChild(container);
       this.caravans.push({
@@ -632,6 +638,7 @@ export class GameRenderer {
         figure,
         route: path.map((p) => this.px(p)),
         light,
+        tag,
         stride: Math.random() * Math.PI * 2,
       });
     }
@@ -654,6 +661,7 @@ export class GameRenderer {
       if (Math.abs(ahead.x - at.x) > 0.25 * Math.abs(ahead.y - at.y)) {
         wagon.figure.scale.x = ahead.x < at.x ? -1 : 1;
       }
+      wagon.tag.x = -9 * u * wagon.figure.scale.x;
       // Rocks gently on the road; the lantern sways and glows only in the dark.
       wagon.figure.y = -Math.abs(Math.sin(seconds * 3 + wagon.stride)) * 0.8 * u;
       wagon.light.alpha = this.night.amount * (0.55 + 0.25 * Math.sin(seconds * 5 + wagon.stride));
