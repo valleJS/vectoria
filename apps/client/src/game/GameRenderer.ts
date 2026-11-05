@@ -202,7 +202,7 @@ interface ArmySprite {
 }
 
 /** Drawn width of a night caravan wagon, world px at piece scale 1. */
-const CARAVAN_WIDTH = 48;
+const CARAVAN_WIDTH = 41;
 
 /**
  * A wagon of the own night caravan, rolling from its outpost to the home castle by real time
@@ -508,8 +508,8 @@ export class GameRenderer {
     const u = this.unit;
     return {
       x: position.x + u * scale.x,
-      y: position.y - 12 * u * scale.y,
-      radius: 27 * u * scale.x,
+      y: position.y - 13 * u * scale.y,
+      radius: 24 * u * scale.x,
     };
   }
 
@@ -630,7 +630,7 @@ export class GameRenderer {
       );
       figure.addChild(light, sprite);
       const tag = this.cargoPile(wagon.load, u);
-      tag.position.set(-9 * u, -23 * u);
+      tag.position.set(-9 * u, -28 * u);
       container.addChild(figure, tag);
       this.armyLayer.addChild(container);
       this.caravans.push({

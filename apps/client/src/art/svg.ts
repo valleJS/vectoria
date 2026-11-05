@@ -1048,12 +1048,12 @@ export function soldiers(color: string): Art {
 // ---- Night caravan ----
 
 /** Where the caravan's lantern hangs (art px of `caravanWagon`): the map lights it at night. */
-export const CARAVAN_LANTERN = { x: 77, y: 13 };
+export const CARAVAN_LANTERN = { x: 62, y: 7 };
 
 /**
- * The night caravan: a big wooden wagon heading right — a long plank bed on stakes with a stripe
+ * The night caravan: a big wooden wagon heading right — a high plank bed on stakes with a stripe
  * in the owner's colour, two large spoked wheels, a drawbar, and a lantern on a post at the
- * front. 84×48, standing at (40, 44).
+ * front. 72×52, standing at (34, 48).
  */
 export function caravanWagon(color: string): Art {
   const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
@@ -1071,26 +1071,26 @@ export function caravanWagon(color: string): Art {
       <path d="${spokes}" stroke="${INK}" stroke-width="1.4"/>
       <circle cx="${cx}" cy="${cy}" r="2.6" fill="${IRON.base}" stroke="${INK}" stroke-width="1.2"/>`;
   };
-  const stakes = [6, 38, 70]
-    .map((x) => `<rect x="${x}" y="11" width="4" height="24" fill="${TIMBER.shade}" ${line}/>`)
+  const stakes = [6, 30, 54]
+    .map((x) => `<rect x="${x}" y="5" width="4" height="33" fill="${TIMBER.shade}" ${line}/>`)
     .join('');
   const body = `
-    ${groundShadow(42, 44, 39, 3.4)}
-    <path d="M72 31L82 36" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
-    <path d="M72 31L82 36" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
-    <path d="M80.5 33.5L83 38.5" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M7 14L75 14L72 17H4Z" fill="${TIMBER.grain}" ${line}/>
-    <rect x="4" y="17" width="72" height="17" fill="${TIMBER.base}" ${line}/>
-    <path d="M5 21.5H75M5 29.5H75" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
-    <rect x="4" y="23" width="72" height="5" fill="${color}" ${line}/>
-    <path d="M6 24.4H74" stroke="${shade(color, 1.45)}" stroke-width="1" opacity=".75"/>
+    ${groundShadow(36, 48, 33, 3.4)}
+    <path d="M60 35L70 40" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M60 35L70 40" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M68.5 37.5L71 42.5" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M7 8L63 8L60 11H4Z" fill="${TIMBER.grain}" ${line}/>
+    <rect x="4" y="11" width="56" height="27" fill="${TIMBER.base}" ${line}/>
+    <path d="M5 16.5H59M5 33H59" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
+    <rect x="4" y="22" width="56" height="6" fill="${color}" ${line}/>
+    <path d="M6 23.6H58" stroke="${shade(color, 1.45)}" stroke-width="1" opacity=".75"/>
     ${stakes}
-    <path d="M3 16.2H77" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
-    <path d="M3 16.2H77" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
-    <path d="M74 16V6H78V9" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
-    <path d="M75.5 9H80.5L79.8 15.5H76.2Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
-    ${wheel(17, 35, 9.5)}${wheel(60, 35, 9.5)}`;
-  return { svg: svg(84, 48, body), width: 84, height: 48, anchor: { x: 40, y: 44 }, centreY: 25 };
+    <path d="M3 10.2H61" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M3 10.2H61" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M58 10V1H62V3" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M59.5 3H64.5L63.8 9.5H60.2Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${wheel(15, 39, 9.5)}${wheel(49, 39, 9.5)}`;
+  return { svg: svg(72, 52, body), width: 72, height: 52, anchor: { x: 34, y: 48 }, centreY: 25 };
 }
 
 // ---- Night camp ----
