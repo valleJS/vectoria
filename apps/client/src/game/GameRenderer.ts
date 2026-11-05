@@ -30,7 +30,6 @@ import {
   CARGO_GOLD,
   FORTIFY_BLUE,
   INK,
-  INK_SOFT,
   NEUTRAL_COLOR,
   PARCHMENT,
   RESOURCE_COLORS,
@@ -72,8 +71,8 @@ const GATHER_RING = 28;
 const GATHER_RING_STEP = 20;
 const GATHER_BADGE = 9;
 const GATHER_START_ANGLE = -Math.PI / 3;
-/** Radius (glyph units) of the cargo token on an army carrying resources home. */
-const CARGO_TOKEN = 5;
+/** Height (glyph units) of the cargo tag on an army carrying resources home. */
+const CARGO_TAG = 10;
 /** Foam rings behind a ship: one every WAKE_EVERY_S, fading over WAKE_LIFE_S. */
 const WAKE_EVERY_S = 0.3;
 const WAKE_LIFE_S = 1.8;
@@ -1288,29 +1287,29 @@ export class GameRenderer {
       sprite.cargo.addChild(chest);
     }
     if (!hasResources(army.cargo)) return;
-    // A small round token with the main resource, the load as a little figure beside it: enough to
-    // tell a convoy at a glance without outweighing the troops.
+    // A small tag in the nameplate style (parchment, solid ink rim, italic ink figure) with the
+    // main resource and the total load: tells a convoy at a glance without outweighing the troops.
     const main = RESOURCES.reduce((a, b) => (army.cargo[b] > army.cargo[a] ? b : a));
     const total = RESOURCES.reduce((sum, r) => sum + army.cargo[r], 0);
-    const r = CARGO_TOKEN * u;
+    const h = CARGO_TAG * u;
     const tag = new Container();
     // Just off the figure's right edge (tucked behind it): beside the soldiers, on the tent's
-    // right slope, at the ship's stern, or beside a gather shield.
+    // right slope, at the ship's stern, or beside a gather shield. The icon sits at the origin.
     if (mode === 'badge') tag.position.set(10 * u, -6 * u);
     else if (mode === 'tent') tag.position.set(13 * u, -9 * u);
     else if (mode === 'ship') tag.position.set(21 * u, -18 * u);
     else tag.position.set(20 * u, -13 * u);
-    const token = new Graphics()
-      .circle(0, 0, r)
-      .fill(PARCHMENT)
-      .stroke({ width: 0.7 * u, color: INK, alpha: 0.55 });
-    const icon = artSprite(this.art.resources[main], r * 1.5, true);
-    const amount = this.label(String(total), 7 * u, INK_SOFT, true);
-    amount.style.stroke = { color: PARCHMENT, width: 2 * u, join: 'round' };
+    const icon = artSprite(this.art.resources[main], h * 0.78, true);
+    const amount = this.label(String(total), h * 0.72, INK, true);
     amount.anchor.set(0, 0.5);
-    amount.position.set(r + 0.6 * u, 0.6 * u);
-    tag.addChild(token, icon, amount);
-    tag.alpha = 0.92;
+    amount.position.set(h * 0.5, 0.3 * u);
+    const left = -h * 0.55;
+    const right = amount.x + amount.width + h * 0.32;
+    const pill = new Graphics()
+      .roundRect(left, -h / 2, right - left, h, h / 2)
+      .fill(PARCHMENT)
+      .stroke({ width: Math.max(0.7 * u, h * 0.08), color: INK });
+    tag.addChild(pill, icon, amount);
     sprite.cargo.addChild(tag);
   }
 
