@@ -10,8 +10,11 @@ import { create } from 'zustand';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'closed';
 
-/** Something selectable on the map: a castle, outpost, resource spot, chest, or army. */
-export type Selection = ArmyTarget;
+/**
+ * Something selectable on the map: a castle, outpost, resource spot, chest, or army, or a wagon
+ * of the own night caravan (client-only: not a target, `id` is the wagon's index on the trip).
+ */
+export type Selection = ArmyTarget | { kind: 'caravan'; id: string };
 
 const TOKEN_KEY = 'vectoria.token';
 

@@ -432,6 +432,13 @@ export class GameRenderer {
         selection: { kind: 'chest' as const, id: c.id },
         position: c.position,
       })),
+      ...this.caravans.map((wagon, i) => {
+        const { x, y } = this.caravanFocus(wagon);
+        return {
+          selection: { kind: 'caravan' as const, id: String(i) },
+          position: { x: x / size, y: y / size },
+        };
+      }),
     ];
     const hits = candidates
       .map(({ selection, position }) => ({
@@ -476,6 +483,13 @@ export class GameRenderer {
       y: position.y + (lift * u - pivot.y) * scale.y,
       radius: radius * u * scale.x,
     };
+  }
+
+  /** Centre and radius (world px, at the current piece scale) of a caravan wagon as drawn. */
+  private caravanFocus(wagon: CaravanSprite): { x: number; y: number; radius: number } {
+    const { position, scale } = wagon.container;
+    const u = this.unit;
+    return { x: position.x, y: position.y - 9 * u * scale.y, radius: 21 * u * scale.x };
   }
 
   /** Whether a world point lies on water as drawn (off the map counts as sea). */
@@ -1455,6 +1469,12 @@ export class GameRenderer {
       }
       case 'chest':
         return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);
+      case 'caravan': {
+        const wagon = this.caravans[Number(selection.id)];
+        return wagon
+          ? { ...this.caravanFocus(wagon), color: playerColor(view, view.self.id) }
+          : null;
+      }
     }
   }
 

@@ -37,7 +37,15 @@ import {
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
+import {
+  CaravanIcon,
+  CastleIcon,
+  ChestIcon,
+  OutpostIcon,
+  ResourceIcon,
+  SoldiersIcon,
+  SpotIcon,
+} from './icons';
 import { Button, SectionLabel, Tip } from './Panel';
 import { DuoForm } from './Duo';
 import { Locked } from './Routed';
@@ -862,6 +870,28 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
         </>
       );
     }
+    case 'caravan': {
+      const trip = view.self.caravanTrip;
+      const wagon = trip?.wagons[Number(selection.id)];
+      if (!trip || !wagon) return null;
+      const arrival = new Date(trip.arrivesAt).toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return (
+        <>
+          <Title icon={<CaravanIcon color={cssColor(playerColor(view, view.self.id))} size={26} />}>
+            Deine Karawane
+          </Title>
+          <div>Ladung: {formatResources(wagon.load)}</div>
+          <div className="text-ink-soft">Ankunft in der Burg: {arrival} Uhr</div>
+          <p className="mt-1 text-xs text-ink-soft">
+            Bringt das Lager der Stützpunkte über Nacht heim. Sie braucht keine Truppen und kann
+            nicht überfallen werden; ausgeben lässt sich die Ladung, sobald sie in der Burg ist.
+          </p>
+        </>
+      );
+    }
   }
 }
 
@@ -877,6 +907,8 @@ function selectionExists(view: GameView, selection: Selection): boolean {
       return view.spots.some((s) => s.id === selection.id);
     case 'chest':
       return view.chests.some((c) => c.id === selection.id);
+    case 'caravan':
+      return view.self.caravanTrip?.wagons[Number(selection.id)] !== undefined;
   }
 }
 
