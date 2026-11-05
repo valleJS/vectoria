@@ -19,7 +19,7 @@ import {
   gatherShield,
   grassTuft,
   outpost,
-  resourceIcon,
+  cargoPiece,
   rocks,
   ruin,
   ship,
@@ -83,8 +83,8 @@ export interface MapArt {
   /** Small boat for lakes and straits. */
   boat: ArtTexture;
   deposits: Record<SpotKind, ArtTexture>;
-  /** Bare resource icons, for cargo carried by armies. */
-  resources: Record<ResourceType, ArtTexture>;
+  /** Load carried home by armies and the caravan: one icon per resource, shown in a roundel. */
+  cargo: Record<ResourceType, ArtTexture>;
   chest: ArtTexture;
   /** Glint that twinkles around chests. */
   sparkle: ArtTexture;
@@ -295,14 +295,7 @@ export function loadMapArt(): Promise<MapArt> {
       all([0, 1, 2, 3].map(rocks), decor),
       all([0, 1, 2].map(boulder), decor),
       all(SPOT_KINDS.map(deposit), { outline: true }),
-      all(
-        RESOURCES.map((r) => ({
-          svg: resourceIcon(r),
-          width: 64,
-          height: 64,
-          anchor: { x: 32, y: 32 },
-        })),
-      ),
+      all(RESOURCES.map(cargoPiece)),
       all([0, 1.3, 2.6].map(smokePuff)),
       Promise.all([
         rasterise(grassTuft(), decor),
@@ -343,7 +336,7 @@ export function loadMapArt(): Promise<MapArt> {
         SpotKind,
         ArtTexture
       >,
-      resources: byResource(icons),
+      cargo: byResource(icons),
       pieces,
     };
   })();

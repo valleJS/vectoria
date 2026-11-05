@@ -80,8 +80,8 @@ const GATHER_RING = 28;
 const GATHER_RING_STEP = 20;
 const GATHER_BADGE = 9;
 const GATHER_START_ANGLE = -Math.PI / 3;
-/** Height (glyph units) of the cargo tag on an army carrying resources home. */
-const CARGO_TAG = 10;
+/** Diameter (glyph units) of the cargo roundel on an army or wagon carrying resources home. */
+const CARGO_SIZE = 15;
 /** Foam rings behind a ship: one every WAKE_EVERY_S, fading over WAKE_LIFE_S. */
 const WAKE_EVERY_S = 0.3;
 const WAKE_LIFE_S = 1.8;
@@ -140,12 +140,16 @@ function windowLights(
  */
 type FigureMode = 'badge' | 'soldiers' | 'tent' | 'ship';
 
-/** Per figure: lift of its visual centre above the ground point and focus ring radius, glyph units. */
-const FIGURE_FOCUS: Record<FigureMode, readonly [number, number]> = {
-  badge: [0, 13],
-  soldiers: [-12, 22],
-  tent: [-9, 20],
-  ship: [-15, 27],
+/**
+ * Per figure, glyph units: offset of its visual centre from the ground point (x, then y as a
+ * lift) and focus ring radius. The tent's centre sits right of its pole, between the tent and
+ * its campfire.
+ */
+const FIGURE_FOCUS: Record<FigureMode, readonly [number, number, number]> = {
+  badge: [0, 0, 13],
+  soldiers: [0, -12, 22],
+  tent: [2.5, -9, 19],
+  ship: [0, -15, 27],
 };
 
 interface ArmySprite {
@@ -153,6 +157,8 @@ interface ArmySprite {
   /** The latest server state of the army. */
   army: ArmyView;
   color: number;
+  /** A duo army: the other partner's colour, for the right ribbon tail of its plate. */
+  partnerColor: number | null;
   /** Night camp (marching armies pitch tents). */
   camp: boolean;
   mode: FigureMode;
@@ -196,7 +202,7 @@ interface ArmySprite {
 }
 
 /** Drawn width of a night caravan wagon, world px at piece scale 1. */
-const CARAVAN_WIDTH = 32;
+const CARAVAN_WIDTH = 41;
 
 /**
  * A wagon of the own night caravan, rolling from its outpost to the home castle by real time
@@ -209,6 +215,8 @@ interface CaravanSprite {
   route: PointData[];
   /** Lantern light at the front hoop, brighter the darker it is. */
   light: Sprite;
+  /** Cargo roundel over the canvas; follows the canvas when the wagon turns. */
+  tag: Container;
   stride: number;
 }
 
@@ -276,15 +284,25 @@ export class GameRenderer {
   private readonly alertLayer = new Container();
   private alerts: SiteAlert[] = [];
   private alertsKey = '';
-  /** Glints twinkling on chests and gold mines, each with its own phase. */
-  private sparkles: { sprite: Sprite; phase: number; size: number; speed: number }[] = [];
+  /**
+   * Glints twinkling on chests and gold mines, each with its own phase; chest glints also turn,
+   * gold mine glints only blink.
+   */
+  private sparkles: {
+    sprite: Sprite;
+    phase: number;
+    size: number;
+    speed: number;
+    spin: boolean;
+  }[] = [];
   /** Warm shine pulsing under gold mines. */
   private shines: { sprite: Sprite; phase: number }[] = [];
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
   /**
-   * Focus ring around the selection: a parchment band with orbiting studs on the ground under
-   * the piece, and four arrowheads over the sites (under labels and armies) that point at it.
+   * Focus ring around the selection: a soft disc on the ground under the piece, and over
+   * everything else on the map the parchment band with orbiting studs and four arrowheads that
+   * point at it, so no site, label or army ever hides it.
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
@@ -339,9 +357,8 @@ export class GameRenderer {
     this.app = app;
     this.art = art;
     this.night = new NightScene(art);
-    // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus ring),
-    // sites and their lamp light, deposits, the focus arrows (over every site, under every label),
-    // labels, alarms, armies, fireflies.
+    // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
+    // sites and their lamp light, deposits, labels, alarms, armies, fireflies, the focus ring.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -354,11 +371,11 @@ export class GameRenderer {
       this.siteLayer,
       this.night.glowOver,
       this.spotLayer,
-      this.focusTop,
       this.labelLayer,
       this.alertLayer,
       this.armyLayer,
       this.night.fireflies,
+      this.focusTop,
     );
     app.stage.addChild(this.world);
 
@@ -432,6 +449,13 @@ export class GameRenderer {
         selection: { kind: 'chest' as const, id: c.id },
         position: c.position,
       })),
+      ...this.caravans.map((wagon, i) => {
+        const { x, y } = this.caravanFocus(wagon);
+        return {
+          selection: { kind: 'caravan' as const, id: String(i) },
+          position: { x: x / size, y: y / size },
+        };
+      }),
     ];
     const hits = candidates
       .map(({ selection, position }) => ({
@@ -470,11 +494,22 @@ export class GameRenderer {
   private armyFocus(sprite: ArmySprite): { x: number; y: number; radius: number } {
     const { position, pivot, scale } = sprite.container;
     const u = this.unit;
-    const [lift, radius] = FIGURE_FOCUS[sprite.mode];
+    const [dx, lift, radius] = FIGURE_FOCUS[sprite.mode];
     return {
-      x: position.x - pivot.x * scale.x,
+      x: position.x + (dx * u - pivot.x) * scale.x,
       y: position.y + (lift * u - pivot.y) * scale.y,
       radius: radius * u * scale.x,
+    };
+  }
+
+  /** Centre and radius (world px, at the current piece scale) of a caravan wagon as drawn. */
+  private caravanFocus(wagon: CaravanSprite): { x: number; y: number; radius: number } {
+    const { position, scale } = wagon.container;
+    const u = this.unit;
+    return {
+      x: position.x + u * scale.x,
+      y: position.y - 13 * u * scale.y,
+      radius: 24 * u * scale.x,
     };
   }
 
@@ -562,7 +597,7 @@ export class GameRenderer {
 
   /**
    * The own night caravan: one wagon per outpost it set out from, on the land route to the home
-   * castle, with its load as a cargo tag. Rebuilt only when the trip (or the colour) changes.
+   * castle, with its load beside it (`cargoPile`). Rebuilt only when the trip (or the colour) changes.
    */
   private drawCaravan(view: GameView | null, selfId: string | null): void {
     const trip = view?.self.caravanTrip ?? null;
@@ -594,15 +629,16 @@ export class GameRenderer {
         (CARAVAN_LANTERN.y + art.pad - art.anchor.y) * k,
       );
       figure.addChild(light, sprite);
-      const tag = this.cargoTag(wagon.load, u);
-      tag.position.set(10 * u, -26 * u);
-      container.addChild(tag, figure);
+      const tag = this.cargoPile(wagon.load, u);
+      tag.position.set(-9 * u, -28 * u);
+      container.addChild(figure, tag);
       this.armyLayer.addChild(container);
       this.caravans.push({
         container,
         figure,
         route: path.map((p) => this.px(p)),
         light,
+        tag,
         stride: Math.random() * Math.PI * 2,
       });
     }
@@ -625,6 +661,7 @@ export class GameRenderer {
       if (Math.abs(ahead.x - at.x) > 0.25 * Math.abs(ahead.y - at.y)) {
         wagon.figure.scale.x = ahead.x < at.x ? -1 : 1;
       }
+      wagon.tag.x = -9 * u * wagon.figure.scale.x;
       // Rocks gently on the road; the lantern sways and glows only in the dark.
       wagon.figure.y = -Math.abs(Math.sin(seconds * 3 + wagon.stride)) * 0.8 * u;
       wagon.light.alpha = this.night.amount * (0.55 + 0.25 * Math.sin(seconds * 5 + wagon.stride));
@@ -712,6 +749,7 @@ export class GameRenderer {
             phase: Math.random() * Math.PI * 2,
             size: g.size * k,
             speed: 2.6 + Math.random() * 1.6,
+            spin: false,
           });
         }
       }
@@ -735,6 +773,7 @@ export class GameRenderer {
           phase: Math.random() * Math.PI * 2,
           size: size * u,
           speed: 2.2,
+          spin: true,
         });
       }
     }
@@ -831,7 +870,8 @@ export class GameRenderer {
    * The one label style on the map: italic ink on a parchment plate, with ribbon tails in the
    * owner's colour (none for `null`). `top` is the plate's top edge, `size` the font size; all
    * proportions follow the font size, so castle, outpost and army plates match. `home` puts a
-   * gold star before the text (the viewer's own castle).
+   * gold star before the text (the viewer's own castle); `right` gives the right tail its own
+   * colour (a duo army: one tail per partner).
    */
   private nameplate(
     text: string,
@@ -841,7 +881,8 @@ export class GameRenderer {
       top = 23 * u,
       size = 13 * u,
       home = false,
-    }: { top?: number; size?: number; home?: boolean } = {},
+      right,
+    }: { top?: number; size?: number; home?: boolean; right?: number } = {},
   ): Container {
     const label = this.label(text, size, INK, true);
     const star = home ? size * 1.05 : 0;
@@ -867,7 +908,7 @@ export class GameRenderer {
             edge,
             top + drop + h,
           ])
-          .fill(color)
+          .fill(side === 1 && right !== undefined ? right : color)
           .stroke({ width: line, color: INK });
       }
     }
@@ -941,7 +982,7 @@ export class GameRenderer {
         const figure = new Container();
         const plate = new Container();
         const cargo = new Container();
-        container.addChild(cargo, figure, plate);
+        container.addChild(figure, cargo, plate);
         container.position.copyFrom(target);
         const offset = offsets.get(army.id) ?? { x: 0, y: 0 };
         container.pivot.set(-offset.x, -offset.y);
@@ -950,6 +991,7 @@ export class GameRenderer {
           container,
           army,
           color,
+          partnerColor: null,
           camp: false,
           mode: 'soldiers',
           figure,
@@ -972,6 +1014,7 @@ export class GameRenderer {
       }
       sprite.army = army;
       sprite.color = color;
+      sprite.partnerColor = army.duoWith ? playerColor(view, army.duoWith) : null;
       sprite.target = target;
       // At night marching armies pitch camp: a tent with a campfire instead of soldiers.
       sprite.camp = this.night.night && !gathering;
@@ -1047,8 +1090,8 @@ export class GameRenderer {
       this.drawCargo(sprite, army, u, mode);
     }
     const count = army.troops === null ? '?' : String(army.troops);
-    const troops = army.duoWith && mode !== 'badge' ? `Duo · ${count}` : count;
-    const text = `${mode === 'badge'}:${troops}`;
+    const troops = count;
+    const text = `${mode === 'badge'}:${troops}:${sprite.partnerColor}`;
     if (text !== sprite.text) {
       sprite.text = text;
       for (const child of sprite.plate.removeChildren()) child.destroy({ children: true });
@@ -1064,7 +1107,14 @@ export class GameRenderer {
         count.position.set(0, 0.6 * u);
         sprite.plate.addChild(count);
       } else {
-        sprite.plate.addChild(this.nameplate(troops, color, u, { top: 2 * u, size: 11 * u }));
+        // A duo army's plate flies both partners' colours: owner left, partner right.
+        sprite.plate.addChild(
+          this.nameplate(troops, color, u, {
+            top: 2 * u,
+            size: 11 * u,
+            right: sprite.partnerColor ?? undefined,
+          }),
+        );
       }
     }
   }
@@ -1379,8 +1429,8 @@ export class GameRenderer {
   }
 
   /**
-   * A parchment tag with the main resource's icon and the total load (beside the soldiers, the
-   * ship or the badge while gathering); a small chest while the army brings one home.
+   * The load beside the soldiers, the tent, the ship or the badge while gathering (`cargoPile`);
+   * a small chest while the army brings one home.
    */
   private drawCargo(sprite: ArmySprite, army: ArmyView, u: number, mode: FigureMode): void {
     for (const child of sprite.cargo.removeChildren()) child.destroy({ children: true });
@@ -1390,38 +1440,61 @@ export class GameRenderer {
       sprite.cargo.addChild(chest);
     }
     if (!hasResources(army.cargo)) return;
-    const tag = this.cargoTag(army.cargo, u);
-    // Just off the figure's right edge (tucked behind it): beside the soldiers, on the tent's
-    // right slope, at the ship's stern, or beside a gather shield. The icon sits at the origin.
-    if (mode === 'badge') tag.position.set(10 * u, -6 * u);
-    else if (mode === 'tent') tag.position.set(13 * u, -9 * u);
-    else if (mode === 'ship') tag.position.set(21 * u, -18 * u);
-    else tag.position.set(20 * u, -13 * u);
+    const tag = this.cargoPile(army.cargo, u);
+    // In front of the figure at its upper right shoulder, like a badge: beside the soldiers, at
+    // the tent's right slope, over the ship's stern, or beside a gather shield.
+    if (mode === 'badge') tag.position.set(11 * u, -8 * u);
+    else if (mode === 'tent') tag.position.set(15 * u, -15 * u);
+    else if (mode === 'ship') tag.position.set(21 * u, -24 * u);
+    else tag.position.set(17 * u, -22 * u);
     sprite.cargo.addChild(tag);
   }
 
   /**
-   * A small tag in the nameplate style (parchment, solid ink rim, italic ink figure) with the main
-   * resource and the total load: tells a convoy at a glance without outweighing the troops. The
-   * icon sits at (0, 0).
+   * What a convoy carries, as a roundel in the nameplate style (parchment disc, ink rim, a thin
+   * inner ring) centred at (0, 0), holding one icon per resource it has: one centred, two side by
+   * side, three in a triangle. No amounts: the selection panel lists them.
    */
-  private cargoTag(cargo: Resources, u: number): Container {
-    const main = RESOURCES.reduce((a, b) => (cargo[b] > cargo[a] ? b : a));
-    const total = RESOURCES.reduce((sum, r) => sum + cargo[r], 0);
-    const h = CARGO_TAG * u;
-    const tag = new Container();
-    const icon = artSprite(this.art.resources[main], h * 0.78, true);
-    const amount = this.label(String(total), h * 0.72, INK, true);
-    amount.anchor.set(0, 0.5);
-    amount.position.set(h * 0.5, 0.3 * u);
-    const left = -h * 0.55;
-    const right = amount.x + amount.width + h * 0.32;
-    const pill = new Graphics()
-      .roundRect(left, -h / 2, right - left, h, h / 2)
-      .fill(PARCHMENT)
-      .stroke({ width: Math.max(0.7 * u, h * 0.08), color: INK });
-    tag.addChild(pill, icon, amount);
-    return tag;
+  private cargoPile(cargo: Resources, u: number): Container {
+    const r = (CARGO_SIZE / 2) * u;
+    const carried = RESOURCES.filter((res) => cargo[res] > 0);
+    const roundel = new Container();
+    roundel.addChild(
+      new Graphics()
+        .circle(0, 0, r)
+        .fill(PARCHMENT)
+        .stroke({ width: 1.3 * u, color: INK })
+        .circle(0, 0, r - 1.7 * u)
+        .stroke({ width: 0.5 * u, color: INK, alpha: 0.45 }),
+    );
+    const layouts: Record<number, { size: number; at: [number, number][] }> = {
+      1: { size: 1.25, at: [[0, 0]] },
+      2: {
+        size: 0.95,
+        at: [
+          [-0.4, 0.04],
+          [0.4, -0.04],
+        ],
+      },
+      3: {
+        size: 0.78,
+        at: [
+          [0, -0.38],
+          [-0.4, 0.3],
+          [0.4, 0.3],
+        ],
+      },
+    };
+    const layout = layouts[carried.length];
+    if (layout) {
+      carried.forEach((res, i) => {
+        const [x, y] = layout.at[i]!;
+        const icon = artSprite(this.art.cargo[res], layout.size * r, true);
+        icon.position.set(x * r, y * r);
+        roundel.addChild(icon);
+      });
+    }
+    return roundel;
   }
 
   /**
@@ -1455,14 +1528,20 @@ export class GameRenderer {
       }
       case 'chest':
         return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);
+      case 'caravan': {
+        const wagon = this.caravans[Number(selection.id)];
+        return wagon
+          ? { ...this.caravanFocus(wagon), color: playerColor(view, view.self.id) }
+          : null;
+      }
     }
   }
 
   /**
-   * Focus ring, redrawn every frame: on the ground a soft disc and a parchment band edged in ink
-   * with a thread and four orbiting studs in the accent colour; over the sites four arrowheads
-   * on the diagonals that breathe toward the piece. A new selection locks on: the ring shrinks
-   * onto it from a little wider while fading in.
+   * Focus ring, redrawn every frame: on the ground a soft disc; on top of the map a parchment
+   * band edged in ink with a thread and four orbiting studs in the accent colour, and four
+   * arrowheads on the diagonals that breathe toward the piece. A new selection locks on: the ring
+   * shrinks onto it from a little wider while fading in.
    */
   private drawFocus(seconds: number, now: number, tint: number): void {
     const ground = this.focusGround.clear();
@@ -1487,9 +1566,8 @@ export class GameRenderer {
       g.tint = tint;
     }
 
-    ground
-      .circle(0, 0, r)
-      .fill({ color, alpha: 0.14 })
+    ground.circle(0, 0, r).fill({ color, alpha: 0.14 });
+    top
       .circle(0, 0, r)
       .stroke({ width: 5.4 * s, color: INK, alpha: 0.85 })
       .circle(0, 0, r)
@@ -1504,7 +1582,7 @@ export class GameRenderer {
       const d = 3.6 * s;
       const along = { x: Math.cos(a) * d, y: Math.sin(a) * d };
       const across = { x: -Math.sin(a) * d * 0.7, y: Math.cos(a) * d * 0.7 };
-      ground
+      top
         .poly([
           x + along.x,
           y + along.y,
@@ -1679,11 +1757,11 @@ export class GameRenderer {
       fire.flame.scale.set(fire.scale * (2 - flicker), fire.scale * flicker * 1.1);
       fire.light.alpha = 0.35 + 0.4 * flicker;
     }
-    for (const { sprite, phase, size, speed } of this.sparkles) {
+    for (const { sprite, phase, size, speed, spin } of this.sparkles) {
       const twinkle = Math.max(0, Math.sin(seconds * speed + phase));
       sprite.alpha = twinkle;
       sprite.scale.set(((0.4 + 0.6 * twinkle) * size) / this.art.sparkle.width);
-      sprite.rotation = seconds * 0.8 + phase;
+      if (spin) sprite.rotation = seconds * 0.8 + phase;
     }
     for (const { sprite, phase } of this.shines) {
       // Brighter in the dark, where the gold catches the moon.

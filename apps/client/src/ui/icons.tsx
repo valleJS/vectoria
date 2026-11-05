@@ -1,11 +1,15 @@
 import { RESOURCES, type CardType, type ResourceType, type SpotKind } from '@vectoria/shared';
 import {
   alarm,
+  armyShip,
+  gatherShield,
+  tent,
   caravanWagon,
   castle,
   chest,
   dataUrl,
   deposit,
+  duoShields,
   outpost,
   resourceIcon,
   ruin,
@@ -157,9 +161,42 @@ export function SoldiersIcon({ size = 22, color }: { size?: number; color: strin
   return <ArtIcon id={`soldiers${color}`} size={size} make={() => soldiers(color).svg} />;
 }
 
+/** A deposit or the trader as drawn on the map. */
+export function DepositIcon({ size = 30, kind }: { size?: number; kind: SpotKind }) {
+  return <ArtIcon id={`deposit${kind}`} size={size} make={() => deposit(kind).svg} />;
+}
+
+/** An army's night camp: a tent in the owner's colour. */
+export function TentIcon({ size = 22, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`tent${color}`} size={size} make={() => tent(color).svg} />;
+}
+
+/** An army at sea (Seeweg): a ship in the owner's colour. */
+export function ShipIcon({ size = 22, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`ship${color}`} size={size} make={() => armyShip(color).svg} />;
+}
+
+/** Troops loading at a deposit: the map's shield badge in the owner's colour. */
+export function GatherBadgeIcon({ size = 18, color }: { size?: number; color: string }) {
+  return <ArtIcon id={`gather${color}`} size={size} make={() => gatherShield(color).svg} />;
+}
+
 /** A wagon of the night caravan in the owner's colour. */
 export function CaravanIcon({ size = 22, color }: { size?: number; color: string }) {
   return <ArtIcon id={`caravan${color}`} size={size} make={() => caravanWagon(color).svg} />;
+}
+
+/** A duo attack: two shields in the partners' colours over crossed spears. */
+export function DuoIcon({
+  size = 26,
+  left,
+  right,
+}: {
+  size?: number;
+  left: string;
+  right: string;
+}) {
+  return <ArtIcon id={`duo${left}${right}`} size={size} make={() => duoShields(left, right).svg} />;
 }
 
 /** The map's treasure chest. */

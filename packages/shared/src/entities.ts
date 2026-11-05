@@ -106,7 +106,10 @@ export interface ArmyView {
   /** Route still ahead, starting at `position`, along land. Null when hidden by stealth. */
   route: Vec2[] | null;
   target: ArmyTarget | null;
-  /** Game clock when the current leg started / ends (for `gathering`: loading done). */
+  /**
+   * Game clock when the current leg started / ends (for `gathering`: loading done). When hidden by
+   * stealth, `arriveClock` equals `departClock`: the arrival time is not shown.
+   */
   departClock: number;
   arriveClock: number;
   /** Resources carried (gathered, plundered, or moved between bases). Always visible. */
@@ -211,6 +214,8 @@ export interface SelfState {
   caravanTrip: CaravanTrip | null;
   /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
   barefootUntil: number | null;
+  /** Victory points bought this gameday (capped at `VICTORY_POINTS_PER_GAMEDAY`). */
+  victoryPointsToday: number;
   log: LogEntry[];
 }
 

@@ -37,7 +37,16 @@ import {
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
-import { SoldiersIcon, CastleIcon, ChestIcon, OutpostIcon, ResourceIcon, SpotIcon } from './icons';
+import {
+  CaravanIcon,
+  CastleIcon,
+  ChestIcon,
+  DuoIcon,
+  OutpostIcon,
+  ResourceIcon,
+  SoldiersIcon,
+  SpotIcon,
+} from './icons';
 import { Button, SectionLabel, Tip } from './Panel';
 import { DuoForm } from './Duo';
 import { Locked } from './Routed';
@@ -100,6 +109,37 @@ function barefoot(view: GameView): boolean {
   return (view.self.barefootUntil ?? 0) > view.clock.clock;
 }
 
+/** What the trader does, for the side panel and the trade menu. */
+export const TRADER_TEXT =
+  'Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin und zurück — beladen langsamer und überfallbar.';
+
+/** The trade form for the trader spot (the centred trade menu). */
+export function TradeForm({
+  view,
+  spotId,
+  onSent,
+}: {
+  view: GameView;
+  spotId: string;
+  onSent?: () => void;
+}) {
+  const spot = view.spots.find((s) => s.id === spotId);
+  if (!spot) return null;
+  return (
+    <SendForm
+      key={spotId}
+      view={view}
+      target={{ kind: 'spot', id: spotId }}
+      position={spot.position}
+      verb="Handeln"
+      bases={ownBases(view)}
+      defaultTroops={10}
+      trade
+      onSent={onSent}
+    />
+  );
+}
+
 function SendForm({
   view,
   target,
@@ -110,6 +150,7 @@ function SendForm({
   minTroops = 1,
   preview,
   trade = false,
+  onSent,
 }: {
   view: GameView;
   target: ArmyTarget;
@@ -122,8 +163,10 @@ function SendForm({
   minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
-  /** Target is the trader: carry stone and choose the gold/wood split. */
+  /** Target is the trader: carry stone and choose the gold/wood split (two columns). */
   trade?: boolean;
+  /** Called once the march is sent (the trade menu closes then). */
+  onSent?: () => void;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
@@ -179,6 +222,7 @@ function SendForm({
       ...(trade ? { trade: { gold, wood } } : {}),
     });
     setStone(0);
+    onSent?.();
   };
 
   const baseSelect = bases.length > 1 && (
@@ -209,7 +253,6 @@ function SendForm({
 
   const troopFields = (
     <div className="space-y-1">
-      {trade && <SectionLabel>Träger</SectionLabel>}
       <Slider
         min={available > 0 ? 1 : 0}
         max={Math.max(available, 1)}
@@ -260,7 +303,6 @@ function SendForm({
           <b>{wood}</b>
         </span>
       </div>
-      {baseSelect}
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Label htmlFor="trade-stone" className="gap-1">
@@ -358,10 +400,17 @@ function SendForm({
         />
       )}
       {trade ? (
-        <>
-          {tradeFields}
-          {troopFields}
-        </>
+        <div className="grid gap-x-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <SectionLabel>Tausch</SectionLabel>
+            {tradeFields}
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>Träger</SectionLabel>
+            {baseSelect}
+            {troopFields}
+          </div>
+        </div>
       ) : (
         <>
           {baseSelect}
@@ -564,7 +613,19 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
   const ownerRouted = view.players.find((p) => p.id === army.ownerId)?.routed ?? false;
   return (
     <>
-      <Title icon={<SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />}>
+      <Title
+        icon={
+          army.duoWith ? (
+            <DuoIcon
+              left={cssColor(playerColor(view, army.ownerId))}
+              right={cssColor(playerColor(view, army.duoWith))}
+              size={30}
+            />
+          ) : (
+            <SoldiersIcon color={cssColor(playerColor(view, army.ownerId))} />
+          )
+        }
+      >
         {army.duoWith
           ? `Duo-Zug: ${own ? 'du' : playerName(view, army.ownerId)} + ${army.duoWith === view.self.id ? 'du' : playerName(view, army.duoWith)}`
           : `Heerzug von ${own ? 'dir' : playerName(view, army.ownerId)}`}
@@ -573,7 +634,8 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
       </div>
       <div className="text-ink-soft">
-        Ziel: {describeTarget(view, army.target)} · noch {formatGameDuration(remaining)}
+        Ziel: {describeTarget(view, army.target)}
+        {army.to !== null && ` · noch ${formatGameDuration(remaining)}`}
       </div>
       {carrying && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">
@@ -792,20 +854,16 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
         return (
           <>
             <Title icon={<SpotIcon kind="trader" size={30} />}>Händler</Title>
-            <div className="text-ink-soft">
-              Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin
-              und zurück — beladen langsamer und überfallbar.
-            </div>
-            <SendForm
-              key={selection.id}
-              view={view}
-              target={selection}
-              position={spot.position}
-              verb="Handeln"
-              bases={bases}
-              defaultTroops={10}
-              trade
-            />
+            <div className="text-ink-soft">{TRADER_TEXT}</div>
+            <Locked className="mt-2">
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => useGameStore.getState().setTraderMenu(true)}
+              >
+                Handel öffnen
+              </Button>
+            </Locked>
           </>
         );
       }
@@ -862,6 +920,28 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
         </>
       );
     }
+    case 'caravan': {
+      const trip = view.self.caravanTrip;
+      const wagon = trip?.wagons[Number(selection.id)];
+      if (!trip || !wagon) return null;
+      const arrival = new Date(trip.arrivesAt).toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return (
+        <>
+          <Title icon={<CaravanIcon color={cssColor(playerColor(view, view.self.id))} size={26} />}>
+            Deine Karawane
+          </Title>
+          <div>Ladung: {formatResources(wagon.load)}</div>
+          <div className="text-ink-soft">Ankunft in der Burg: {arrival} Uhr</div>
+          <p className="mt-1 text-xs text-ink-soft">
+            Bringt das Lager der Stützpunkte über Nacht heim. Sie braucht keine Truppen und kann
+            nicht überfallen werden; ausgeben lässt sich die Ladung, sobald sie in der Burg ist.
+          </p>
+        </>
+      );
+    }
   }
 }
 
@@ -877,6 +957,8 @@ function selectionExists(view: GameView, selection: Selection): boolean {
       return view.spots.some((s) => s.id === selection.id);
     case 'chest':
       return view.chests.some((c) => c.id === selection.id);
+    case 'caravan':
+      return view.self.caravanTrip?.wagons[Number(selection.id)] !== undefined;
   }
 }
 

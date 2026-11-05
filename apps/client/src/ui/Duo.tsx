@@ -9,17 +9,23 @@ import {
   type PactView,
   type Vec2,
 } from '@vectoria/shared';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowRightIcon } from 'lucide-react';
 import {
+  cssColor,
   describeTarget,
   formatGameDuration,
   ownBases,
+  playerColor,
+  playerHeraldry,
   playerName,
   type BaseInfo,
 } from '../game/format';
 import { pactsToAnswer } from '../game/duo';
+import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore } from '../state/store';
+import { CastleIcon, DuoIcon, OutpostIcon, ShieldIcon } from './icons';
 import { Button } from './Panel';
 import { Locked } from './Routed';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -60,13 +66,15 @@ function stationed(view: GameView, playerId: string): number {
     .reduce((sum, o) => sum + o.troops, home);
 }
 
-/** "Dauer 7:30 h (Offenlegung des Ziels nach 3:10 h)" for a plan, or why there is none. */
+/** A planned duo's timing (game ms from the start): meeting point, attack; or why there is none. */
+type DuoTimes = { meetMs: number; totalMs: number } | 'no-route' | null;
+
 function useDuoTimes(
   map: MapData | null,
   view: GameView,
   groups: { playerId: string; from: string | null }[],
   target: ArmyTarget,
-): string {
+): DuoTimes {
   const signature = JSON.stringify(groups);
   return useMemo(() => {
     const to = targetPosition(view, target);
@@ -74,13 +82,148 @@ function useDuoTimes(
       const position = basePosition(view, g.playerId, g.from);
       return position ? [{ position, speed: pace(view, g.playerId) }] : [];
     });
-    if (!map || !to || sources.length === 0) return '';
+    if (!map || !to || sources.length === 0) return null;
     const plan = planDuo(map, sources, to);
-    if (!plan) return 'Kein Landweg für dieses Duo.';
-    return `Dauer ${formatGameDuration(plan.totalMs)} (Offenlegung des Ziels nach ${formatGameDuration(plan.meetMs)})`;
+    return plan ? { meetMs: plan.meetMs, totalMs: plan.totalMs } : 'no-route';
     // Bases and paces barely change; recompute when the picked groups or the target do.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, signature, target.kind, target.id]);
+}
+
+const colorOf = (view: GameView, playerId: string | undefined) =>
+  cssColor(playerId ? playerColor(view, playerId) : NEUTRAL_COLOR);
+
+/** The emblem with the partners' colours: initiator left, partner right (neutral until chosen). */
+function Emblem({
+  view,
+  initiatorId,
+  partnerId,
+  size = 34,
+}: {
+  view: GameView;
+  initiatorId: string;
+  partnerId: string | undefined;
+  size?: number;
+}) {
+  return <DuoIcon left={colorOf(view, initiatorId)} right={colorOf(view, partnerId)} size={size} />;
+}
+
+/** Heading of a duo block: emblem and title in the selection panel's heading style. */
+function DuoHeading({ emblem, children }: { emblem: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 text-base italic">
+      {emblem}
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
+/** One side of the duo: shield in the player's colour and the name ("du" for the viewer). */
+function Side({ view, playerId }: { view: GameView; playerId: string | undefined }) {
+  const name = !playerId ? '…' : playerId === view.self.id ? 'du' : playerName(view, playerId);
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      <ShieldIcon color={colorOf(view, playerId)} size={14} />
+      <b>{name}</b>
+    </span>
+  );
+}
+
+/** Who attacks whom: both partners' shields, an arrow, and the target with its map art. */
+function DuoLine({
+  view,
+  initiatorId,
+  partnerId,
+  target,
+}: {
+  view: GameView;
+  initiatorId: string;
+  partnerId: string | undefined;
+  target: ArmyTarget;
+}) {
+  const outpost =
+    target.kind === 'outpost' ? view.outposts.find((o) => o.id === target.id) : undefined;
+  const icon =
+    target.kind === 'castle' ? (
+      <CastleIcon
+        color={colorOf(view, target.id)}
+        style={playerHeraldry(view, target.id).style}
+        size={22}
+      />
+    ) : (
+      <OutpostIcon color={outpost?.ownerId ? colorOf(view, outpost.ownerId) : null} size={20} />
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <Side view={view} playerId={initiatorId} />
+      <span className="text-ink-soft">+</span>
+      <Side view={view} playerId={partnerId} />
+      <ArrowRightIcon className="size-3.5 shrink-0 text-ink-soft" />
+      <span className="inline-flex items-center gap-1">
+        {icon}
+        <span>{describeTarget(view, target)}</span>
+      </span>
+    </div>
+  );
+}
+
+/** The duo's strength: one bar split in the partners' colours, each share and the total. */
+function StrengthBar({
+  view,
+  parts,
+}: {
+  view: GameView;
+  parts: { playerId: string | undefined; troops: number }[];
+}) {
+  const total = parts.reduce((sum, p) => sum + p.troops, 0);
+  return (
+    <div>
+      <div className="flex h-2.5 overflow-hidden rounded-[2px] border border-ink/80 bg-ink/10">
+        {parts.map((p, i) => (
+          <div
+            key={i}
+            className="h-full border-ink/60 not-last:border-r"
+            style={{ flexGrow: p.troops, backgroundColor: colorOf(view, p.playerId) }}
+          />
+        ))}
+      </div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-ink-soft tabular-nums">
+        {parts.map((p, i) => (
+          <span key={i} className="inline-flex items-center gap-0.5">
+            {i > 0 && <span className="mr-0.5">+</span>}
+            <ShieldIcon color={colorOf(view, p.playerId)} size={11} />
+            <b className="text-ink">{p.troops}</b>
+          </span>
+        ))}
+        <span>
+          = <b className="text-ink">{total}</b> Truppen
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** A small parchment chip for one moment of the duo (meeting point, attack). */
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-[3px] border border-ink/35 bg-parchment/60 px-1.5 py-px text-xs">
+      {children}
+    </span>
+  );
+}
+
+/** Planned timing as chips, or why there is no plan. */
+function TimeChips({ times }: { times: DuoTimes }) {
+  if (times === null) return null;
+  if (times === 'no-route') {
+    return <div className="text-xs text-seal italic">Kein Landweg für dieses Duo.</div>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      <Chip>Treffpunkt in {formatGameDuration(times.meetMs)}</Chip>
+      <Chip>Angriff in {formatGameDuration(times.totalMs)}</Chip>
+    </div>
+  );
 }
 
 /** Troop inputs per own base; returns the picks (bases with troops) and their sum. */
@@ -178,6 +321,7 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
     return (
       <Locked className="mt-2">
         <Button className="w-full" onClick={() => setOpen(true)} disabled={partners.length === 0}>
+          <DuoIcon left={colorOf(view, view.self.id)} right={cssColor(NEUTRAL_COLOR)} size={20} />
           Duo-Angreifen
         </Button>
       </Locked>
@@ -186,7 +330,9 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
   const valid = partnerId !== undefined && ownTroops > 0 && partnerTroops > 0;
   return (
     <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
-      <div className="font-bold">Duo-Angriff</div>
+      <DuoHeading emblem={<Emblem view={view} initiatorId={view.self.id} partnerId={partnerId} />}>
+        Duo-Angriff
+      </DuoHeading>
       <p className="text-xs text-ink-soft">
         Ihr trefft euch auf kürzestem Weg, vereint euch und greift gemeinsam an. Bis zum Treffen
         sieht niemand das Ziel. Beute und Truhe teilt ihr nach Truppen; abbrechen geht nur
@@ -204,7 +350,8 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
           ))}
         </SelectContent>
       </Select>
-      <div className="text-ink-soft">Deine Truppen ({ownTroops}):</div>
+      <DuoLine view={view} initiatorId={view.self.id} partnerId={partnerId} target={target} />
+      <div className="text-xs text-ink-soft">Deine Truppen:</div>
       <SourcePicker bases={bases} picks={picks} onChange={setPicks} />
       {partnerId && (
         <div>
@@ -224,7 +371,14 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
           />
         </div>
       )}
-      {times && <div className="text-ink-soft">{times}</div>}
+      <StrengthBar
+        view={view}
+        parts={[
+          { playerId: view.self.id, troops: ownTroops },
+          { playerId: partnerId, troops: partnerId ? partnerTroops : 0 },
+        ]}
+      />
+      <TimeChips times={times} />
       <div className="flex justify-between gap-2">
         <Button onClick={() => setOpen(false)}>Abbrechen</Button>
         <Button
@@ -270,27 +424,43 @@ function PactItem({ view, pact }: { view: GameView; pact: PactView }) {
     ],
     pact.target,
   );
-  const target = describeTarget(view, pact.target);
-  const shares = `${pact.initiatorTroops} von ${incoming ? other : 'dir'} + ${pact.partnerTroops} von ${incoming ? 'dir' : other}`;
   const now = view.clock.clock;
+  const heading =
+    pact.status === 'offered'
+      ? incoming
+        ? `${other} lädt dich ein`
+        : `Dein Angebot an ${other}`
+      : pact.status === 'marching'
+        ? `Duo mit ${other} · unterwegs`
+        : `Duo mit ${other} · vereint`;
 
   return (
-    <li className="space-y-1.5 py-2">
+    <li
+      className={`space-y-1.5 py-2 ${answer ? '-mx-3 border-l-[3px] border-seal bg-seal/5 pr-3 pl-[9px]' : ''}`}
+    >
+      <DuoHeading
+        emblem={
+          <Emblem view={view} initiatorId={pact.initiatorId} partnerId={pact.partnerId} size={34} />
+        }
+      >
+        <span className="text-sm">{heading}</span>
+      </DuoHeading>
+      <DuoLine
+        view={view}
+        initiatorId={pact.initiatorId}
+        partnerId={pact.partnerId}
+        target={pact.target}
+      />
+      <StrengthBar
+        view={view}
+        parts={[
+          { playerId: pact.initiatorId, troops: pact.initiatorTroops },
+          { playerId: pact.partnerId, troops: pact.partnerTroops },
+        ]}
+      />
       {pact.status === 'offered' ? (
         <>
-          <div>
-            {incoming ? (
-              <>
-                <b>{other}</b> lädt dich zum Duo-Angriff ein:
-              </>
-            ) : (
-              <>
-                Dein Angebot an <b>{other}</b>:
-              </>
-            )}{' '}
-            {target} · {shares}
-          </div>
-          {times && <div className="text-xs text-ink-soft">{times}</div>}
+          <TimeChips times={times} />
           {answer ? (
             <>
               <div className="text-xs text-ink-soft">
@@ -340,15 +510,18 @@ function PactItem({ view, pact }: { view: GameView; pact: PactView }) {
         </>
       ) : (
         <>
-          <div>
-            Duo mit <b>{other}</b> gegen {target} · {shares}
-          </div>
-          <div className="text-xs text-ink-soft">
-            {pact.status === 'marching' && pact.meetClock !== null
-              ? `Treffpunkt in ${formatGameDuration(Math.max(0, pact.meetClock - now))}`
-              : 'Vereint'}
-            {pact.attackClock !== null &&
-              ` · Angriff in ${pact.status === 'marching' ? 'ca. ' : ''}${formatGameDuration(Math.max(0, pact.attackClock - now))}`}
+          <div className="flex flex-wrap gap-1">
+            {pact.status === 'marching' && pact.meetClock !== null ? (
+              <Chip>Treffpunkt in {formatGameDuration(Math.max(0, pact.meetClock - now))}</Chip>
+            ) : (
+              <Chip>Vereint · Ziel sichtbar</Chip>
+            )}
+            {pact.attackClock !== null && (
+              <Chip>
+                Angriff in {pact.status === 'marching' ? 'ca. ' : ''}
+                {formatGameDuration(Math.max(0, pact.attackClock - now))}
+              </Chip>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-ink-soft italic">

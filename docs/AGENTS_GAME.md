@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-05
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: e5a7d0527e01bab0f76b7937c9ab7a7e3fc88df3
+sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
 ---
 
 # Game rules (prototype)
@@ -61,7 +61,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Resources | wood, stone, gold (`Holz`, `Stein`, `Gold`) |
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
-| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources |
+| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources; at most `VICTORY_POINTS_PER_GAMEDAY` (3) per gameday, counted in `PlayerRecord.victoryPointsBought` and shown as `SelfState.victoryPointsToday` |
 | Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (leaves 18:00, arrives at the next gameday start) |
 | Start | 50 troops, 2 of each resource |
 | Spot layout | `spots.placeBalancedSpots` over the four `SPOT_KINDS`. Hard rules (per castle, nearest spot of each kind, real routes): every spot ≥ `SPOT_NEAR_HOURS` (1 h) from every castle; **exactly one** kind `SPOT_FAR_HOURS`–`SPOT_MAX_HOURS` (2–4 h) away and it is one of `SPOT_FAR_KINDS` (wood/gold), the other three < 2 h; spots ≥ `SPOT_GAP_HOURS` (1 h, straight line) apart, same kind ≥ `SPOT_SAME_GAP_HOURS` (2 h); no inner-land tile farther than `SPOT_HOLE_HOURS` (1.5 h, grid walk) from a spot, castle or outpost. Soft: totals within `SPOT_BALANCE_TOLERANCE_HOURS`, wood/gold far split ~50/50, few spots. Search on the 8-way `distanceField` with margins that carry to real routes (real ≤ grid ≤ real × `GRID_EXCESS`): greedy seed per castle ring (near 1–2 h, far 2–4 h) plus hole fill, then annealing (violation × `HARD` + soft; repair / retype / swap / jitter / jump / add / remove), then a `findPath` polish that never adds violation. `crampedCastles` precheck (no room for 3 spots 1 h apart under 2 h, or no far tile): `createWorld` throws such castle placements away (≤ 20 tries, ≤ 4 full searches); a running game searches anyway (`force`). Annealing runs a fixed step budget (`SEARCH_STEPS` + `SEARCH_STEPS_PER_CASTLE` × castles, ≤ `ATTEMPTS` 4, stops after `VALID_ATTEMPTS` 2 valid ones), not a time box, so a seed gives the same layout on every machine: a re-layout checked offline on a copy of the live save is exactly what the server produces. `evaluate` is the hot loop (flat arrays, no closures). The re-layout runs synchronously at server start before `/healthz` answers, and `deploy.sh` (fixed on the server, not updated by CI) rolls back after ≈ 60 s, so it uses `quick` (first valid attempt): live save, 18 castles ≈ 1.8 s on a dev Mac; the VPS is ≥ 4× slower (a 14 s version timed out there on 2026-11-05). `relayoutSpots` (once per running game, `SPOT_LAYOUT` 6): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
@@ -153,7 +153,8 @@ always keeps at least one troop (`raid`), so the chest always gets home.
 ## Live ticker
 
 `GameState.addFeed` keeps the last 60 public events (marches, battles, gathering returns, chests,
-outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied.
+outposts, gamedays) in `GameView.feed`, written with fog already applied; a stealth march (or
+redirect) is not announced at all.
 
 ## Chests and cards
 
@@ -172,7 +173,7 @@ outposts, gamedays) in `GameView.feed`, written with fog/stealth already applied
 | Card | Use | Effect |
 | ---- | --- | ------ |
 | Nebel (`fog`) | on send | others see `?` for troop count |
-| Tarnung (`stealth`) | on send | others don't see the target |
+| Tarnung (`stealth`) | on send | others don't see the target, route or arrival time (`arriveClock` = `departClock`); the march is not in the ticker |
 | Eilmarsch (`forcedMarch`) | on send | outbound trip takes half as long |
 | Bollwerk (`fortify`) | instant | castle defends ×1.5 for one gameday |
 | Seeweg (`sea`) | on send | outbound path is the straight line `[from, to]`, over water too (`ArmyView.sea`); home, redirects and reroutes go by land again; refused for raids, and armies on water cannot be intercepted (no land path to the meeting point) |

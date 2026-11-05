@@ -31,13 +31,35 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   VICTORY_POINT_BASE_COST,
+  VICTORY_POINTS_PER_GAMEDAY,
+  type ResourceType,
+  type Resources,
 } from '@vectoria/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { compassRose, dataUrl } from '../art/svg';
-import { formatGameDuration, formatPercent, formatResources } from '../game/format';
+import { formatGameDuration, formatPercent } from '../game/format';
+import { HERALDRY } from '../theme/tokens';
 import { useGameStore } from '../state/store';
 import { CardFace } from './CardFace';
-import { CardArt } from './icons';
+import {
+  AlarmIcon,
+  CaravanIcon,
+  CardArt,
+  CastleIcon,
+  ChestIcon,
+  DepositIcon,
+  DuoIcon,
+  GatherBadgeIcon,
+  OnlineDot,
+  OutpostIcon,
+  ResourceIcon,
+  ShipIcon,
+  SoldiersIcon,
+  SpotIcon,
+  StarIcon,
+  SunIcon,
+  TentIcon,
+} from './icons';
 import { Button, Tip } from './Panel';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeftIcon, ChevronRightIcon, MenuIcon } from 'lucide-react';
@@ -73,13 +95,28 @@ function BookGlyph({ size = 44 }: { size?: number }) {
   );
 }
 
+/** The compass rose as a small picture (chapter icon of the map legend). */
+function CompassGlyph() {
+  return <img src={COMPASS_URL} alt="" className="h-5 w-auto" draggable={false} />;
+}
+
+/** Example colours for the pictures: you, an opponent, a partner. */
+const YOU = HERALDRY[0]!;
+const FOE = HERALDRY[1]!;
+const ALLY = HERALDRY[2]!;
+
 /** Running text helpers so chapters read like a printed manual. */
 function P({ children }: { children: ReactNode }) {
   return <p className="mb-2 leading-relaxed">{children}</p>;
 }
 
-function H({ children }: { children: ReactNode }) {
-  return <h3 className="mt-3 mb-1 text-base font-bold italic">{children}</h3>;
+function H({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+  return (
+    <h3 className="mt-4 mb-1.5 flex items-center gap-2 text-base font-bold italic">
+      {icon}
+      {children}
+    </h3>
+  );
 }
 
 function List({ items }: { items: ReactNode[] }) {
@@ -92,11 +129,59 @@ function List({ items }: { items: ReactNode[] }) {
   );
 }
 
-/** "Im Detail": the special and edge cases after a chapter's general part. */
+/** Numbered steps: how something is done, one action per line. */
+function Steps({ items }: { items: ReactNode[] }) {
+  return (
+    <ol className="mb-2 space-y-1.5">
+      {items.map((item, i) => (
+        <li key={i} className="flex gap-2 leading-relaxed">
+          <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-ink bg-seal text-xs font-bold text-parchment not-italic">
+            {i + 1}
+          </span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The one thing to remember from a chapter: a boxed note with a seal-red edge. */
+function Remember({ children }: { children: ReactNode }) {
+  return (
+    <div className="my-3 border border-ink/30 border-l-4 border-l-seal bg-parchment-dark px-3 py-2 leading-relaxed">
+      <b className="mr-1 text-seal italic">Merke:</b>
+      {children}
+    </div>
+  );
+}
+
+/** Pictures with captions: map art on the left, what it means on the right. */
+function Legend({ items }: { items: { art: ReactNode; title: string; text: ReactNode }[] }) {
+  return (
+    <div className="mb-3 grid gap-2 sm:grid-cols-2">
+      {items.map((item) => (
+        <div
+          key={item.title}
+          className="flex items-center gap-3 rounded-[3px] border border-ink/20 bg-parchment-dark/60 px-2 py-1.5"
+        >
+          <span className="grid w-12 shrink-0 place-items-center">{item.art}</span>
+          <span className="leading-snug">
+            <b className="block italic">{item.title}</b>
+            <span className="text-sm">{item.text}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** "Genau genommen": the special and edge cases after a chapter's general part. */
 function Details({ items }: { items: ReactNode[] }) {
   return (
-    <section className="mt-4 border-t border-ink/30 pt-2">
-      <h3 className="mb-1 text-xs font-bold tracking-[0.2em] text-seal uppercase">Im Detail</h3>
+    <section className="mt-5 border-t border-ink/30 pt-2">
+      <h3 className="mb-1 text-xs font-bold tracking-[0.2em] text-seal uppercase">
+        Genau genommen
+      </h3>
       <List items={items} />
     </section>
   );
@@ -132,9 +217,53 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   );
 }
 
+/** The load roundel as on the map: a parchment disc with the icons of what a convoy carries. */
+function CargoRoundel({ resources, size = 36 }: { resources: ResourceType[]; size?: number }) {
+  const icon = resources.length > 1 ? size * 0.36 : size * 0.56;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center gap-px rounded-full border-2 border-ink bg-parchment"
+      style={{ width: size, height: size, borderWidth: size < 24 ? 1.5 : 2 }}
+    >
+      {resources.map((r) => (
+        <ResourceIcon key={r} resource={r} size={icon} />
+      ))}
+    </span>
+  );
+}
+
+/** A resource amount with its icon, inline in running text. */
+function Res({ resource, children }: { resource: ResourceType; children?: ReactNode }) {
+  return (
+    <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap">
+      <ResourceIcon resource={resource} size={15} />
+      {children ?? RESOURCE_NAMES[resource]}
+    </span>
+  );
+}
+
+/** A cost or stock ("1 Holz, 2 Stein, 1 Gold") with resource icons. */
+function Cost({ resources }: { resources: Resources }) {
+  const parts = RESOURCES.filter((r) => resources[r] > 0);
+  return (
+    <span className="whitespace-nowrap">
+      {parts.map((r, i) => (
+        <span key={r}>
+          {i > 0 && ', '}
+          <Res resource={r}>
+            {resources[r]} {RESOURCE_NAMES[r]}
+          </Res>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 interface Chapter {
   id: string;
   title: string;
+  /** Small picture for the contents and the chapter heading. */
+  icon: ReactNode;
   body: (ctx: { victoryPointsToWin: number }) => ReactNode;
 }
 
@@ -142,26 +271,35 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'goal',
     title: 'Ziel des Spiels',
+    icon: <StarIcon size={20} />,
     body: ({ victoryPointsToWin }) => (
       <>
         <P>
-          Vectoria ist ein langsames Strategiespiel über viele Tage. Jeder Spieler herrscht über
-          eine Burg auf derselben Karte. Wer zuerst <b>{victoryPointsToWin} Siegpunkte</b> besitzt,
-          gewinnt. Beendet der Admin das Spiel vorher, gewinnt, wer die meisten hat.
+          Vectoria ist ein langsames Strategiespiel, das über viele Tage läuft. Jeder Spieler hat
+          eine eigene Burg auf derselben Karte. Wer zuerst <b>{victoryPointsToWin} Siegpunkte</b>{' '}
+          besitzt, gewinnt. Beendet der Admin das Spiel vorher, gewinnt, wer die meisten hat.
+        </P>
+        <H icon={<StarIcon size={18} />}>Siegpunkte kaufen</H>
+        <P>
+          Siegpunkte kaufst du in deiner Burg. Der erste kostet{' '}
+          <Cost resources={VICTORY_POINT_BASE_COST} />. Jeder weitere kostet 1 Ressource mehr als
+          der vorige, reihum Stein, Holz, Gold. Den aktuellen Preis siehst du im Laden deiner Burg.
         </P>
         <P>
-          Siegpunkte kauft man in der eigenen Burg. Der erste kostet{' '}
-          {formatResources(VICTORY_POINT_BASE_COST)}, jeder weitere 1 Ressource mehr als der vorige
-          — abwechselnd Stein, Holz, Gold. Der aktuelle Preis steht im Laden deiner Burg. Siegpunkte
-          können nie gestohlen werden — Ressourcen und Truppen dagegen schon.
+          Pro Spieltag kannst du höchstens <b>{VICTORY_POINTS_PER_GAMEDAY} Siegpunkte</b> kaufen.
         </P>
+        <Remember>
+          Siegpunkte kann dir niemand wegnehmen. Ressourcen und Truppen dagegen schon.
+        </Remember>
         <P>
-          Du beginnst mit {STARTING_TROOPS} Truppen und {formatResources(STARTING_RESOURCES)}.
+          Zum Start hast du <b>{STARTING_TROOPS} Truppen</b> und{' '}
+          <Cost resources={STARTING_RESOURCES} />.
         </P>
         <Details
           items={[
-            'Das Spiel endet sofort, wenn jemand das Siegziel erreicht — auch mitten im Spieltag.',
+            'Das Spiel endet sofort, wenn jemand das Ziel erreicht – auch mitten am Spieltag.',
             'Kaufst du mehrere Siegpunkte auf einmal, zahlst du die Summe der einzelnen, steigenden Preise.',
+            `Die Grenze von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten gilt von einem Spieltagbeginn (10 Uhr) bis zum nächsten. Abend und Nacht gehören also noch zum alten Tag.`,
             'Siegpunkte gehen nie verloren, auch nicht, wenn deine Burg gestürmt wird.',
             'Beendet der Admin das Spiel bei Gleichstand, gewinnt, wer sich früher angemeldet hat.',
           ]}
@@ -170,31 +308,161 @@ const CHAPTERS: Chapter[] = [
     ),
   },
   {
+    id: 'map',
+    title: 'Die Karte auf einen Blick',
+    icon: <CompassGlyph />,
+    body: () => (
+      <>
+        <P>
+          Alles, was du auf der Karte siehst, kannst du anklicken. In der Seitenleiste (am Handy
+          unten) steht dann, was es ist und was du damit tun kannst. Liegen mehrere Dinge
+          übereinander, klickst du einfach noch einmal auf dieselbe Stelle.
+        </P>
+        <H>Orte</H>
+        <Legend
+          items={[
+            {
+              art: <CastleIcon color={YOU} size={44} />,
+              title: 'Deine Burg (Basis)',
+              text: 'Dein Zuhause, mit Stern im Namen und farbigem Sockel. Hier kaufst und lagerst du.',
+            },
+            {
+              art: <CastleIcon color={FOE} style={1} size={44} />,
+              title: 'Fremde Burg',
+              text: 'Die Burg eines anderen Spielers, in seiner Farbe. Du kannst sie angreifen.',
+            },
+            {
+              art: <OutpostIcon color={YOU} size={38} />,
+              title: 'Stützpunkt',
+              text: 'Ein Turm in der Farbe seines Besitzers: ein vorgeschobenes Lager.',
+            },
+            {
+              art: <OutpostIcon color={null} size={38} />,
+              title: 'Ruine',
+              text: 'Gehört niemandem. Wer sie einnimmt, baut sie zum Stützpunkt auf.',
+            },
+            {
+              art: <DepositIcon kind="wood" size={44} />,
+              title: 'Vorkommen',
+              text: (
+                <>
+                  Hier sammeln deine Truppen <Res resource="wood" />, <Res resource="stone" /> oder{' '}
+                  <Res resource="gold" />.
+                </>
+              ),
+            },
+            {
+              art: <DepositIcon kind="trader" size={44} />,
+              title: 'Händler',
+              text: 'Tauscht Stein gegen Gold und Holz.',
+            },
+            {
+              art: <ChestIcon size={34} />,
+              title: 'Truhe',
+              text: 'Enthält eine Karte. Darunter steht, wie viele Truppen du zum Bergen brauchst.',
+            },
+          ]}
+        />
+        <H>Truppen unterwegs</H>
+        <Legend
+          items={[
+            {
+              art: <SoldiersIcon color={YOU} size={40} />,
+              title: 'Heerzug',
+              text: 'Truppen auf dem Marsch. Das Schild darunter zeigt, wie viele es sind.',
+            },
+            {
+              art: <GatherBadgeIcon color={YOU} size={26} />,
+              title: 'Am Sammeln',
+              text: 'Ein Wappenschild mit der Truppenzahl rund um ein Vorkommen.',
+            },
+            {
+              art: <TentIcon color={YOU} size={36} />,
+              title: 'Nachtlager',
+              text: 'Nachts schlagen marschierende Züge ein Zelt auf und stehen still.',
+            },
+            {
+              art: <ShipIcon color={YOU} size={42} />,
+              title: 'Auf See',
+              text: 'Ein Zug mit der Karte Seeweg, der gerade übers Wasser fährt.',
+            },
+            {
+              art: <CargoRoundel resources={['wood', 'stone', 'gold']} />,
+              title: 'Ladung',
+              text: 'Das runde Abzeichen am Zug zeigt, was er trägt. Wer etwas trägt, kann überfallen werden.',
+            },
+            {
+              art: <CaravanIcon color={YOU} size={40} />,
+              title: 'Karawane',
+              text: 'Bringt abends das Lager deiner Stützpunkte heim. Nur du siehst deine.',
+            },
+            {
+              art: <DuoIcon left={YOU} right={ALLY} size={40} />,
+              title: 'Duo-Zug',
+              text: 'Zwei Spieler greifen gemeinsam an. Das Namensschild trägt beide Farben.',
+            },
+            {
+              art: <AlarmIcon size={30} />,
+              title: 'Angriff naht',
+              text: 'Gekreuzte Schwerter und ein roter Ring: Ein Gegner marschiert auf diesen Ort zu. Rauch heißt: Hier wurde gerade gekämpft.',
+            },
+          ]}
+        />
+        <Remember>
+          Die gestrichelte Linie vor einem Zug ist sein restlicher Weg. Die Striche wandern in
+          Richtung Ziel.
+        </Remember>
+      </>
+    ),
+  },
+  {
     id: 'time',
     title: 'Spielzeit & Spieltage',
+    icon: <SunIcon size={20} />,
     body: () => (
       <>
         <P>
           Die Spieluhr läuft nur <b>montags bis freitags von 10 bis 18 Uhr</b>. Nachts und am
-          Wochenende ruht alles: Züge bleiben stehen, nichts kommt an. Alle Dauern im Spiel sind in
-          dieser Spielzeit gemessen.
+          Wochenende ruht alles: Züge stehen still, nichts kommt an. Alle Zeiten im Spiel zählen nur
+          diese Spielzeit.
         </P>
-        <P>Jeder Spieltag ({GAMEDAY_HOURS} Stunden) beginnt mit:</P>
-        <List
+        <Legend
           items={[
-            `Einkommen: +${DAILY_BASE_INCOME} jeder Ressource, +${DAILY_ACTIVITY_INCOME} der gewählten Basisaktivität, dazu +${OUTPOST_DAILY_INCOME} jeder Ressource pro eigenem Stützpunkt — alles direkt in die Basis.`,
-            'Die Karawane vom Vorabend kommt an: Was um 18 Uhr aus deinen Stützpunkten aufgebrochen ist, liegt jetzt in der Basis.',
-            'Die tags zuvor gewählte Basisaktivität tritt in Kraft.',
+            {
+              art: <SunIcon size={30} />,
+              title: 'Tag',
+              text: 'Die Uhr läuft, Züge marschieren.',
+            },
+            {
+              art: <TentIcon color={YOU} size={36} />,
+              title: 'Nachtruhe',
+              text: 'Die Karte wird dunkel, marschierende Züge schlafen im Zelt.',
+            },
+          ]}
+        />
+        <P>Jeder Spieltag dauert {GAMEDAY_HOURS} Stunden. Zu Beginn passiert Folgendes:</P>
+        <Steps
+          items={[
+            <>
+              <b>Einkommen</b>: +{DAILY_BASE_INCOME} von jeder Ressource, +{DAILY_ACTIVITY_INCOME}{' '}
+              statt +{DAILY_BASE_INCOME} von deiner Basisaktivität, dazu +{OUTPOST_DAILY_INCOME} von
+              jeder Ressource für jeden eigenen Stützpunkt. Alles landet direkt in der Basis.
+            </>,
+            <>
+              Die <b>Karawane</b> vom Vorabend kommt an: Was um 18 Uhr aus deinen Stützpunkten
+              losgefahren ist, liegt jetzt in der Basis.
+            </>,
+            'Die Basisaktivität, die du am Vortag gewählt hast, gilt ab jetzt.',
             `${CHESTS_PER_GAMEDAY} neue Truhen erscheinen auf der Karte.`,
           ]}
         />
         <Details
           items={[
-            'Ein Spieltag beginnt mit dem ersten Moment Spielzeit eines Werktags (10 Uhr).',
-            'Auch Laden, Bollwerk und alle anderen Dauern pausieren nachts: Ein Zug, der um 17:30 Uhr noch 1 Stunde braucht, kommt am nächsten Werktag um 10:30 Uhr an.',
-            'Was nachts ankommen würde, kommt nicht an — Kämpfe, Überfälle und Ankünfte passieren nur während der Spielzeit, dann aber exakt in der Reihenfolge ihrer Ankunftszeiten.',
+            'Ein Spieltag beginnt mit dem ersten Moment Spielzeit eines Werktags, also um 10 Uhr.',
+            'Auch Laden, Bollwerk und alle anderen Dauern pausieren nachts. Beispiel: Ein Zug, der um 17:30 Uhr noch 1 Stunde braucht, kommt am nächsten Werktag um 10:30 Uhr an.',
+            'Nachts kommt nichts an. Kämpfe, Überfälle und Ankünfte gibt es nur während der Spielzeit – dann aber genau in der Reihenfolge ihrer Ankunftszeiten.',
             'Pausiert der Admin die Uhr, steht alles still wie in der Nacht.',
-            'War der Server länger aus, holt die Uhr die verpasste Spielzeit nach; Einkommen gibt es dabei nur einmal, nicht für jeden verpassten Tag.',
+            'War der Server länger aus, holt die Uhr die verpasste Spielzeit nach. Einkommen gibt es dabei nur einmal, nicht für jeden verpassten Tag.',
           ]}
         />
       </>
@@ -202,64 +470,118 @@ const CHAPTERS: Chapter[] = [
   },
   {
     id: 'resources',
-    title: 'Ressourcen & Basisaktivität',
+    title: 'Ressourcen & Sammeln',
+    icon: <ResourceIcon resource="wood" size={20} />,
     body: () => (
       <>
         <P>
-          Es gibt drei Ressourcen: {RESOURCES.map((r) => RESOURCE_NAMES[r]).join(', ')}. Ausgeben
-          lässt sich nur, was <b>in der Basis</b> (deiner Heimatburg) lagert.
+          Es gibt drei Ressourcen: <Res resource="wood" />, <Res resource="stone" /> und{' '}
+          <Res resource="gold" />. Damit kaufst du Truppen und Siegpunkte.
         </P>
+        <Remember>
+          Ausgeben kannst du nur, was <b>in deiner Basis</b> (deiner Heimatburg) liegt.
+        </Remember>
         <H>Basisaktivität</H>
         <P>
-          Wähle jederzeit, worauf sich deine Burg konzentriert. Die Wahl gilt ab dem nächsten
-          Spieltag und bringt dann täglich {DAILY_ACTIVITY_INCOME} statt {DAILY_BASE_INCOME} dieser
-          Ressource. Wählst du nichts Neues, bleibt die alte.
+          Du wählst jederzeit, worauf sich deine Burg konzentriert: Holz, Stein oder Gold. Ab dem
+          nächsten Spieltag bekommst du davon täglich {DAILY_ACTIVITY_INCOME} statt{' '}
+          {DAILY_BASE_INCOME}. Wählst du nichts Neues, bleibt es bei der alten Wahl.
         </P>
-        <H>Sammeln</H>
-        <P>
-          Schicke Truppen zu einem Vorkommen. Dort laden sie{' '}
-          {formatGameDuration(GATHER_DURATION_MS)} lang und bringen je 100 Truppen{' '}
-          {GATHER_YIELD_PER_100_TROOPS} Einheiten zurück — zu der Burg, aus der sie kamen. Beladen
-          marschieren sie heim nur mit <b>{formatPercent(LOADED_SPEED)} Tempo</b> und sind unterwegs
-          angreifbar.
-        </P>
-        <P>
-          Die Vorkommen sind fair verteilt. Von jeder Burg aus liegen Stein, Händler und eines von
-          Holz und Gold näher als {SPOT_FAR_HOURS} Stunden, das andere {SPOT_FAR_HOURS} bis{' '}
-          {SPOT_MAX_HOURS} Stunden entfernt. Kein Vorkommen liegt näher als {SPOT_NEAR_HOURS} Stunde
-          an einer Burg. Der Weg zu allen vier zusammen ist für alle etwa gleich lang (Ziel:
-          höchstens {formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied).
-          Vorkommen liegen mindestens {SPOT_GAP_HOURS} Stunde auseinander, gleiche mindestens{' '}
-          {SPOT_SAME_GAP_HOURS} Stunden, und nirgends ist man weiter als{' '}
-          {formatGameDuration(SPOT_HOLE_HOURS * HOUR_MS)} vom nächsten Vorkommen, Stützpunkt oder
-          Burg entfernt.
-        </P>
-        <H>Händler</H>
-        <P>
-          Der Händler tauscht <b>Stein 1:1 gegen Gold und Holz</b> — wie viel davon Gold und wie
-          viel Holz wird, wählst du beim Losschicken (x Stein ergibt y Gold + z Holz, x = y + z).
-          Deine Truppen bringen den Stein aus einer Burg hin, der Handel geht <b>sofort</b>, ohne
-          Ladezeit, und sie tragen Gold und Holz zurück. Hin und zurück sind sie beladen: nur{' '}
-          {formatPercent(LOADED_SPEED)} Tempo und überfallbar.
-        </P>
-        <P>
-          Solange Truppen sammeln, bleibt das Vorkommen auf der Karte sichtbar; ein kleines
-          Truppenabzeichen mit der Truppenzahl oben rechts daneben zeigt, wer dort gerade lädt.
-        </P>
+        <H icon={<DepositIcon kind="stone" size={30} />}>Sammeln</H>
+        <Steps
+          items={[
+            'Klicke auf ein Vorkommen und schicke Truppen hin.',
+            <>
+              Dort laden sie {formatGameDuration(GATHER_DURATION_MS)} lang. Je 100 Truppen bringen{' '}
+              {GATHER_YIELD_PER_100_TROOPS} Einheiten mit.
+            </>,
+            <>
+              Dann ziehen sie zurück zu der Burg, aus der sie kamen. Beladen gehen sie nur mit{' '}
+              <b>{formatPercent(LOADED_SPEED)} Tempo</b> und können unterwegs überfallen werden.
+            </>,
+          ]}
+        />
+        <Legend
+          items={[
+            {
+              art: <GatherBadgeIcon color={YOU} size={26} />,
+              title: 'Wer lädt hier?',
+              text: 'Jeder Zug am Vorkommen zeigt sich als Wappenschild mit seiner Truppenzahl.',
+            },
+            {
+              art: <CargoRoundel resources={['stone']} />,
+              title: 'Auf dem Heimweg',
+              text: 'Das Abzeichen am Zug zeigt die Ladung. Die genaue Menge steht in der Auswahl.',
+            },
+          ]}
+        />
+        <H>Wo die Vorkommen liegen</H>
+        <P>Die Vorkommen sind für alle gleich fair verteilt:</P>
+        <List
+          items={[
+            `Von jeder Burg aus liegen Stein, Händler und eines von Holz und Gold näher als ${SPOT_FAR_HOURS} Stunden. Das andere liegt ${SPOT_FAR_HOURS} bis ${SPOT_MAX_HOURS} Stunden entfernt.`,
+            `Kein Vorkommen liegt näher als ${SPOT_NEAR_HOURS} Stunde an einer Burg.`,
+            `Der Weg zu allen vier zusammen ist für alle etwa gleich lang (Ziel: höchstens ${formatGameDuration(SPOT_BALANCE_TOLERANCE_HOURS * HOUR_MS)} Unterschied).`,
+            `Vorkommen liegen mindestens ${SPOT_GAP_HOURS} Stunde auseinander, gleiche Sorten mindestens ${SPOT_SAME_GAP_HOURS} Stunden. Nirgends ist man weiter als ${formatGameDuration(SPOT_HOLE_HOURS * HOUR_MS)} vom nächsten Vorkommen, Stützpunkt oder einer Burg entfernt.`,
+          ]}
+        />
         <Details
           items={[
-            'Das Einkommen landet immer in der Basis — auch während deine Burg gefallen ist.',
-            `Ohne gewählte Basisaktivität gibt es nur +${DAILY_BASE_INCOME} jeder Ressource. Wählst du mehrmals am Tag, zählt die letzte Wahl.`,
+            'Das Einkommen landet immer in der Basis – auch während deine Burg gefallen ist.',
+            `Ohne gewählte Basisaktivität gibt es nur +${DAILY_BASE_INCOME} von jeder Ressource. Wählst du mehrmals am Tag, zählt die letzte Wahl.`,
             `Die Ausbeute wird abgerundet: Unter 100 Truppen gibt es entsprechend weniger, unter ${Math.ceil(100 / GATHER_YIELD_PER_100_TROOPS)} Truppen gar nichts.`,
-            'Vorkommen erschöpfen sich nie; beliebig viele Züge — auch verschiedener Spieler — können gleichzeitig am selben Vorkommen laden. Dort kämpft niemand.',
+            'Vorkommen werden nie leer. Beliebig viele Züge – auch von verschiedenen Spielern – können gleichzeitig am selben Vorkommen laden. Dort kämpft niemand.',
             'Ladende Züge können nicht angegriffen werden. Erst auf dem Heimweg mit Ladung sind sie angreifbar.',
             'Rufst du einen ladenden Zug zurück oder leitest ihn um, bricht er das Laden ab und hat nichts dabei.',
-            'Die Ladung geht an die Burg, aus der der Zug losgezogen ist — ist dieser Stützpunkt inzwischen verloren, an die Basis.',
+            'Die Ladung geht an die Burg, aus der der Zug losgezogen ist. Ist dieser Stützpunkt inzwischen verloren, geht sie an die Basis.',
             'Die faire Verteilung der Vorkommen ist ab deiner Heimatburg gemessen, nicht ab Stützpunkten.',
-            'Zum Händler geht nur ein Zug, der Stein mitnimmt; Stein ist die einzige Ladung, die du aus einer Burg mitschicken kannst.',
-            'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen — dann bringt er den Stein zurück.',
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: 'trader',
+    title: 'Der Händler',
+    icon: <SpotIcon kind="trader" size={20} />,
+    body: () => (
+      <>
+        <P>
+          Der Händler tauscht <b>Stein 1:1 gegen Gold und Holz</b>. Wie viel davon Gold und wie viel
+          Holz wird, bestimmst du selbst: Aus x Stein werden y Gold und z Holz, mit x = y + z.
+        </P>
+        <Legend
+          items={[
+            {
+              art: <DepositIcon kind="trader" size={46} />,
+              title: 'Beispiel',
+              text: (
+                <>
+                  10 <Res resource="stone">Stein</Res> → 6 <Res resource="gold">Gold</Res> + 4{' '}
+                  <Res resource="wood">Holz</Res>
+                </>
+              ),
+            },
+          ]}
+        />
+        <Steps
+          items={[
+            'Klicke auf den Händler. In der Mitte öffnet sich das Handelsmenü.',
+            'Wähle links, wie viel Stein du tauschst und wie viel davon Gold und Holz wird.',
+            'Wähle rechts, aus welcher Burg die Truppen den Stein tragen und wie viele mitgehen.',
+            'Mit „Handeln“ ziehen sie los. Der Tausch passiert sofort bei der Ankunft, ohne Wartezeit. Dann tragen sie Gold und Holz zurück.',
+          ]}
+        />
+        <Remember>
+          Hin und zurück sind deine Träger beladen: nur {formatPercent(LOADED_SPEED)} Tempo, und sie
+          können überfallen werden.
+        </Remember>
+        <Details
+          items={[
+            'Zum Händler geht nur ein Zug, der Stein mitnimmt. Stein ist die einzige Ladung, die du aus einer Burg mitschicken kannst.',
+            'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen. Dann bringt er den Stein zurück.',
             'Wird er auf dem Hinweg ausgeraubt, kehrt er sofort leer und wieder normal schnell heim.',
-            'Gold und Holz gehen an die Burg, aus der der Zug losgezogen ist; unterwegs lassen sie sich wie jede Ladung zu einem anderen eigenen Lager umleiten.',
+            'Gold und Holz gehen an die Burg, aus der der Zug losgezogen ist. Unterwegs kannst du sie wie jede Ladung zu einem anderen eigenen Lager umleiten.',
           ]}
         />
       </>
@@ -267,36 +589,60 @@ const CHAPTERS: Chapter[] = [
   },
   {
     id: 'bases',
-    title: 'Basis & Stützpunkte',
+    title: 'Basis, Stützpunkte & Karawane',
+    icon: <OutpostIcon color={YOU} size={20} />,
     body: () => (
       <>
         <P>
-          Deine <b>Basis</b> ist die Heimatburg: Hier kaufst du Truppen und Siegpunkte, hier wird
-          Beute sicher.
+          Deine <b>Basis</b> ist deine Heimatburg. Nur hier kaufst du Truppen und Siegpunkte, und
+          nur was hier liegt, kannst du ausgeben. Unterwegs kann man Beute überfallen – ist sie in
+          der Basis angekommen, nicht mehr.
         </P>
+        <H icon={<OutpostIcon color={null} size={30} />}>Ruinen werden Stützpunkte</H>
         <P>
-          Zwischen den Burgen liegen <b>Ruinen</b>. Wer eine Ruine mit Truppen einnimmt, baut sie
-          wieder auf — sie heißt dann „Stützpunkt“ mit deinem Namen. Ein Stützpunkt ist ein
-          vorgeschobenes Lager: Truppen können dort stehen und von dort losziehen; was Sammler
-          dorthin bringen, lagert dort. Jeder Stützpunkt bringt täglich +{OUTPOST_DAILY_INCOME}{' '}
-          jeder Ressource direkt in die Basis.
+          Zwischen den Burgen liegen <b>Ruinen</b>. Schickst du Truppen in eine Ruine, baust du sie
+          wieder auf. Sie wird zu deinem <b>Stützpunkt</b>, einem Lager weiter draußen:
         </P>
         <List
           items={[
-            'Ressourcen im Stützpunkt kannst du nicht ausgeben, und von Hand lassen sie sich nicht zwischen deinen Burgen verschieben. Um 18 Uhr bricht eine Karawane mit dem ganzen Lager aller Stützpunkte auf; am nächsten Morgen liegt es in der Basis und lässt sich ausgeben.',
-            'Was ein Lager (Basis oder Stützpunkt) erreicht hat, bleibt dort: in der Basis, bis du es ausgibst, im Stützpunkt bis zur Karawane um 18 Uhr.',
-            'Truppen kannst du auch tagsüber abziehen („Heimholen“), die Ressourcen bleiben dann im Stützpunkt zurück.',
-            'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer; die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort zur Burg um — mit ihrer Ladung.',
-            'Züge kehren zu der Burg zurück, aus der sie kamen — ist sie verloren, zur Basis.',
+            'Truppen können dort stehen und von dort losziehen.',
+            'Was Sammler dorthin bringen, lagert dort.',
+            <>
+              Jeder Stützpunkt bringt dir täglich +{OUTPOST_DAILY_INCOME} von jeder Ressource,
+              direkt in die Basis.
+            </>,
+          ]}
+        />
+        <H icon={<CaravanIcon color={YOU} size={34} />}>Die Karawane</H>
+        <P>
+          Was in einem Stützpunkt liegt, kannst du nicht ausgeben. Von Hand lässt es sich auch nicht
+          zwischen deinen Burgen verschieben. Dafür gibt es die Karawane:
+        </P>
+        <Steps
+          items={[
+            'Um 18 Uhr fährt aus jedem Stützpunkt ein Wagen mit dem ganzen Lager los.',
+            'Über Nacht rollen die Wagen zu deiner Basis. Klicke einen an, um seine Ladung zu sehen.',
+            'Am nächsten Morgen liegt alles in der Basis und lässt sich ausgeben.',
+          ]}
+        />
+        <Remember>
+          Was ein Lager erreicht hat, bleibt dort: in der Basis, bis du es ausgibst, im Stützpunkt
+          bis zur Karawane um 18 Uhr.
+        </Remember>
+        <List
+          items={[
+            'Truppen kannst du jederzeit aus einem Stützpunkt abziehen („Heimholen“). Die Ressourcen bleiben dann im Stützpunkt.',
+            'Fällt ein Stützpunkt, gehört er samt Lager dem Eroberer. Die Überlebenden fliehen heim. Deine Züge, die gerade dorthin unterwegs sind, kehren sofort mit ihrer Ladung zur Burg um.',
+            'Züge kehren zu der Burg zurück, aus der sie kamen. Ist diese verloren, gehen sie zur Basis.',
           ]}
         />
         <Details
           items={[
             'Eine Ruine hat keine Verteidiger: Schon 1 Truppe nimmt sie ein, ganz ohne Verluste. Liegt noch ein Lager darin, gehört es dir.',
-            'Dasselbe gilt für einen eigenen Stützpunkt, aus dem du alle Truppen abgezogen hast — leer ist er für jeden mit 1 Truppe zu haben.',
-            'Wer einen Stützpunkt erobert, bleibt mit allen überlebenden Truppen als Besatzung dort; der Zug kehrt nicht heim.',
+            'Dasselbe gilt für einen eigenen Stützpunkt, aus dem du alle Truppen abgezogen hast: Leer kann ihn jeder mit 1 Truppe nehmen.',
+            'Wer einen Stützpunkt erobert, bleibt mit allen überlebenden Truppen als Besatzung dort. Der Zug kehrt nicht heim.',
             'Das Bollwerk schützt nur die Basis, nie einen Stützpunkt.',
-            'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Absprungpunkt, sonst nichts.',
+            'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Startpunkt, sonst nichts.',
             'Die Karawane braucht keine Truppen und kann nicht überfallen oder geplündert werden: Nachts ruht die Spieluhr. Was vor 18 Uhr mit einem Stützpunkt erobert wird, gehört aber dem Eroberer.',
             'Truppen zu der Burg schicken, in der sie schon stehen, geht nicht.',
             'Fällt ein Stützpunkt, laufen deine Züge, die von dort aufgebrochen sind, später zur Basis statt dorthin zurück.',
@@ -308,42 +654,51 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'troops',
     title: 'Truppen & Heerzüge',
+    icon: <SoldiersIcon color={YOU} size={22} />,
     body: () => (
       <>
         <P>
-          Es gibt eine Sorte Truppen. {TROOP_BATCH_SIZE} Truppen kosten{' '}
-          {formatResources(TROOP_BATCH_COST)} und erscheinen sofort in der Basis.
+          Es gibt nur eine Sorte Truppen. {TROOP_BATCH_SIZE} Truppen kosten{' '}
+          <Cost resources={TROOP_BATCH_COST} /> und stehen sofort in deiner Basis.
         </P>
+        <H icon={<SoldiersIcon color={YOU} size={30} />}>Losschicken</H>
+        <Steps
+          items={[
+            'Klicke ein Ziel auf der Karte an.',
+            'Wähle, aus welcher Burg die Truppen losziehen, und wie viele.',
+            'Schicke sie los. Du siehst vorher, wann sie ankommen.',
+          ]}
+        />
         <P>
-          Klicke ein Ziel auf der Karte an, wähle die Burg, aus der du losschickst, und die Zahl der
-          Truppen. Züge laufen nur über Land; einmal quer über die Karte dauert etwa{' '}
-          {CROSS_MAP_HOURS} Spielstunden.
+          Züge laufen nur über Land. Einmal quer über die Karte dauert etwa {CROSS_MAP_HOURS}{' '}
+          Spielstunden.
         </P>
+        <H>Unterwegs</H>
         <List
           items={[
             <>
-              <b>Zurückrufen:</b> jederzeit, solange der Zug nicht schon heimkehrt.
+              <b>Zurückrufen:</b> geht jederzeit, solange der Zug nicht schon heimkehrt.
             </>,
             <>
-              <b>Umleiten:</b> ein Zug ohne Ladung (auch auf dem Heimweg) kann im Feld ein neues
-              Ziel bekommen — wähle das Ziel auf der Karte, unter „Zug im Feld umleiten“ stehen
-              deine Züge. Ein beladener Zug (Sammler, Beute, Truhe) lässt sich jederzeit zu einem
-              anderen eigenen Lager umleiten: wähle ihn an, dann „Abliefern in“.
+              <b>Umleiten:</b> Ein Zug ohne Ladung (auch auf dem Heimweg) kann ein neues Ziel
+              bekommen. Wähle das neue Ziel auf der Karte; unter „Zug im Feld umleiten“ stehen deine
+              Züge. Ein beladener Zug (Sammler, Beute, Truhe) kann jederzeit zu einem anderen
+              eigenen Lager: Wähle ihn an, dann „Abliefern in“.
             </>,
             <>
-              <b>Heimweg:</b> immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
-              Ressourcen im Gepäck geht es nur mit {formatPercent(LOADED_SPEED)} Tempo heim.
+              <b>Heimweg:</b> ist immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
+              Ressourcen geht es nur mit {formatPercent(LOADED_SPEED)} Tempo heim.
             </>,
           ]}
         />
         <Details
           items={[
             'Zurückgerufen wird von der aktuellen Position aus, zur Burg, aus der der Zug kam.',
-            'Wer schon heimkehrt, kann nicht zurückgerufen werden — ohne Ladung aber umgeleitet.',
+            'Wer schon heimkehrt, kann nicht zurückgerufen werden – ohne Ladung aber umgeleitet.',
             'Mit Ladung oder Truhe geht Umleiten nur zu einer eigenen Burg (Basis oder Stützpunkt). Ein umgeleiteter Zug ohne Ladung behält Nebel, Tarnung und Eilmarsch.',
             'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
-            'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe; unterwegs kann niemand dazustoßen.',
-            'Truhenträger ohne Ladung marschieren normal schnell, nur Ressourcen bremsen.',
+            'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe. Unterwegs kann niemand dazustoßen.',
+            'Truhenträger ohne Ladung marschieren normal schnell. Nur Ressourcen bremsen.',
           ]}
         />
       </>
@@ -352,13 +707,26 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'combat',
     title: 'Kampf',
+    icon: <AlarmIcon size={20} />,
     body: () => (
       <>
         <P>
-          Ein Kampf entscheidet sich an der Truppenstärke: Der Angreifer gewinnt nur mit{' '}
-          <b>echt mehr</b> Truppen als der Verteidiger. Niemand verliert mehr Truppen, als die
-          Gegenseite mitgebracht hat.
+          Im Kampf zählt nur die Truppenzahl. Der Angreifer gewinnt nur, wenn er <b>mehr</b> Truppen
+          hat als der Verteidiger – Gleichstand reicht nicht.
         </P>
+        <div className="my-3 flex items-center justify-center gap-3 text-sm">
+          <span className="flex flex-col items-center">
+            <SoldiersIcon color={YOU} size={44} />
+            <b>100</b>
+          </span>
+          <span className="text-lg italic">gegen</span>
+          <span className="flex flex-col items-center">
+            <CastleIcon color={FOE} size={44} />
+            <b>60</b>
+          </span>
+          <span className="text-lg">→</span>
+          <span className="italic">Angreifer siegt</span>
+        </div>
         <Table
           head={['Ausgang', 'Angreifer verliert', 'Verteidiger verliert']}
           rows={[
@@ -374,23 +742,16 @@ const CHAPTERS: Chapter[] = [
             ],
           ]}
         />
+        <Remember>Niemand verliert mehr Truppen, als die Gegenseite mitgebracht hat.</Remember>
         <H>Beute</H>
         <List
           items={[
             `Burg: ${formatPercent(CASTLE_PLUNDER_SHARE)} aller Ressourcen in der Basis und eine Truhe.`,
-            'Stützpunkt / Ruine: der Stützpunkt selbst samt ganzem Lager.',
+            'Stützpunkt oder Ruine: der Stützpunkt selbst samt ganzem Lager.',
             'Überfallener Zug: die ganze Ladung.',
           ]}
         />
-        <P>Mit der Karte Bollwerk verteidigt die Burg mit ×{FORTIFY_MULTIPLIER} Stärke.</P>
-        <H>Gefallene Burg</H>
-        <P>
-          Wer seine Basis verliert, ruft <b>sofort alle Truppen heim</b>: Jeder Zug kehrt zur Burg
-          um. Alle Stützpunkte werden <b>aufgegeben</b> und verfallen wieder zu Ruinen; ihre
-          Besatzung zieht samt Lager nach Hause (ohne Besatzung bleibt das Lager in der Ruine). Bis
-          die letzten Truppen daheim sind, kannst du <b>nichts tun</b> — nichts kaufen, niemanden
-          losschicken, keine Karte spielen.
-        </P>
+        <P>Mit der Karte Bollwerk verteidigt deine Burg mit ×{FORTIFY_MULTIPLIER} Stärke.</P>
         <H>Rechenbeispiele</H>
         <Table
           head={['Kampf', 'Ausgang', 'Verluste']}
@@ -415,28 +776,40 @@ const CHAPTERS: Chapter[] = [
             ],
           ]}
         />
+        <H icon={<CastleIcon color={YOU} size={30} />}>Wenn deine Burg fällt</H>
+        <P>Verlierst du deine Basis, passiert sofort Folgendes:</P>
+        <Steps
+          items={[
+            <>
+              Alle deine Truppen werden <b>heimgerufen</b>: Jeder Zug kehrt zur Burg um.
+            </>,
+            <>
+              Alle deine Stützpunkte werden <b>aufgegeben</b> und zu Ruinen. Ihre Besatzung trägt
+              das Lager nach Hause. Ohne Besatzung bleibt das Lager in der Ruine.
+            </>,
+            <>
+              Bis die letzten Truppen daheim sind, kannst du <b>nichts tun</b>: nichts kaufen,
+              niemanden losschicken, keine Karte spielen.
+            </>,
+          ]}
+        />
         <Details
           items={[
             'Verluste werden aufgerundet. Ein siegreicher Zug behält aber immer mindestens 1 Truppe.',
             'Ein verlorener Angriff kostet den ganzen Zug.',
-            'Das Bollwerk zählt nur beim Vergleich der Stärke; die Verluste rechnen mit den echten Truppenzahlen.',
-            'Die Burg selbst wechselt nie den Besitzer. Der Sieger nimmt Beute und Truhe und zieht heim — mit Beute beladen langsamer und überfallbar.',
-            `Die Beute wird je Ressource abgerundet: Wer nur 1 Holz daheim hat, verliert es nicht. Auch wer gar nichts hat, wird gestürmt — die Truhe gibt es trotzdem.`,
-            'Die Truhe entsteht neu; ungeöffnete Truhen und Karten des Verlierers bleiben, wo sie sind.',
-            'Kommen mehrere Angreifer an, wird nacheinander gekämpft, in der Reihenfolge ihrer Ankunft. Jeder Kampf sieht die Verteidigung, die der vorige übrig gelassen hat.',
-            'Kommen mehrere Angreifer an, wird gekämpft, bis die Burg fällt. Ab dann drehen alle übrigen Angriffe auf sie sofort um.',
-            'Eine gefallene Burg ist geschützt, bis ihr Besitzer wieder handlungsfähig ist: So lange kann niemand sie angreifen.',
-          ]}
-        />
-        <H>Gefallene Burg im Detail</H>
-        <List
-          items={[
-            'Alle Züge drehen um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Ladung und Truhen nehmen sie mit.',
+            'Das Bollwerk zählt nur beim Vergleich der Stärke. Die Verluste rechnen mit den echten Truppenzahlen.',
+            'Die Burg selbst wechselt nie den Besitzer. Der Sieger nimmt Beute und Truhe und zieht heim – mit Beute beladen langsamer und überfallbar.',
+            'Die Beute wird je Ressource abgerundet: Wer nur 1 Holz daheim hat, verliert es nicht. Auch wer gar nichts hat, kann gestürmt werden – die Truhe gibt es trotzdem.',
+            'Die Truhe entsteht neu. Ungeöffnete Truhen und Karten des Verlierers bleiben, wo sie sind.',
+            'Kommen mehrere Angreifer an, wird nacheinander gekämpft, in der Reihenfolge ihrer Ankunft. Jeder Kampf trifft auf die Verteidigung, die der vorige übrig gelassen hat.',
+            'Gekämpft wird, bis die Burg fällt. Ab dann drehen alle übrigen Angriffe auf sie sofort um.',
+            'Eine gefallene Burg ist geschützt, bis ihr Besitzer wieder handeln kann: So lange kann niemand sie angreifen.',
+            'Beim Fall drehen alle Züge um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Ladung und Truhen nehmen sie mit.',
             'Ladende Züge brechen ab und kommen ohne Ladung heim.',
-            'Stützpunkte werden zu Ruinen. Die Besatzung trägt das ganze Lager heim (beladen, also langsamer).',
-            'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Auch deine Basis kann in der Zeit niemand stürmen.',
+            'Die Besatzung der aufgegebenen Stützpunkte trägt das ganze Lager heim (beladen, also langsamer).',
+            'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Auch deine Basis kann in dieser Zeit niemand stürmen.',
             'Stehen gerade keine Truppen außerhalb, gibt es keine Sperre und damit auch keinen Schutz: Die Basis ist gleich wieder angreifbar. Die Stützpunkte sind trotzdem aufgegeben.',
-            'Während der Sperre läuft das Einkommen weiter, du kannst aber auch keine Truhe öffnen und die Basisaktivität nicht wechseln.',
+            'Während der Sperre läuft das Einkommen weiter. Du kannst aber keine Truhe öffnen und die Basisaktivität nicht wechseln.',
             'Heimkehrende Truppen verstärken die Basis, sobald sie ankommen. Mit dem letzten Zug daheim ist die Basis wieder angreifbar.',
             'Die Sperre endet in dem Moment, in dem der letzte Zug daheim ankommt.',
           ]}
@@ -445,18 +818,91 @@ const CHAPTERS: Chapter[] = [
     ),
   },
   {
-    id: 'duo',
-    title: 'Duo-Angriff',
+    id: 'raids',
+    title: 'Überfälle',
+    icon: <CargoRoundel resources={['gold']} size={19} />,
     body: () => (
       <>
         <P>
-          Zu zweit gegen eine fremde <b>Burg</b> oder einen fremden <b>Stützpunkt</b>: Wähle das
-          Ziel auf der Karte und dann „Duo-Angreifen“. Du wählst einen Partner, stellst deine
-          Truppen aus deinen Burgen zusammen und legst fest, wie viele Truppen der Partner
-          beisteuern soll (höchstens alles, was er stationiert hat). Das Angebot landet in seinem{' '}
-          <b>Posteingang</b> (unter dem Liveticker, am Handy oben im Ticker), mit Ziel, Anteilen und
-          Dauer.
+          Ein Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen und ausrauben – zum Beispiel auf
+          dem Heimweg vom Vorkommen oder mit Beute. Du erkennst ihn am runden Abzeichen.
         </P>
+        <Legend
+          items={[
+            {
+              art: <CargoRoundel resources={['wood', 'gold']} />,
+              title: 'Überfallbar',
+              text: 'Trägt Ressourcen.',
+            },
+            {
+              art: <SoldiersIcon color={FOE} size={40} />,
+              title: 'Nicht überfallbar',
+              text: 'Ohne Ladung kann man einen Zug nicht ausrauben.',
+            },
+          ]}
+        />
+        <Steps
+          items={[
+            'Klicke den beladenen Zug auf der Karte an.',
+            'Schicke Truppen aus einer Burg los oder leite einen deiner Züge im Feld um.',
+            'Das Spiel berechnet den Treffpunkt im Voraus. Ist der Zug vorher am Ziel, geht es nicht.',
+          ]}
+        />
+        <P>
+          Beladene Züge laufen nur mit {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter
+          einzuholen. Nach einem verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell
+          weiter.
+        </P>
+        <Remember>
+          Eine Truhe lässt sich nie rauben. Trägt ihr Zug auch Ressourcen, kann man ihm aber die
+          Ressourcen abnehmen. Ein Truhenträger behält immer mindestens eine Truppe – die Truhe
+          kommt also sicher heim.
+        </Remember>
+        <P>
+          Ein Zug, der selbst Ressourcen trägt, kann niemanden überfallen. Er lässt sich nur zu
+          einem eigenen Lager umleiten.
+        </P>
+        <Details
+          items={[
+            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute, Züge zum und vom Händler. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
+            'Ausnahme Rückzug: Ist die Burg eines Spielers gefallen, sind alle seine Züge unantastbar, bis alle daheim sind. Ein Überfall, der schon unterwegs ist, geht dann ins Leere.',
+            'Ein ausgeraubter Zug läuft leer und wieder normal schnell zu seinem Ziel weiter.',
+            'Gewinnt der Überfall, nimmt der Räuber die ganze Ladung und trägt sie selbst heim – beladen, also langsamer und selbst überfallbar.',
+            'Der Überfallene zieht danach ohne Ladung weiter, wieder in normalem Tempo und mit seinen Verlusten.',
+            'Scheitert der Überfall, fällt der ganze Räuberzug. Der Überfallene verliert nur ein Viertel.',
+            'Wird ein Zug ganz aufgerieben, ist er weg. Ausnahme: Ein Truhenträger behält immer mindestens 1 Truppe.',
+            'Der Räuber kommt genau zum geplanten Zeitpunkt am Treffpunkt an. Ist der Zug dann nicht mehr da (schon daheim, oder ein anderer hat ihn schon ausgeraubt und er ist schneller geworden), geht der Überfall ins Leere und der Räuber kehrt leer um.',
+            'Wurde der Zug vorher schon von jemand anderem ausgeraubt, gibt es nichts mehr zu holen – ein leerer Zug wird nicht überfallen.',
+            'Eilmarsch macht den Räuberzug schneller und erlaubt einen früheren Treffpunkt. Mit Nebel sieht das Opfer nicht, wie stark der Räuber ist.',
+            'Eigene Züge kannst du nicht überfallen.',
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: 'duo',
+    title: 'Duo-Angriff',
+    icon: <DuoIcon left={YOU} right={ALLY} size={22} />,
+    body: () => (
+      <>
+        <P>
+          Zu zweit gegen eine fremde <b>Burg</b> oder einen fremden <b>Stützpunkt</b>: Ihr legt eure
+          Truppen zusammen und greift gemeinsam an.
+        </P>
+        <H icon={<DuoIcon left={YOU} right={ALLY} size={34} />}>So bietest du ein Duo an</H>
+        <Steps
+          items={[
+            'Klicke das Ziel auf der Karte an und wähle „Duo-Angreifen“.',
+            'Wähle einen Partner.',
+            'Stelle deine Truppen aus deinen Burgen zusammen.',
+            'Lege fest, wie viele Truppen der Partner beisteuern soll – höchstens so viele, wie er stationiert hat.',
+            <>
+              Sende das Angebot. Es landet im <b>Posteingang</b> deines Partners (unter dem
+              Liveticker, am Handy oben im Ticker), mit Ziel, Anteilen und Dauer.
+            </>,
+          ]}
+        />
         <P>
           Der Partner kann nur <b>annehmen oder ablehnen</b>, am Plan nichts ändern. Er wählt
           lediglich, aus welchen seiner Burgen seine Truppen kommen. Mit dem Annehmen geht es los.
@@ -465,31 +911,33 @@ const CHAPTERS: Chapter[] = [
         <P>
           Alle Teilzüge laufen auf direktem Weg zum <b>Treffpunkt</b>: dem Ort, den sie gemeinsam am
           schnellsten erreichen, egal wo das Ziel liegt. Das kann ein Umweg sein. Bis dahin sieht
-          niemand außer euch das Ziel. Am Treffpunkt vereinen sie sich zum Duo-Zug, und ab da ist es
-          ein ganz normaler Angriff, offen für alle sichtbar.
+          niemand außer euch das Ziel. Am Treffpunkt vereinen sie sich zum Duo-Zug. Ab da ist es ein
+          ganz normaler Angriff, für alle sichtbar.
         </P>
         <List
           items={[
             'Gekämpft wird nach den üblichen Regeln, mit allen Truppen des Duo-Zugs.',
             'Verluste und Beute teilt ihr nach den Truppen, die jeder gestellt hat.',
             'Die Truhe einer gestürmten Burg wird nach Truppenanteil zugelost.',
-            'Ein eroberter Stützpunkt gehört dem, der mehr Truppen gestellt hat (bei Gleichstand 50:50 gelost). Er bleibt mit seinen Überlebenden als Besatzung dort und behält seinen Anteil am Lager; der andere zieht mit seinem Anteil heim.',
+            'Ein eroberter Stützpunkt gehört dem, der mehr Truppen gestellt hat (bei Gleichstand 50:50 gelost). Er bleibt mit seinen Überlebenden als Besatzung dort und behält seinen Anteil am Lager. Der andere zieht mit seinem Anteil heim.',
             'Nach dem Kampf zieht jeder mit seinen Überlebenden einzeln zu seiner Basis zurück.',
           ]}
         />
-        <H>Der Pakt</H>
+        <Remember>
+          Abbrechen geht nur gemeinsam: Einer schlägt den Abbruch im Posteingang vor, der andere
+          stimmt zu. Dann ziehen alle heim.
+        </Remember>
         <List
           items={[
-            'Abbrechen geht nur gemeinsam: Einer schlägt den Abbruch im Posteingang vor, der andere stimmt zu. Dann ziehen alle heim.',
             'Zurückrufen oder Umleiten geht für Duo-Züge nicht.',
-            'Selbst wenn die Burg eines Teilnehmers fällt, läuft der Duo-Angriff weiter. Handlungsfähig ist er erst wieder, wenn auch seine Duo-Truppen daheim sind.',
+            'Selbst wenn die Burg eines Teilnehmers fällt, läuft der Duo-Angriff weiter. Handeln kann er erst wieder, wenn auch seine Duo-Truppen daheim sind.',
           ]}
         />
         <Details
           items={[
             'Im Duo gibt es keine Marschkarten. Wer barfuß ist, läuft langsamer; der vereinte Zug geht im Tempo des Langsameren.',
             'Ein Angebot bleibt den Rest seines Spieltags und den ganzen nächsten offen, dann verfällt es. Bis zur Antwort kannst du es zurückziehen.',
-            'Steht beim Annehmen nicht mehr genug Truppen bereit, geht das Annehmen nicht.',
+            'Stehen beim Annehmen nicht mehr genug Truppen bereit, geht das Annehmen nicht.',
             'Ist das Ziel bei der Ankunft nicht mehr angreifbar (die Burg ist gefallen und geschützt, oder der Stützpunkt gehört inzwischen einem von euch), ziehen alle heim.',
             'Duo-Züge tragen keine Ressourcen und lassen sich daher nicht überfallen, solange sie nicht mit Beute heimziehen.',
           ]}
@@ -498,73 +946,47 @@ const CHAPTERS: Chapter[] = [
     ),
   },
   {
-    id: 'raids',
-    title: 'Überfälle',
-    body: () => (
-      <>
-        <P>
-          Ein Zug, der <b>Ressourcen</b> trägt, lässt sich abfangen — etwa auf dem Heimweg vom
-          Vorkommen oder mit Beute. Wähle ihn auf der Karte an und schicke Truppen aus einer Burg
-          los oder leite einen Zug im Feld um. Der Treffpunkt wird vorausberechnet — erreicht der
-          Zug sein Ziel vorher, geht es nicht. Beladene Züge laufen nur mit{' '}
-          {formatPercent(LOADED_SPEED)} Tempo und sind daher leichter einzuholen; nach einem
-          verlorenen Überfall ziehen sie ohne Ladung wieder normal schnell weiter.
-        </P>
-        <P>
-          Züge ohne Ladung können nicht überfallen werden. Eine Truhe lässt sich nie rauben — trägt
-          ihr Zug auch Ressourcen, kann man ihm aber die Ressourcen abnehmen. Ein Truhenträger
-          behält dabei immer mindestens eine Truppe, die Truhe kommt also sicher heim.
-        </P>
-        <P>
-          Ein Zug, der selbst Ressourcen heimbringt, kann niemanden überfallen: Wer Ladung trägt,
-          lässt sich nur zu einem eigenen Lager umleiten, nie auf einen Überfall.
-        </P>
-        <Details
-          items={[
-            'Überfallbar ist jeder marschierende Zug mit Ressourcen: Heimkehrer vom Vorkommen, Sieger mit Beute, Züge zum und vom Händler. Nicht überfallbar: Züge ohne Ressourcen und ladende Züge.',
-            'Ausnahme Rückzug: Ist die Burg eines Spielers gefallen, sind alle seine Züge unantastbar, bis alle daheim sind. Ein Überfall, der schon unterwegs ist, geht dann ins Leere.',
-            'Ein ausgeraubter Zug läuft leer und wieder normal schnell zu seinem Ziel weiter.',
-            'Gewinnt der Überfall, nimmt der Räuber die ganze Ladung und trägt sie selbst heim — beladen, also langsamer und seinerseits überfallbar.',
-            'Der Überfallene zieht danach ohne Ladung weiter, wieder in normalem Tempo und mit seinen Verlusten.',
-            'Scheitert der Überfall, fällt der ganze Räuberzug; der Überfallene verliert nur ein Viertel.',
-            'Wird ein Zug ganz aufgerieben, ist er weg. Ausnahme: Ein Truhenträger behält immer mindestens 1 Truppe.',
-            'Der Räuber kommt exakt zum geplanten Zeitpunkt am Treffpunkt an. Ist der Zug dann nicht mehr da (schon daheim, oder ein anderer hat ihn schon ausgeraubt und er ist schneller geworden), geht der Überfall ins Leere und der Räuber kehrt leer um.',
-            'Wurde der Zug vorher schon von jemand anderem ausgeraubt, gibt es nichts mehr zu holen — ein leerer Zug wird nicht überfallen.',
-            'Eilmarsch auf dem Räuberzug macht ihn schneller und erlaubt einen früheren Treffpunkt. Mit Nebel sieht das Opfer nicht, wie stark der Räuber ist.',
-            'Eigene Züge kannst du nicht überfallen.',
-          ]}
-        />
-      </>
-    ),
-  },
-  {
     id: 'chests',
     title: 'Truhen',
+    icon: <ChestIcon size={20} />,
     body: () => (
       <>
         <P>
-          Jeden Spieltag erscheinen {CHESTS_PER_GAMEDAY} Truhen auf der Karte. Gleichzeitig liegen
-          dort höchstens so viele, wie Spieler:innen mitspielen — mindestens aber{' '}
-          {CHESTS_PER_GAMEDAY}. Um eine Truhe zu öffnen, braucht es eine bestimmte Zahl Truppen (
-          {CHEST_TROOPS_MIN}–{CHEST_TROOPS_MAX}); sie steht auf der Karte neben der Truhe.
+          Jeden Spieltag erscheinen {CHESTS_PER_GAMEDAY} Truhen auf der Karte. In jeder liegt eine{' '}
+          <b>Karte</b>. Zum Bergen brauchst du eine bestimmte Zahl Truppen ({CHEST_TROOPS_MIN}–
+          {CHEST_TROOPS_MAX}); sie steht auf der Karte unter der Truhe.
         </P>
+        <Legend
+          items={[
+            {
+              art: <ChestIcon size={36} />,
+              title: 'ab 50 Truppen',
+              text: 'So zeigt die Karte, wie viele Truppen du mindestens schicken musst.',
+            },
+          ]}
+        />
+        <Steps
+          items={[
+            'Schicke genug Truppen zur Truhe. Wer zuerst mit genug Truppen ankommt, bekommt sie.',
+            'Die Truppen bringen sie sofort heim. Unterwegs kann ihnen niemand die Truhe rauben.',
+            'Daheim öffnest du die Truhe. Erst dann siehst du, welche Karte darin liegt.',
+          ]}
+        />
         <List
           items={[
-            'Wer zuerst mit genug Truppen ankommt, birgt die Truhe.',
-            'Die Truppen bringen sie sofort heim; die Truhe kann ihnen niemand rauben.',
             'Wer eine Burg stürmt, bekommt zusätzlich zur Beute eine Truhe.',
             'Zu wenige Truppen kehren mit leeren Händen um.',
-            'Daheim wartet die Truhe auf dich. Erst beim Öffnen zeigt sich, welche Karte darin liegt.',
+            `Gleichzeitig liegen höchstens so viele Truhen auf der Karte, wie Spieler mitspielen – mindestens aber ${CHESTS_PER_GAMEDAY}.`,
           ]}
         />
         <Details
           items={[
             'Mit zu wenigen Truppen kannst du gar nicht erst zu einer Truhe aufbrechen oder umleiten.',
             'Kommen zwei Züge an, gewinnt, wer zuerst da ist. Der zweite findet nichts und kehrt leer um.',
-            'Ist die Karte schon voll (so viele Truhen wie Spieler, mindestens drei), erscheinen am neuen Spieltag entsprechend weniger.',
+            `Ist die Karte schon voll (so viele Truhen wie Spieler, mindestens ${CHESTS_PER_GAMEDAY}), erscheinen am neuen Spieltag entsprechend weniger.`,
             'Truhen erscheinen möglichst weit weg von Burgen, Stützpunkten, Vorkommen und anderen Truhen.',
-            'Ein Truhenträger kehrt heim — zu der Burg, aus der er kam, oder zu einem anderen eigenen Lager, wenn du ihn umleitest. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
-            'Eine normal geborgene Truhe ist nie überfallbar, weil ihr Zug keine Ressourcen trägt. Nur eine Truhe aus einem Burgsturm reist zusammen mit Beute — dann kann man die Beute rauben, die Truhe nie.',
+            'Ein Truhenträger kehrt heim – zu der Burg, aus der er kam, oder zu einem anderen eigenen Lager, wenn du ihn umleitest. Auch über einen Stützpunkt landet die Truhe bei dir: Truhen gehören dem Spieler, nicht der Burg.',
+            'Eine normal geborgene Truhe ist nie überfallbar, weil ihr Zug keine Ressourcen trägt. Nur eine Truhe aus einem Burgsturm reist zusammen mit Beute – dann kann man die Beute rauben, die Truhe nie.',
             'Ungeöffnete Truhen daheim kann dir niemand nehmen, auch nicht beim Sturm auf deine Burg.',
             `Welche Karte in einer Truhe liegt, ist Zufall: ${CARD_TYPES.map((c) => `${CARDS[c].name} ${formatPercent(cardChance(c))}`).join(', ')}.`,
           ]}
@@ -575,16 +997,25 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'cards',
     title: 'Karten',
+    icon: <CardArt card="fog" className="h-4 w-5 rounded-[2px] border border-ink/60" />,
     body: () => (
       <>
         <P>
-          Karten gehören dir, nicht einer Burg. Klicke eine Karte an, um ihr Profil zu sehen und sie
-          zu <b>aktivieren</b>. Es kann immer nur eine Karte aktiv sein.
+          Karten gehören dir, nicht einer Burg. Klicke eine Karte in deiner Hand an, um sie dir
+          anzusehen und sie zu <b>aktivieren</b>. Es kann immer nur eine Karte aktiv sein.
         </P>
+        <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+          {CARD_TYPES.map((card) => (
+            <span key={card} className="flex w-16 flex-col items-center text-center text-xs">
+              <CardArt card={card} className="h-9 w-full rounded-[2px] border border-ink/60" />
+              {CARDS[card].name}
+            </span>
+          ))}
+        </div>
         <List
           items={[
             <>
-              <b>Sofortkarten</b> wirken im Moment der Aktivierung.
+              <b>Sofortkarten</b> wirken im Moment, in dem du sie aktivierst.
             </>,
             <>
               <b>Marschkarten</b> werden scharf geschaltet und gehen mit dem nächsten Zug mit, den
@@ -592,16 +1023,16 @@ const CHAPTERS: Chapter[] = [
             </>,
           ]}
         />
-        <P>Alle Karten findest du im Kartenkatalog.</P>
+        <P>Was jede Karte genau kann, steht im Kartenkatalog (nächstes Kapitel).</P>
         <Details
           items={[
             'Eine scharf geschaltete Marschkarte bleibt in deiner Hand, bis ein Zug sie mitnimmt. Du kannst sie wieder entschärfen oder durch eine andere ersetzen.',
             'Beim Losschicken entscheidest du, ob die scharfe Karte mitgeht. Umleiten verbraucht keine Karte.',
             'Nebel gilt für das ganze Leben des Zuges, auch auf dem Heimweg: Andere sehen nur „?“, auch im Liveticker.',
-            'Tarnung verbirgt Ziel und Route nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
+            'Tarnung verbirgt Ziel, Route und Ankunftszeit nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
             'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
             'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
-            'Seeweg führt den Hinweg schnurgerade zum Ziel, auch übers Wasser. Heim geht es wieder über Land. Wer umleitet, verlässt den Seeweg; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
+            'Seeweg führt den Hinweg schnurgerade zum Ziel, auch übers Wasser – der Zug wird dort zum Schiff. Heim geht es wieder über Land. Wer umleitet, verlässt den Seeweg; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
             'Füllhorn zahlt an den nächsten drei Spieltag-Anfängen je +1 Holz, Stein und Gold zusätzlich in deine Burg. Mehrere Füllhörner verlängern um je drei Spieltage.',
             'Schuhe klauen trifft alle Züge, die die gewählte Person in den nächsten 8 Stunden Spielzeit losschickt (auch Heimwege und Umleitungen): 75 % Tempo, beladen also nur noch etwa 56 %. Schon laufende Züge behalten ihr Tempo.',
             'Hofumzug tauscht die Orte deiner Burg und eines deiner Stützpunkte. Truppen und Lager bleiben, wo sie hingehören: Die Burg nimmt ihre mit, der Stützpunkt seine. Züge auf dem Weg zu einer der beiden laufen zum neuen Ort weiter. Hofumzug ist seltener als die anderen Karten.',
@@ -614,6 +1045,7 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'catalog',
     title: 'Kartenkatalog',
+    icon: <CardArt card="sea" className="h-4 w-5 rounded-[2px] border border-ink/60" />,
     body: () => (
       <>
         <P>Alle Karten, die in Truhen liegen können:</P>
@@ -628,30 +1060,33 @@ const CHAPTERS: Chapter[] = [
   {
     id: 'view',
     title: 'Sicht & Liveticker',
+    icon: <OnlineDot online />,
     body: () => (
       <>
         <P>
-          Auf der Karte ist alles für alle sichtbar: Burgen, Truppen, Lager und Züge — außer Karten
-          verbergen etwas (Nebel: Truppenzahl, Tarnung: Ziel).
+          Auf der Karte sehen alle alles: Burgen, Truppen, Lager und Züge. Nur Karten verbergen
+          etwas – Nebel die Truppenzahl, Tarnung das Ziel.
         </P>
+        <H>Liveticker und Chronik</H>
         <P>
-          Der Liveticker oben links meldet öffentliche Ereignisse: Aufbrüche, Kämpfe, geborgene
-          Truhen, eroberte Stützpunkte, neue Spieltage. Deine eigene Chronik findest du in der
-          Seitenleiste.
+          Der Liveticker oben links meldet, was auf der Karte passiert: Aufbrüche, Kämpfe, geborgene
+          Truhen, eroberte Stützpunkte, neue Spieltage. Was nur dich betrifft, steht in deiner
+          Chronik in der Seitenleiste.
         </P>
+        <H>Wer ist online?</H>
         <P>
-          In der Rangliste zeigt ein <b>grüner Punkt</b> neben dem Namen, wer gerade online ist; ein
-          leerer Kreis heißt offline.
+          In der Rangliste zeigt ein <b>grüner Punkt</b> <OnlineDot online /> neben dem Namen, wer
+          gerade online ist. Ein leerer Kreis <OnlineDot online={false} /> heißt offline.
         </P>
-        <P>
-          Ändern sich während des Spiels die Regeln, steht das unter <b>Neuerungen</b> (Schriftrolle
-          neben dem Handbuch). Neue Änderungen erscheinen dort einmal von selbst.
-        </P>
+        <Remember>
+          Ändern sich während des Spiels die Regeln, steht das unter <b>Neuerungen</b> (die
+          Schriftrolle neben dem Handbuch). Neue Änderungen zeigt das Spiel dir einmal von selbst.
+        </Remember>
         <Details
           items={[
             'Ladungen sind immer für alle sichtbar, auch unter Nebel oder Tarnung.',
             'Der Liveticker zeigt die letzten 60 Ereignisse, deine Chronik die letzten 30 Einträge.',
-            'Der Liveticker schreibt mit, was alle sehen: Unter Nebel steht dort „?“ statt der Truppenzahl, unter Tarnung „unbekanntes Ziel“.',
+            'Der Liveticker schreibt mit, was alle sehen: Unter Nebel steht dort „?“ statt der Truppenzahl. Ein getarnter Zug zieht ohne Meldung los.',
           ]}
         />
       </>
@@ -719,12 +1154,15 @@ function Book({
                     i === index ? 'bg-accent/70 font-bold text-seal' : 'hover:text-seal'
                   }`}
                 >
-                  <span className="w-9 shrink-0 text-right text-ink-soft tabular-nums">
+                  <span className="w-8 shrink-0 text-right text-ink-soft tabular-nums">
                     {toRoman(i + 1)}.
                   </span>
-                  <span className="shrink-0 italic">{c.title}</span>
+                  <span className="grid w-6 shrink-0 translate-y-[3px] place-items-center">
+                    {c.icon}
+                  </span>
+                  <span className="min-w-0 italic">{c.title}</span>
                   <span className="min-w-2 flex-1 translate-y-[-3px] border-b border-dotted border-ink/50" />
-                  <span className="shrink-0 text-xs text-ink-soft tabular-nums">{i * 2 + 3}</span>
+                  <span className="shrink-0 text-xs text-ink-soft tabular-nums">{i + 1}</span>
                 </Button>
               </li>
             ))}
@@ -759,7 +1197,10 @@ function Book({
               <MenuIcon /> Inhalt
             </Button>
           </div>
-          <h2 className="mt-1 mb-3 border-b border-ink/40 pb-1 text-2xl italic">{chapter.title}</h2>
+          <h2 className="mt-1 mb-3 flex items-center gap-2.5 border-b border-ink/40 pb-1 text-2xl italic">
+            <span className="grid scale-150 place-items-center">{chapter.icon}</span>
+            {chapter.title}
+          </h2>
           <div
             key={chapter.id}
             className="min-h-0 flex-1 overflow-y-auto pr-2 text-[15px] [&>p:first-child]:first-letter:float-left [&>p:first-child]:first-letter:mr-1.5 [&>p:first-child]:first-letter:text-5xl [&>p:first-child]:first-letter:leading-[0.9] [&>p:first-child]:first-letter:text-seal"
@@ -778,7 +1219,7 @@ function Book({
               <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
               <span className="md:hidden">Zurück</span>
             </Button>
-            <span className="text-xs text-ink-soft tabular-nums">— {index * 2 + 3} —</span>
+            <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
             <Button
               variant="ghost"
               size="sm"

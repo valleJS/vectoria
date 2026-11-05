@@ -216,68 +216,91 @@ export function resourceIcon(resource: ResourceType): string {
   return svg(64, 64, RESOURCE_BODY[resource]);
 }
 
-/** Gold veins glinting in the mine's mound: ink-edged seams, lit in pale gold. */
-const GOLD_VEINS = [
-  'M15 44L20 40L19 35L24 31',
-  'M64 28L68 33L67 38L72 42',
-  'M27 27L32 29L35 25',
-  'M57 44L62 47',
-]
-  .map(
-    (d) =>
-      `<path d="${d}" fill="none" stroke="${INK}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-       <path d="${d}" fill="none" stroke="${GOLD}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-       <path d="${d}" fill="none" stroke="${GOLD_LIGHT}" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round"/>`,
-  )
-  .join('');
+const CARGO_BODY: Record<ResourceType, string> = {
+  wood: `${log(8, 42, 38, 10, -4, INK)}${log(14, 25, 34, 9, -4, INK)}`,
+  stone: stoneChunk(32, 34, 50, 2),
+  gold: goldNugget(32, 34, 50, 1),
+};
+
+/**
+ * Load an army carries home, 64×64 around its centre: a bundle of two logs, a stone chunk, a gold
+ * nugget — no glints. The map shows it inside the cargo roundel.
+ */
+export function cargoPiece(resource: ResourceType): Art {
+  return {
+    svg: svg(64, 64, CARGO_BODY[resource]),
+    width: 64,
+    height: 64,
+    anchor: { x: 32, y: 32 },
+  };
+}
 
 /** Where the gold mine (`deposit('gold')`) catches the light, art px: the map twinkles there. */
 export const GOLD_MINE_GLINTS: readonly { x: number; y: number; size: number }[] = [
-  { x: 16, y: 40, size: 9 },
-  { x: 68, y: 40, size: 10 },
-  { x: 41, y: 51, size: 8 },
-  { x: 24, y: 28, size: 7 },
-  { x: 62, y: 22, size: 7 },
-  { x: 60, y: 50, size: 6 },
+  { x: 20, y: 47, size: 9 },
+  { x: 43, y: 50, size: 10 },
+  { x: 62, y: 49, size: 8 },
+  { x: 72, y: 53, size: 6 },
+  { x: 30, y: 54, size: 6 },
 ];
 
 /**
- * The trader: a striped pavilion with a pennant over a counter, stone on one side and gold on
- * the other (it swaps the one for the other).
+ * The trader: a market stall under a scalloped awning striped in seal red and parchment, stone
+ * on one side of the counter and gold on the other (it swaps the one for the other). A crate and
+ * a sack of wares beside it.
  */
-function traderTent(): string {
-  const eaves = [14, 29, 44, 59, 74];
-  const wedges = eaves
-    .slice(0, -1)
-    .map((x, i) => `<path d="M44 8L${x} 28H${eaves[i + 1]}Z" fill="${i % 2 ? PARCHMENT : SEAL}"/>`)
-    .join('');
-  const line = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
-  return `${groundShadow(44, 59, 36, 6)}
-    <path d="M19 28V56H69V28Z" fill="${PARCHMENT}" ${line}/>
-    <path d="M58 29V55H68V29Z" fill="${shade(PARCHMENT, 0.86)}"/>
-    <g ${line}>${wedges}<path d="M44 8L14 28H74Z" fill="none"/></g>
-    <path d="M42 11L20 25.6" stroke="${PARCHMENT}" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
-    <path d="M44 8V1.5" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/>
-    <path d="M44 2h9l-2.4 2.4 2.4 2.4H44Z" fill="${GOLD}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+function traderStall(): string {
+  const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
+  // Awning: a sloped strip from the ridge (y 8) to the front edge (y 20), eight stripes, each
+  // ending in a scallop.
+  const stripes = 8;
+  const top = (k: number) => 14 + (60 * k) / stripes;
+  const bottom = (k: number) => 8 + (72 * k) / stripes;
+  let awning = '';
+  let scallops = '';
+  for (let k = 0; k < stripes; k++) {
+    const fill = k % 2 ? PARCHMENT : SEAL;
+    awning += `<path d="M${n(top(k))} 8L${n(top(k + 1))} 8L${n(bottom(k + 1))} 20L${n(bottom(k))} 20Z" fill="${fill}" stroke="${fill}" stroke-width=".6"/>`;
+    const r = (bottom(k + 1) - bottom(k)) / 2;
+    scallops += `<path d="M${n(bottom(k))} 20A${n(r)} ${n(r)} 0 0 0 ${n(bottom(k + 1))} 20Z" fill="${fill}" ${line}/>`;
+  }
+  return `${groundShadow(44, 59, 40, 6)}
+    <rect x="16" y="14" width="56" height="28" fill="${shade(PARCHMENT, 0.8)}" ${line}/>
+    <path d="M30 14V42M44 14V42M58 14V42" stroke="${shade(PARCHMENT, 0.66)}" stroke-width="1.2"/>
     <g ${line}>
-      <rect x="16" y="45" width="56" height="12" fill="${TIMBER.base}"/>
-      <path d="M16 45H72"/>
+      <rect x="13" y="12" width="4.5" height="45" fill="${TIMBER.shade}"/>
+      <rect x="70.5" y="12" width="4.5" height="45" fill="${TIMBER.shade}"/>
     </g>
-    <path d="M18 51H70" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
-    ${stoneChunk(30, 39, 20, 1)}
-    ${goldNugget(53, 40, 15, 2)}${goldNugget(61, 41, 11, 0)}
-    ${glint(64, 32, 3.6)}`;
+    ${scallops}
+    ${awning}<path d="M14 8H74L80 20H8Z" fill="none" ${line}/>
+    <path d="M12 8H76" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M12 8H76" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    ${stoneChunk(24, 35, 15, 1)}${stoneChunk(35, 36.5, 11, 3)}
+    ${goldNugget(55, 36, 12, 2)}${goldNugget(65, 36.5, 10, 0)}${goldNugget(60, 32, 8, 4)}
+    <g ${line}>
+      <rect x="12" y="41" width="64" height="16" fill="${TIMBER.base}"/>
+      <rect x="10" y="39" width="68" height="4" rx="1" fill="${TIMBER.light}"/>
+    </g>
+    <path d="M14 48H74M14 53H74" stroke="${TIMBER.grain}" stroke-width="1" opacity=".55"/>
+    <path d="M60 43.5V56" stroke="${TIMBER.shade}" stroke-width="5" opacity=".35"/>
+    <g ${line}>
+      <rect x="74" y="46" width="11" height="11" fill="${TIMBER.light}"/>
+      <path d="M74 46L85 57M85 46L74 57" fill="none" stroke-width="1.2"/>
+      <path d="M2 57Q1 49 5 46L7 43H11L12 46Q16 49 14 57Z" fill="${PARCHMENT}"/>
+    </g>
+    <path d="M6 45.5H12" stroke="${INK}" stroke-width="1.3"/>
+    <path d="M10 49Q12 52 11 56" stroke="${shade(PARCHMENT, 0.8)}" stroke-width="1.4" fill="none"/>`;
 }
 
 /**
  * Map piece for a spot, 88×68, standing at (44, 58), centred on its tile at y 40: a woodpile
- * with a chopping block, a heap of quarry stone, a gold-veined outcrop with nuggets, or the
- * trader's pavilion.
+ * with a chopping block, a heap of quarry stone, a gold mine with nuggets, or the
+ * trader's market stall.
  */
 export function deposit(resource: SpotKind): Art {
   let body: string;
   if (resource === 'trader') {
-    body = traderTent();
+    body = traderStall();
   } else if (resource === 'wood') {
     body = `${groundShadow(44, 58, 38, 7)}
       <g transform="translate(66 50)">
@@ -323,10 +346,7 @@ export function deposit(resource: SpotKind): Art {
         <rect x="27" y="30" width="34" height="6" rx="1" fill="${TIMBER.light}"/>
       </g>
       <path d="M31.6 38v16M54 38v16" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
-      ${GOLD_VEINS}
-      ${goldNugget(22, 52, 20, 1)}${goldNugget(60, 54, 18, 2)}${goldNugget(41, 56, 22, 0)}${goldNugget(30, 58, 14, 3)}${goldNugget(70, 57, 12, 4)}
-      <path d="M38 22l-1.4 2.8" stroke="#fffbe6" stroke-width="1.6" stroke-linecap="round"/>
-      ${glint(16, 40, 5)}${glint(68, 40, 5.5)}${glint(46, 47, 3.8)}${glint(24, 28, 3.6)}${glint(62, 22, 3.2)}`;
+      ${goldNugget(22, 52, 20, 1)}${goldNugget(60, 54, 18, 2)}${goldNugget(41, 56, 22, 0)}${goldNugget(30, 58, 14, 3)}${goldNugget(70, 57, 12, 4)}`;
   }
   return { svg: svg(88, 68, body), width: 88, height: 68, anchor: { x: 44, y: 58 }, centreY: 40 };
 }
@@ -723,6 +743,28 @@ export function gatherShield(color: string): Art {
   return { svg: svg(30, 34, body), width: 30, height: 34, anchor: { x: 15, y: 16 } };
 }
 
+/**
+ * Emblem of a duo attack: two heraldic shields side by side, the left in the initiator's colour,
+ * the right in the partner's, leaning together over two crossed spears. 52×40, centred at (26, 21).
+ */
+export function duoShields(left: string, right: string): Art {
+  const outline = 'M4 4.5H26V15.5Q26 26.5 15 31Q4 26.5 4 15.5Z';
+  const shield = (color: string, x: number, angle: number) => `
+    <g transform="translate(${x} 4) rotate(${angle} 15 18)">
+      <path d="${outline}" fill="${color}"/>
+      <path d="M15 4.5V31Q26 26.5 26 15.5V4.5Z" fill="${shade(color, 0.82)}"/>
+      <path d="M6.6 7.4H23.4V15.5Q23.4 24.6 15 28.2Q6.6 24.6 6.6 15.5Z" fill="none" stroke="${shade(color, 1.45)}" stroke-width="1.1" opacity=".75"/>
+      <path d="${outline}" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M3 4.5H27" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>
+    </g>`;
+  const spear = (x1: number, x2: number) => `
+    <path d="M${x1} 38L${x2} 4" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M${x1} 38L${x2} 4" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M${x2} 0L${x2 + (x2 > x1 ? 3 : -3)} 6L${x2 - (x2 > x1 ? 1.5 : -1.5)} 6.5Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>`;
+  const body = `${spear(8, 44)}${spear(44, 8)}${shield(left, 3, -10)}${shield(right, 19, 10)}`;
+  return { svg: svg(52, 40, body), width: 52, height: 40, anchor: { x: 26, y: 21 } };
+}
+
 // ---- Sites ----
 
 const LINE = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"`;
@@ -1006,32 +1048,49 @@ export function soldiers(color: string): Art {
 // ---- Night caravan ----
 
 /** Where the caravan's lantern hangs (art px of `caravanWagon`): the map lights it at night. */
-export const CARAVAN_LANTERN = { x: 47, y: 15 };
+export const CARAVAN_LANTERN = { x: 62, y: 7 };
 
 /**
- * The night caravan: a covered wagon heading right, the canvas banded in the owner's colour, a
- * lantern on the front hoop. 56×42, standing at (28, 38).
+ * The night caravan: a big wooden wagon heading right — a high plank bed on stakes with a stripe
+ * in the owner's colour, two large spoked wheels, a drawbar, and a lantern on a post at the
+ * front. 72×52, standing at (34, 48).
  */
 export function caravanWagon(color: string): Art {
   const line = `stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"`;
-  const wheel = (cx: number, cy: number, r: number) =>
-    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${TIMBER.shade}" ${line}/>
-     <path d="M${cx - r * 0.7} ${cy}H${cx + r * 0.7}M${cx} ${cy - r * 0.7}V${cy + r * 0.7}" stroke="${INK}" stroke-width="1.4"/>
-     <circle cx="${cx}" cy="${cy}" r="1.8" fill="${IRON.base}" stroke="${INK}" stroke-width="1.1"/>`;
+  const wheel = (cx: number, cy: number, r: number) => {
+    const spokes = [0, 1, 2, 3, 4, 5]
+      .map((k) => {
+        const a = (k * Math.PI) / 6;
+        const dx = Math.cos(a) * r * 0.78;
+        const dy = Math.sin(a) * r * 0.78;
+        return `M${n(cx - dx)} ${n(cy - dy)}L${n(cx + dx)} ${n(cy + dy)}`;
+      })
+      .join('');
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${TIMBER.shade}" ${line}/>
+      <circle cx="${cx}" cy="${cy}" r="${n(r - 2.4)}" fill="none" stroke="${TIMBER.base}" stroke-width="1.4"/>
+      <path d="${spokes}" stroke="${INK}" stroke-width="1.4"/>
+      <circle cx="${cx}" cy="${cy}" r="2.6" fill="${IRON.base}" stroke="${INK}" stroke-width="1.2"/>`;
+  };
+  const stakes = [6, 30, 54]
+    .map((x) => `<rect x="${x}" y="5" width="4" height="33" fill="${TIMBER.shade}" ${line}/>`)
+    .join('');
   const body = `
-    ${groundShadow(28, 38.5, 25, 3)}
-    <path d="M42 28L54 30" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>
-    <rect x="6" y="22" width="36" height="9" fill="${TIMBER.base}" ${line}/>
-    <path d="M8 22V12Q8 3 17 3H31Q40 3 40 12V22Z" fill="${PARCHMENT}" ${line}/>
-    <path d="M32 3.6Q39.4 4 39.4 12V21.4H33Z" fill="${shade(PARCHMENT, 0.86)}"/>
-    <path d="M18.6 3.6V15M29.4 3.6V15" stroke="${shade(PARCHMENT, 0.72)}" stroke-width="1.3"/>
-    <path d="M10.4 13Q10.4 6 16 5.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" opacity=".7"/>
-    <path d="M8 15H40V22H8Z" fill="${color}" ${line}/>
-    <path d="M8 22V12Q8 3 17 3H31Q40 3 40 12V22Z" fill="none" ${line}/>
-    <path d="M40 8.4H47V12" fill="none" stroke="${INK}" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M45 12H49L48.4 18H45.6Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
-    ${wheel(14, 31, 7)}${wheel(35, 31, 7)}`;
-  return { svg: svg(56, 42, body), width: 56, height: 42, anchor: { x: 28, y: 38 }, centreY: 22 };
+    ${groundShadow(36, 48, 33, 3.4)}
+    <path d="M60 35L70 40" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M60 35L70 40" stroke="${TIMBER.light}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M68.5 37.5L71 42.5" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M7 8L63 8L60 11H4Z" fill="${TIMBER.grain}" ${line}/>
+    <rect x="4" y="11" width="56" height="27" fill="${TIMBER.base}" ${line}/>
+    <path d="M5 16.5H59M5 33H59" stroke="${TIMBER.grain}" stroke-width="1" opacity=".6"/>
+    <rect x="4" y="22" width="56" height="6" fill="${color}" ${line}/>
+    <path d="M6 23.6H58" stroke="${shade(color, 1.45)}" stroke-width="1" opacity=".75"/>
+    ${stakes}
+    <path d="M3 10.2H61" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M3 10.2H61" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M58 10V1H62V3" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M59.5 3H64.5L63.8 9.5H60.2Z" fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${wheel(15, 39, 9.5)}${wheel(49, 39, 9.5)}`;
+  return { svg: svg(72, 52, body), width: 72, height: 52, anchor: { x: 34, y: 48 }, centreY: 25 };
 }
 
 // ---- Night camp ----

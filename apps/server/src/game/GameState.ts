@@ -43,6 +43,7 @@ import {
   TROOP_BATCH_SIZE,
   travelMs,
   victoryPointsCost,
+  VICTORY_POINTS_PER_GAMEDAY,
   type AdminState,
   type ArmyStatus,
   type ArmyTarget,
@@ -131,6 +132,8 @@ interface PlayerRecord {
   harvestDays?: number;
   /** Shoes stolen: marches started before this clock go barefoot. Absent in older saves. */
   barefootUntil?: number | null;
+  /** Victory points bought in `gameday`; absent in older saves and before the first purchase. */
+  victoryPointsBought?: { gameday: number; count: number };
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
@@ -358,6 +361,16 @@ export class GameState {
 
   buy(playerId: string, item: 'troops' | 'victoryPoint', count: number): void {
     const player = this.requirePlaying(playerId);
+    if (item === 'victoryPoint') {
+      const left = VICTORY_POINTS_PER_GAMEDAY - this.victoryPointsToday(player);
+      if (count > left) {
+        throw new RuleError(
+          left > 0
+            ? `Heute kannst du nur noch ${left} Siegpunkt${left === 1 ? '' : 'e'} kaufen.`
+            : `Pro Spieltag gibt es höchstens ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkte — morgen wieder.`,
+        );
+      }
+    }
     // Victory points get dearer one by one, so their price is the sum over the whole purchase.
     const cost =
       item === 'troops' ? TROOP_BATCH_COST : victoryPointsCost(player.victoryPoints, count);
@@ -370,6 +383,10 @@ export class GameState {
       player.homeTroops += count * TROOP_BATCH_SIZE;
     } else {
       player.victoryPoints += count;
+      player.victoryPointsBought = {
+        gameday: this.data.gameday,
+        count: this.victoryPointsToday(player) + count,
+      };
       this.addLog(player, `Du hast ${count} Siegpunkt(e) gekauft.`);
       if (player.victoryPoints >= this.options.victoryPointsToWin) this.finish(player.id);
     }
@@ -434,13 +451,16 @@ export class GameState {
       ...(trade ? { trade: { ...trade } } : {}),
     };
     this.data.armies.push(army);
-    this.addFeed(
-      target.kind === 'army' ? 'battle' : 'march',
-      `${this.armyLabel(army)} ${this.marchPhrase(army)}` +
-        (hasResources(cargo) ? ` (mit ${formatResources(cargo)})` : '') +
-        '.',
-      army.id,
-    );
+    // A stealth march sets out unannounced: the ticker would give away that something is afoot.
+    if (!army.stealth) {
+      this.addFeed(
+        target.kind === 'army' ? 'battle' : 'march',
+        `${this.armyLabel(army)} ${this.marchPhrase(army)}` +
+          (hasResources(cargo) ? ` (mit ${formatResources(cargo)})` : '') +
+          '.',
+        army.id,
+      );
+    }
     this.dirty = true;
   }
 
@@ -537,11 +557,13 @@ export class GameState {
     army.target = target;
     army.departClock = this.data.clock;
     army.arriveClock = destination.arriveClock;
-    this.addFeed(
-      target.kind === 'army' ? 'battle' : 'march',
-      `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
-      army.id,
-    );
+    if (!army.stealth) {
+      this.addFeed(
+        target.kind === 'army' ? 'battle' : 'march',
+        `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
+        army.id,
+      );
+    }
     this.dirty = true;
   }
 
@@ -2047,6 +2069,7 @@ export class GameState {
             initiatorSources: [...pact.initiatorSources],
           })),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
+        victoryPointsToday: this.victoryPointsToday(self),
         log: self.log,
       },
     };
@@ -2114,7 +2137,8 @@ export class GameState {
       route: visible ? remainingPath(army.path, this.legFraction(army)) : null,
       target: visible && !secret ? army.target : null,
       departClock: army.departClock,
-      arriveClock: army.arriveClock,
+      // The arrival time would tell how far away the hidden target is.
+      arriveClock: visible ? army.arriveClock : army.departClock,
       cargo: army.cargo,
       fog: army.fog,
       stealth: army.stealth,
@@ -2395,6 +2419,12 @@ export class GameState {
     army.forcedMarch = false;
   }
 
+  /** Victory points the player bought in the current gameday. */
+  private victoryPointsToday(player: PlayerRecord): number {
+    const bought = player.victoryPointsBought;
+    return bought && bought.gameday === this.data.gameday ? bought.count : 0;
+  }
+
   /** Pace of marches the player starts now: slowed while barefoot (Schuhe klauen). */
   private marchSpeed(player: PlayerRecord): number {
     return (player.barefootUntil ?? 0) > this.data.clock ? BAREFOOT_SPEED : 1;
@@ -2446,7 +2476,6 @@ export class GameState {
 
   /** What a marching army is doing, for the ticker ("greift die Burg von X an"). */
   private marchPhrase(army: ArmyRecord): string {
-    if (army.stealth) return 'bricht zu einem unbekannten Ziel auf';
     const { kind, id } = army.target;
     const name = (playerId: string | undefined) =>
       (playerId && this.player(playerId)?.name) ?? 'Unbekannt';
