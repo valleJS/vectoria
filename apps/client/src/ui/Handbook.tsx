@@ -250,7 +250,7 @@ const CHAPTERS: Chapter[] = [
             'Die faire Verteilung der Vorkommen ist ab deiner Heimatburg gemessen, nicht ab Stützpunkten.',
             'Zum Händler geht nur ein Zug, der Stein mitnimmt; Stein ist die einzige Ladung, die du aus einer Burg mitschicken kannst.',
             'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen — dann bringt er den Stein zurück.',
-            'Wird er unterwegs ausgeraubt, kommt er ohne Stein beim Händler an und kehrt leer heim.',
+            'Wird er auf dem Hinweg ausgeraubt, kehrt er sofort leer und wieder normal schnell heim.',
             'Gold und Holz gehen an die Burg, aus der der Zug losgezogen ist; unterwegs lassen sie sich wie jede Ladung zu einem anderen eigenen Lager umleiten.',
           ]}
         />

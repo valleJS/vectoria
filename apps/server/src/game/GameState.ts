@@ -1221,10 +1221,17 @@ export class GameState {
       );
       this.startReturn(army, last(army.path));
       // Robbed of its load, the convoy marches on at normal speed: home, or on to its own base.
+      // Robbed of its stone, a march to the trader has nothing left to trade and turns home.
       if (!hasResources(convoy.cargo)) {
         const position = this.armyPosition(convoy);
-        if (convoy.status === 'returning') this.startReturn(convoy, position);
-        else this.reroute(convoy, position, last(convoy.path));
+        if (convoy.status === 'returning' || convoy.trade) {
+          if (convoy.trade && convoy.troops > 0) {
+            this.addLog(victim, 'Ohne Stein lohnt der Händler nicht — dein Zug kehrt um.');
+          }
+          this.startReturn(convoy, position);
+        } else {
+          this.reroute(convoy, position, last(convoy.path));
+        }
       }
     } else {
       this.addLog(
