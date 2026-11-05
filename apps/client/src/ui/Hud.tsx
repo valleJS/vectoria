@@ -45,6 +45,7 @@ import {
 } from './icons';
 import { CardProfile } from './CardFace';
 import { ChestOpening } from './ChestOpening';
+import { TraderMenu } from './TraderMenu';
 import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
 import { RuleChanges, RuleChangesButton } from './RuleChanges';
 import { compactQuery } from './layout';
@@ -1037,6 +1038,7 @@ export function Hud() {
         </div>
       )}
       <ChestOpening />
+      <TraderMenu />
       <CardProfile />
       <Handbook />
       <RuleChanges />

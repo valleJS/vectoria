@@ -109,6 +109,37 @@ function barefoot(view: GameView): boolean {
   return (view.self.barefootUntil ?? 0) > view.clock.clock;
 }
 
+/** What the trader does, for the side panel and the trade menu. */
+export const TRADER_TEXT =
+  'Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin und zurück — beladen langsamer und überfallbar.';
+
+/** The trade form for the trader spot (the centred trade menu). */
+export function TradeForm({
+  view,
+  spotId,
+  onSent,
+}: {
+  view: GameView;
+  spotId: string;
+  onSent?: () => void;
+}) {
+  const spot = view.spots.find((s) => s.id === spotId);
+  if (!spot) return null;
+  return (
+    <SendForm
+      key={spotId}
+      view={view}
+      target={{ kind: 'spot', id: spotId }}
+      position={spot.position}
+      verb="Handeln"
+      bases={ownBases(view)}
+      defaultTroops={10}
+      trade
+      onSent={onSent}
+    />
+  );
+}
+
 function SendForm({
   view,
   target,
@@ -119,6 +150,7 @@ function SendForm({
   minTroops = 1,
   preview,
   trade = false,
+  onSent,
 }: {
   view: GameView;
   target: ArmyTarget;
@@ -131,8 +163,10 @@ function SendForm({
   minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
-  /** Target is the trader: carry stone and choose the gold/wood split. */
+  /** Target is the trader: carry stone and choose the gold/wood split (two columns). */
   trade?: boolean;
+  /** Called once the march is sent (the trade menu closes then). */
+  onSent?: () => void;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
@@ -188,6 +222,7 @@ function SendForm({
       ...(trade ? { trade: { gold, wood } } : {}),
     });
     setStone(0);
+    onSent?.();
   };
 
   const baseSelect = bases.length > 1 && (
@@ -218,7 +253,6 @@ function SendForm({
 
   const troopFields = (
     <div className="space-y-1">
-      {trade && <SectionLabel>Träger</SectionLabel>}
       <Slider
         min={available > 0 ? 1 : 0}
         max={Math.max(available, 1)}
@@ -269,7 +303,6 @@ function SendForm({
           <b>{wood}</b>
         </span>
       </div>
-      {baseSelect}
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Label htmlFor="trade-stone" className="gap-1">
@@ -367,10 +400,17 @@ function SendForm({
         />
       )}
       {trade ? (
-        <>
-          {tradeFields}
-          {troopFields}
-        </>
+        <div className="grid gap-x-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <SectionLabel>Tausch</SectionLabel>
+            {tradeFields}
+          </div>
+          <div className="space-y-2">
+            <SectionLabel>Träger</SectionLabel>
+            {baseSelect}
+            {troopFields}
+          </div>
+        </div>
       ) : (
         <>
           {baseSelect}
@@ -814,20 +854,16 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
         return (
           <>
             <Title icon={<SpotIcon kind="trader" size={30} />}>Händler</Title>
-            <div className="text-ink-soft">
-              Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin
-              und zurück — beladen langsamer und überfallbar.
-            </div>
-            <SendForm
-              key={selection.id}
-              view={view}
-              target={selection}
-              position={spot.position}
-              verb="Handeln"
-              bases={bases}
-              defaultTroops={10}
-              trade
-            />
+            <div className="text-ink-soft">{TRADER_TEXT}</div>
+            <Locked className="mt-2">
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => useGameStore.getState().setTraderMenu(true)}
+              >
+                Handel öffnen
+              </Button>
+            </Locked>
           </>
         );
       }

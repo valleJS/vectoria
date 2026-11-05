@@ -75,6 +75,8 @@ interface GameStore {
   revealedCard: CardType | null;
   /** The handbook is open. */
   handbook: boolean;
+  /** The trader's trade menu is open (opens when the trader is selected). */
+  traderMenu: boolean;
   /** The rule-changes notice is open. */
   ruleChanges: boolean;
   /** Rule changes already shown in this browser. */
@@ -93,6 +95,7 @@ interface GameStore {
   setChestOverlay(open: boolean): void;
   revealCard(card: CardType | null): void;
   setHandbook(open: boolean): void;
+  setTraderMenu(open: boolean): void;
   setRuleChanges(open: boolean): void;
   /** Remembers these rule changes as seen, so they lose their "Neu" mark. */
   markRuleChangesSeen(ids: string[]): void;
@@ -114,6 +117,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   chestOverlay: false,
   revealedCard: null,
   handbook: false,
+  traderMenu: false,
   ruleChanges: false,
   seenRuleChanges: readSeenRuleChanges(),
 
@@ -132,7 +136,15 @@ export const useGameStore = create<GameStore>()((set) => ({
       view,
       chestOverlay: s.chestOverlay || view.self.chests > (s.view?.self.chests ?? 0),
     })),
-  select: (selection) => set({ selection }),
+  // Selecting the trader opens its trade menu in the middle of the screen.
+  select: (selection) =>
+    set((s) => ({
+      selection,
+      traderMenu:
+        selection?.kind === 'spot' &&
+        s.view?.spots.find((spot) => spot.id === selection.id)?.resource === 'trader',
+    })),
+  setTraderMenu: (traderMenu) => set({ traderMenu }),
   setZoom: (zoom) => set({ zoom }),
   showNotice: (text) => set({ notice: { text, at: Date.now() } }),
   showCard: (cardProfile) => set({ cardProfile }),
