@@ -821,7 +821,7 @@ const CHAPTERS: Chapter[] = [
             'Kommen mehrere Angreifer an, wird nacheinander gekämpft, in der Reihenfolge ihrer Ankunft. Jeder Kampf trifft auf die Verteidigung, die der vorige übrig gelassen hat.',
             'Gekämpft wird, bis die Burg fällt. Ab dann drehen alle übrigen Angriffe auf sie sofort um.',
             'Eine gefallene Burg ist geschützt, bis ihr Besitzer wieder handeln kann: So lange kann niemand sie angreifen.',
-            'Beim Fall drehen alle Züge um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Ihre Ladung an Ressourcen verlieren sie, Truhen nehmen sie mit.',
+            'Beim Fall drehen alle Züge um: Hinmärsche, Angriffe, Überfälle, Truhenbergungen und Transporte. Alle Züge – auch die, die schon heimkehren – verlieren ihre Ladung an Ressourcen. Truhen nehmen sie mit.',
             'Ladende Züge brechen ab und kommen ohne Ladung heim.',
             'Die Besatzung der aufgegebenen Stützpunkte zieht ohne Ladung heim. Das Lager bleibt in der Ruine.',
             'Während des Rückzugs sind alle deine Züge unantastbar: Niemand kann sie überfallen, auch Überfälle, die schon unterwegs sind, gehen ins Leere. Auch deine Basis kann in dieser Zeit niemand stürmen.',

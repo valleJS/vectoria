@@ -111,7 +111,7 @@ troops than the other side brought (stops 1-troop harassment).
 | Defender wins | 100 % | 25 % | — |
 
 **Castle fall** (`GameState.rout`): the defender's armies all turn for the home castle on the spot
-and lose their resource cargo (chests kept; armies already heading for the castle are untouched),
+and lose their resource cargo (chests kept), those already heading home too (re-timed at normal speed),
 and every outpost is given up: it turns back into an unowned ruin, its garrison marching home
 empty-handed while the stock stays in the ruin. `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
 command in `requirePlaying` until the player's last army is gone (`removeArmy` lifts it). Nobody
