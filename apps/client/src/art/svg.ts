@@ -1,13 +1,16 @@
 import type { ResourceType, SpotKind } from '@vectoria/shared';
 import {
   END_GRAIN,
+  FORTIFY,
   GOLD,
   GOLD_DEEP,
   GOLD_LIGHT,
   GRANITE,
+  HERALDRY,
   INK,
   IRON,
   MASONRY,
+  MOSS,
   PARCHMENT,
   SEAL,
   SKIN,
@@ -1209,4 +1212,190 @@ export function flame(): Art {
     <path d="M12 28C8 28 8 23 10 20C11 22 12 22 12.5 20C12.5 17 14 14 16 12C16 17 18 19 18 23C18 26 16 28 12 28Z" fill="${GOLD}"/>
     <path d="M12 27C10.5 27 10.5 25 11.5 23.5C12.5 24.5 14 24 14.5 23C15 25 14 27 12 27Z" fill="${GOLD_LIGHT}"/>`;
   return { svg: svg(24, 32, body), width: 24, height: 32, anchor: { x: 12, y: 30 } };
+}
+
+// ---- Portraits ----
+
+/** One finger as an ink-outlined capsule from knuckle (x1, y1) to tip (x2, y2). */
+function finger(x1: number, y1: number, x2: number, y2: number, w: number): string {
+  const d = `M${n(x1)} ${n(y1)}L${n(x2)} ${n(y2)}`;
+  // Nail: a short light dash just short of the tip.
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const ux = (x2 - x1) / len;
+  const uy = (y2 - y1) / len;
+  const nail = `M${n(x2 - ux * 5)} ${n(y2 - uy * 5)}L${n(x2 - ux * 1.5)} ${n(y2 - uy * 1.5)}`;
+  return `<path d="${d}" stroke="${INK}" stroke-width="${n(w + 3)}" stroke-linecap="round"/>
+    <path d="${d}" stroke="${SKIN}" stroke-width="${n(w)}" stroke-linecap="round"/>
+    <path d="${nail}" stroke="${shade(SKIN, 1.35)}" stroke-width="${n(w * 0.45)}" stroke-linecap="round"/>`;
+}
+
+/**
+ * The trade menu's scene, after the "trade offer" meme: the trader in a violet-lit room (ceiling
+ * with light panels and pipes, a glowing strip along the ceiling edge, a pillar and a potted
+ * plant on the right, a dark turned post on the left), long hair parted in the middle,
+ * moustache and goatee, one brow raised, slate suit and tie, fingertips steepled in front of
+ * his chest. The upper corners stay calm: the menu lays its offer boxes over them. 400×340.
+ */
+export function merchant(): Art {
+  const W = 400;
+  const H = 340;
+  const line = `stroke="${INK}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"`;
+  const violet = HERALDRY[1];
+  const magenta = HERALDRY[10];
+  const hair = shade(TIMBER.grain, 0.55);
+  const hairLit = shade(TIMBER.shade, 0.95);
+  const suit = GRANITE.shade;
+  const suitShade = GRANITE.crack;
+  const shirt = GRANITE.light;
+  const tie = shade(FORTIFY, 0.55);
+
+  // ---- Room ----
+  // Leaves fanning out of the pot behind the trader's left shoulder: [x, y, angle, length].
+  const plantLeaves: [number, number, number, number][] = [
+    [330, 196, -95, 40],
+    [344, 206, -60, 46],
+    [318, 214, -125, 42],
+    [356, 222, -30, 48],
+    [306, 236, -150, 44],
+    [340, 236, -80, 44],
+    [366, 246, -8, 42],
+    [298, 262, -170, 40],
+    [328, 258, -110, 38],
+    [352, 262, -45, 46],
+    [372, 276, 18, 36],
+    [316, 284, -160, 38],
+    [346, 288, -20, 40],
+    [362, 300, 30, 32],
+    [300, 300, 175, 30],
+  ];
+  const leaves = plantLeaves
+    .map(([x, y, a, l], i) => {
+      const fill = i % 3 === 0 ? shade(MOSS, 1.25) : i % 3 === 1 ? MOSS : shade(MOSS, 0.8);
+      return `<g transform="translate(${x} ${y}) rotate(${a})">
+        <path d="M0 0Q${n(l / 2)} ${n(-l / 4)} ${l} 0Q${n(l / 2)} ${n(l / 4)} 0 0Z" fill="${fill}" stroke="${shade(MOSS, 0.55)}" stroke-width="1.2"/>
+        <path d="M2 0H${n(l - 4)}" stroke="${shade(MOSS, 0.6)}" stroke-width=".8"/>
+      </g>`;
+    })
+    .join('');
+  const joists = [
+    [40, 30],
+    [120, 112],
+    [200, 196],
+    [280, 286],
+    [360, 364],
+  ]
+    .map(([top, bottom]) => {
+      const yb = bottom! <= 320 ? 140 - (12 * bottom!) / 320 : 128 - (16 * (bottom! - 320)) / 80;
+      return `<path d="M${top} 0L${bottom} ${n(yb)}" stroke="${shade(violet, 1.25)}" stroke-width="1.6"/>`;
+    })
+    .join('');
+  const pipe = (d: string, w: number) =>
+    `<path d="${d}" stroke="${shade(violet, 0.22)}" stroke-width="${w}" stroke-linecap="round"/>
+     <path d="${d}" stroke="${shade(violet, 0.75)}" stroke-width="${n(w * 0.25)}" stroke-linecap="round" transform="translate(0 ${n(-w * 0.2)})"/>`;
+  const led = (w: number, color: string, alpha: number) =>
+    `<path d="M0 140L320 128L400 112" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" opacity="${alpha}"/>`;
+  const room = `
+    <defs>
+      <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${shade(violet, 0.95)}"/>
+        <stop offset="1" stop-color="${shade(violet, 0.62)}"/>
+      </linearGradient>
+      <radialGradient id="ceiling" cx=".45" cy=".9" r=".9">
+        <stop offset="0" stop-color="${shade(violet, 1.75)}"/>
+        <stop offset="1" stop-color="${shade(violet, 1.2)}"/>
+      </radialGradient>
+      <radialGradient id="vignette" cx=".5" cy=".55" r=".75">
+        <stop offset=".55" stop-color="${shade(violet, 0.3)}" stop-opacity="0"/>
+        <stop offset="1" stop-color="${shade(violet, 0.3)}" stop-opacity=".55"/>
+      </radialGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#wall)"/>
+    <path d="M0 0H400V112L320 128L0 140Z" fill="url(#ceiling)"/>
+    ${joists}
+    <path d="M0 52L400 36M0 96L400 76" stroke="${shade(violet, 1.3)}" stroke-width="1.2"/>
+    <path d="M58 18L128 14L126 40L54 44Z" fill="${shade(violet, 1.9)}" stroke="${shade(violet, 1.3)}" stroke-width="1.2"/>
+    <path d="M254 10L322 6L324 30L256 34Z" fill="${shade(violet, 1.9)}" stroke="${shade(violet, 1.3)}" stroke-width="1.2"/>
+    <path d="M150 70L196 67L196 86L148 90Z" fill="${shade(violet, 1.8)}" stroke="${shade(violet, 1.3)}" stroke-width="1"/>
+    ${pipe('M-6 74L406 22', 5)}
+    ${pipe('M96 -6L262 126', 4)}
+    ${pipe('M300 -6L372 112', 3)}
+    <path d="M320 128L400 112V340H320Z" fill="${shade(violet, 0.58)}"/>
+    <path d="M320 128V340" stroke="${shade(violet, 0.45)}" stroke-width="1.4"/>
+    ${led(18, shade(magenta, 1.5), 0.16)}${led(9, shade(magenta, 1.6), 0.35)}${led(3.5, shade(magenta, 1.9), 0.95)}
+    <path d="M370 108L400 102V340H370Z" fill="${shade(violet, 1.35)}"/>
+    <path d="M370 108V340" stroke="${shade(violet, 0.9)}" stroke-width="1.4"/>
+    <path d="M378 108V340" stroke="${shade(violet, 1.6)}" stroke-width="2"/>
+    <path d="M0 168L36 172V340H0Z" fill="${shade(violet, 0.32)}"/>
+    <g stroke="${shade(TIMBER.grain, 0.5)}" stroke-width="1.4">
+      <rect x="44" y="236" width="14" height="104" fill="${shade(TIMBER.shade, 0.55)}"/>
+      <ellipse cx="51" cy="232" rx="11" ry="5" fill="${shade(TIMBER.shade, 0.7)}"/>
+      <circle cx="51" cy="222" r="7" fill="${shade(TIMBER.shade, 0.75)}"/>
+      <rect x="40" y="262" width="22" height="7" rx="2" fill="${shade(TIMBER.shade, 0.7)}"/>
+    </g>
+    <path d="M47 240V336" stroke="${shade(TIMBER.base, 0.8)}" stroke-width="2" opacity=".6"/>
+    <path d="M322 340L328 300H372L378 340Z" fill="${shade(TIMBER.shade, 0.6)}" stroke="${shade(TIMBER.grain, 0.5)}" stroke-width="1.4"/>
+    <path d="M340 300Q336 250 330 200M352 300Q356 266 366 230M346 300Q344 270 342 220M336 300Q320 270 306 240" stroke="${shade(MOSS, 0.6)}" stroke-width="2" fill="none"/>
+    ${leaves}
+    <rect width="${W}" height="${H}" fill="url(#vignette)"/>`;
+
+  // ---- The trader ----
+  const eye = (x: number, y: number, lift: number) => `
+    <path d="M${x - 9} ${y + 4}Q${x} ${y + 9} ${x + 9} ${y + 4}" stroke="${shade(SKIN, 0.72)}" stroke-width="1.2" fill="none"/>
+    <ellipse cx="${x}" cy="${y}" rx="7" ry="3.8" fill="${shade(PARCHMENT, 1.05)}"/>
+    <circle cx="${x + 0.8}" cy="${y + 0.4}" r="3" fill="${TIMBER.shade}"/>
+    <circle cx="${x + 0.8}" cy="${y + 0.4}" r="1.5" fill="${INK}"/>
+    <circle cx="${x + 1.8}" cy="${y - 0.6}" r=".7" fill="${PARCHMENT}"/>
+    <path d="M${x - 8} ${y - 1.5 - lift}Q${x} ${y - 6 - lift} ${x + 8} ${y - 1.5 - lift}L${x + 8} ${y - 1}Q${x} ${y - 2.5} ${x - 8} ${y - 0.5}Z" fill="${shade(SKIN, 0.86)}"/>
+    <path d="M${x - 8} ${y - 0.5}Q${x} ${y - 3} ${x + 8} ${y - 1}" stroke="${INK}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+  const hand = `
+    <path d="M92 340L124 302Q140 288 158 300L150 340Z" fill="${suit}" ${line}/>
+    <path d="M124 302Q140 288 158 300L154 312Q140 302 130 312Z" fill="${shirt}" ${line}/>
+    ${finger(171, 330, 196, 300, 8)}
+    ${finger(170, 320, 197, 288, 8.5)}
+    ${finger(172, 310, 197, 276, 9)}
+    ${finger(176, 300, 197, 263, 9)}
+    ${finger(186, 334, 196, 316, 9.5)}
+    <path d="M138 340L148 308Q158 294 176 296L182 306Q176 318 182 340Z" fill="${SKIN}" ${line}/>
+    <path d="M166 302Q172 300 177 304M164 312Q170 310 174 314M164 322Q169 320 173 324" stroke="${shade(SKIN, 0.68)}" stroke-width="1.3" fill="none"/>
+    <path d="M150 336Q154 318 162 306" stroke="${shade(SKIN, 1.2)}" stroke-width="3" fill="none" opacity=".8"/>`;
+  const person = `
+    <path d="M200 120C160 120 146 145 148 178C150 210 146 240 134 272L160 284L172 240H228L240 284L266 272C254 240 250 210 252 178C254 145 240 120 200 120Z" fill="${hair}" ${line}/>
+    <path d="M156 190C156 220 152 244 144 266M164 200C164 230 162 250 156 274M244 190C244 220 248 244 256 266M236 200C236 230 238 250 244 274" stroke="${hairLit}" stroke-width="1.4" fill="none"/>
+    <path d="M58 340C60 300 92 272 150 258L200 296L250 258C308 272 340 300 342 340Z" fill="${suit}" ${line}/>
+    <path d="M250 258C308 272 340 300 342 340H300Q296 296 250 258Z" fill="${suitShade}" opacity=".6"/>
+    <path d="M100 300Q96 320 98 340M300 300Q304 320 302 340" stroke="${suitShade}" stroke-width="1.4" fill="none"/>
+    <path d="M182 210V254L200 270L218 254V210Z" fill="${shade(SKIN, 0.82)}" ${line}/>
+    <path d="M182 230Q200 244 218 230" stroke="${shade(SKIN, 0.68)}" stroke-width="1.4" fill="none"/>
+    <path d="M160 254L200 314L240 254L222 244L200 270L178 244Z" fill="${shirt}" ${line}/>
+    <path d="M192 268H208L205 280H195Z" fill="${shade(tie, 0.85)}" ${line}/>
+    <path d="M195 280L188 330L200 340L212 330L205 280Z" fill="${tie}" ${line}/>
+    <g fill="${GRANITE.light}" opacity=".7">
+      <circle cx="198" cy="290" r="1.1"/><circle cx="202" cy="298" r="1.1"/><circle cx="197" cy="306" r="1.1"/>
+      <circle cx="203" cy="314" r="1.1"/><circle cx="198" cy="322" r="1.1"/>
+    </g>
+    <path d="M150 258L176 248L170 272L192 328Z" fill="${shade(suit, 0.9)}" ${line}/>
+    <path d="M250 258L224 248L230 272L208 328Z" fill="${shade(suitShade, 0.95)}" ${line}/>
+    <path d="M165 168C165 140 180 130 200 130C220 130 235 140 235 168C235 196 228 214 214 222C207 226 193 226 186 222C172 214 165 196 165 168Z" fill="${SKIN}" ${line}/>
+    <path d="M220 136C232 146 236 160 234 178C232 198 224 214 210 222C222 208 228 192 228 172C228 158 226 146 220 136Z" fill="${shade(SKIN, 0.86)}"/>
+    <path d="M168 190C172 212 186 224 200 224C214 224 228 212 232 190C226 206 214 212 200 212C186 212 174 206 168 190Z" fill="${hair}" opacity=".26"/>
+    <path d="M164 170C162 138 178 124 200 125C222 124 238 138 236 170C230 148 218 138 203 139L200 131L197 139C182 138 170 148 164 170Z" fill="${hair}" ${line}/>
+    <path d="M166 150C160 180 166 204 156 238C170 224 174 198 173 172Z" fill="${hair}" ${line}/>
+    <path d="M234 150C240 180 234 204 244 238C230 224 226 198 227 172Z" fill="${hair}" ${line}/>
+    <path d="M190 132Q176 138 170 154M210 132Q224 138 230 154M196 134Q186 140 182 150" stroke="${hairLit}" stroke-width="1.3" fill="none"/>
+    <path d="M175 159Q185 154 194 158.5" stroke="${hair}" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M206 155Q215 147 226 153" stroke="${hair}" stroke-width="4" fill="none" stroke-linecap="round"/>
+    ${eye(185, 168, 0)}${eye(215, 167, 1.2)}
+    <path d="M200 166L196.5 188Q194.5 193 199 195Q203.5 196.5 206.5 193" stroke="${shade(SKIN, 0.6)}" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    <path d="M202 174L205 188" stroke="${shade(SKIN, 1.25)}" stroke-width="2" stroke-linecap="round"/>
+    <path d="M183 204Q191 196.5 200 199.5Q209 196.5 217 204Q211 206 200 205Q189 206 183 204Z" fill="${hair}" stroke="${hair}" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M189 209.5Q200 212.5 213 207.5" stroke="${shade(SKIN, 0.5)}" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    <path d="M192 212.5Q200 215.5 208 212" stroke="${shade(SKIN, 1.15)}" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M192.5 214.5Q200 230 207.5 214.5Q200 218 192.5 214.5Z" fill="${hair}"/>
+    <g transform="translate(200 340) scale(1.18) translate(-200 -340)">
+      ${hand}
+      <g transform="translate(400 0) scale(-1 1)">${hand}</g>
+    </g>`;
+
+  const body = `${room}${person}<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="${INK}" stroke-width="2"/>`;
+  return { svg: svg(W, H, body), width: W, height: H, anchor: { x: W / 2, y: H } };
 }

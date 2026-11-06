@@ -16,6 +16,7 @@ import {
   flame,
   FOLIAGE,
   gatherShield,
+  merchant,
   grassTuft,
   outpost,
   resourceIcon,
@@ -389,6 +390,9 @@ export function DesignSheet() {
           ))}
           <Tile label="Händler">
             <MapArt art={deposit('trader')} options={{ outline: true }} height={78} />
+          </Tile>
+          <Tile label="Händler (Handelsmenü)">
+            <MapArt art={merchant()} height={220} />
           </Tile>
           {RESOURCES.map((r) => (
             <Tile key={`i${r}`} label={`Icon ${RESOURCE_NAMES[r]}`}>

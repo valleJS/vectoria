@@ -16,8 +16,8 @@ import {
   travelMs,
   type ArmyTarget,
   type ArmyView,
+  type CardType,
   type GameView,
-  type MapData,
   type Vec2,
 } from '@vectoria/shared';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -35,6 +35,7 @@ import {
   playerName,
   type BaseInfo,
 } from '../game/format';
+import { barefoot, eta, nearestBase, trackOf } from '../game/march';
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type Selection } from '../state/store';
@@ -48,10 +49,10 @@ import {
   SoldiersIcon,
   SpotIcon,
 } from './icons';
-import { Button, SectionLabel, Tip } from './Panel';
+import { Button, Tip } from './Panel';
 import { DuoForm } from './Duo';
 import { Locked } from './Routed';
-import { ArrowRightIcon, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,8 +68,6 @@ import { Slider } from '@/components/ui/slider';
 /** Select value for the home castle (base id null). */
 const HOME = 'home';
 
-const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
-
 const STATUS_NAMES: Record<ArmyView['status'], string> = {
   outbound: 'unterwegs',
   gathering: 'sammelt',
@@ -76,68 +75,113 @@ const STATUS_NAMES: Record<ArmyView['status'], string> = {
   waiting: 'wartet am Duo-Treffpunkt',
 };
 
-/** Convoy movement as seen now: the remaining route, walked until its arrival clock. */
-function trackOf(view: GameView, army: ArmyView) {
-  return army.route
-    ? { path: army.route, departClock: view.clock.clock, arriveClock: army.arriveClock }
-    : null;
-}
-
-/** Travel time from `from` to the target, or null if no land route (or raid too late). */
-function eta(
-  map: MapData,
-  view: GameView,
-  from: Vec2,
-  target: ArmyTarget,
-  position: Vec2,
-  forcedMarch: boolean,
-  /** Seeweg: straight over water, not along land. */
-  sea = false,
-): number | null {
-  // Marches started barefoot (Schuhe klauen) go slower, as on the server.
-  const speed = barefoot(view) ? BAREFOOT_SPEED : 1;
-  if (target.kind === 'army') {
-    const convoy = view.armies.find((a) => a.id === target.id);
-    const track = convoy && trackOf(view, convoy);
-    const meeting = track && planIntercept(map, from, track, view.clock.clock, forcedMarch, speed);
-    return meeting ? meeting.clock - view.clock.clock : null;
-  }
-  const path = sea ? [from, position] : findPath(map, from, position);
-  return path ? travelMs(pathLength(path), map.width, forcedMarch, speed) : null;
-}
-
-function barefoot(view: GameView): boolean {
-  return (view.self.barefootUntil ?? 0) > view.clock.clock;
-}
-
 /** What the trader does, for the side panel and the trade menu. */
 export const TRADER_TEXT =
   'Tauscht Stein 1:1 gegen Gold und Holz, sofort bei Ankunft. Deine Truppen tragen hin und zurück — beladen langsamer und überfallbar.';
 
-/** The trade form for the trader spot (the centred trade menu). */
-export function TradeForm({
-  view,
-  spotId,
-  onSent,
+/** Picks the base the troops leave from; renders nothing with a single base. */
+export function BaseSelect({
+  bases,
+  base,
+  onChange,
+  label = 'Von',
+  describe = (b) => `${b.name} (${b.troops} Truppen)`,
 }: {
-  view: GameView;
-  spotId: string;
-  onSent?: () => void;
+  bases: BaseInfo[];
+  base: BaseInfo;
+  onChange: (id: string | null) => void;
+  label?: string;
+  describe?: (base: BaseInfo) => string;
 }) {
-  const spot = view.spots.find((s) => s.id === spotId);
-  if (!spot) return null;
+  if (bases.length < 2) return null;
   return (
-    <SendForm
-      key={spotId}
-      view={view}
-      target={{ kind: 'spot', id: spotId }}
-      position={spot.position}
-      verb="Handeln"
-      bases={ownBases(view)}
-      defaultTroops={10}
-      trade
-      onSent={onSent}
-    />
+    <div className="flex items-center gap-2">
+      <Label htmlFor="send-from" className="text-ink-soft">
+        {label}
+      </Label>
+      {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
+      <Select
+        value={base.id ?? HOME}
+        onValueChange={(value) => onChange(value === HOME ? null : value)}
+      >
+        <SelectTrigger id="send-from" className="h-7 flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {bases.map((b) => (
+            <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
+              {describe(b)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Troop count for a march: slider, number field and "Alle", capped by the base's troops. */
+export function TroopFields({
+  base,
+  troops,
+  onChange,
+}: {
+  base: BaseInfo;
+  troops: number;
+  onChange: (troops: number) => void;
+}) {
+  const available = base.troops;
+  return (
+    <div className="space-y-1">
+      <Slider
+        min={available > 0 ? 1 : 0}
+        max={Math.max(available, 1)}
+        step={1}
+        value={[troops]}
+        onValueChange={([value]) => onChange(value ?? 0)}
+        disabled={available === 0}
+        className="py-1"
+        aria-label="Truppen"
+      />
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          min={1}
+          max={available}
+          value={troops}
+          onChange={(e) => onChange(Math.floor(Number(e.target.value)))}
+          className="h-7 w-20 tabular-nums"
+          aria-label="Anzahl Truppen"
+        />
+        <span className="text-ink-soft">
+          / {available} {base.id === null ? 'zu Hause' : 'vor Ort'}
+        </span>
+        <Button onClick={() => onChange(available)} disabled={available === 0}>
+          Alle
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Sends the armed card along with the march. */
+export function CardToggle({
+  card,
+  checked,
+  onChange,
+}: {
+  card: CardType;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <Tip label={CARDS[card].description}>
+      <Label className="gap-1.5 leading-snug">
+        <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+        <span>
+          Aktive Karte mitschicken: <b>{CARDS[card].name}</b>
+        </span>
+      </Label>
+    </Tip>
   );
 }
 
@@ -150,8 +194,6 @@ function SendForm({
   defaultTroops = 50,
   minTroops = 1,
   preview,
-  trade = false,
-  onSent,
 }: {
   view: GameView;
   target: ArmyTarget;
@@ -164,29 +206,18 @@ function SendForm({
   minTroops?: number;
   /** Extra line under the form for the chosen troop count (e.g. expected yield). */
   preview?: (troops: number) => ReactNode;
-  /** Target is the trader: carry stone and choose the gold/wood split (two columns). */
-  trade?: boolean;
-  /** Called once the march is sent (the trade menu closes then). */
-  onSent?: () => void;
 }) {
   const map = useGameStore((s) => s.map);
   const [fromId, setFromId] = useState<string | null | undefined>(undefined);
   const [chosen, setTroops] = useState(defaultTroops);
   const [useCard, setUseCard] = useState(true);
-  const [stoneWanted, setStone] = useState(0);
-  const [goldShare, setGoldShare] = useState(0.5);
   const activeCard = view.self.activeCard;
   // A Seeweg cannot be used for a raid (the server refuses it): it stays armed for later.
   const cardUsable = activeCard !== null && !(activeCard === 'sea' && target.kind === 'army');
   const withCard = useCard && cardUsable;
   const forced = withCard && activeCard === 'forcedMarch';
   const sea = withCard && activeCard === 'sea' && target.kind !== 'army';
-  const nearest = [...bases].sort(
-    (a, b) =>
-      Number(b.troops > 0) - Number(a.troops > 0) ||
-      distance(a.position, position) - distance(b.position, position),
-  )[0];
-  const base = bases.find((b) => b.id === fromId) ?? nearest;
+  const base = bases.find((b) => b.id === fromId) ?? nearestBase(bases, position);
   const travel = useMemo(
     () => (map && base ? eta(map, view, base.position, target, position, forced, sea) : null),
     // Raids move with the convoy; recompute on every state update for those.
@@ -196,20 +227,8 @@ function SendForm({
   if (!base || !map) return null;
 
   // Troops shrink as armies leave; never offer more than are there.
-  const available = base.troops;
-  const troops = Math.min(chosen, available);
-  // Trader: x stone → y gold + z wood (x = y + z); stone in the store caps x.
-  const stone = trade ? Math.max(0, Math.min(stoneWanted, base.resources.stone)) : 0;
-  const gold = Math.round(stone * goldShare);
-  const wood = stone - gold;
-  // Carrying resources slows the march (same rule as the server).
-  const arrival = travel !== null && stone > 0 ? Math.round(travel / LOADED_SPEED) : travel;
-  const valid =
-    Number.isInteger(troops) &&
-    troops > 0 &&
-    troops >= minTroops &&
-    travel !== null &&
-    (!trade || stone > 0);
+  const troops = Math.min(chosen, base.troops);
+  const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
 
   const send = () => {
     gameSocket.send({
@@ -218,175 +237,15 @@ function SendForm({
       troops,
       target,
       useActiveCard: withCard,
-      // Cargo only goes to the trader; stock moves between bases with the night caravan.
-      cargo: trade ? { ...emptyResources(), stone } : emptyResources(),
-      ...(trade ? { trade: { gold, wood } } : {}),
+      // Stock moves between bases with the night caravan; only trade marches carry cargo.
+      cargo: emptyResources(),
     });
-    setStone(0);
-    onSent?.();
   };
-
-  const baseSelect = bases.length > 1 && (
-    <div className="flex items-center gap-2">
-      <Label htmlFor="send-from" className="text-ink-soft">
-        {trade ? 'Aus' : 'Von'}
-      </Label>
-      {/* Radix items need a non-empty value: the home castle (id null) is "home". */}
-      <Select
-        value={base.id ?? HOME}
-        onValueChange={(value) => setFromId(value === HOME ? null : value)}
-      >
-        <SelectTrigger id="send-from" className="h-7 flex-1">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {bases.map((b) => (
-            <SelectItem key={b.id ?? HOME} value={b.id ?? HOME}>
-              {trade
-                ? `${b.name} (${b.resources.stone} Stein · ${b.troops} Tr.)`
-                : `${b.name} (${b.troops} Truppen)`}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
-  const troopFields = (
-    <div className="space-y-1">
-      <Slider
-        min={available > 0 ? 1 : 0}
-        max={Math.max(available, 1)}
-        step={1}
-        value={[troops]}
-        onValueChange={([value]) => setTroops(value ?? 0)}
-        disabled={available === 0}
-        className="py-1"
-        aria-label="Truppen"
-      />
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          min={1}
-          max={available}
-          value={troops}
-          onChange={(e) => setTroops(Math.floor(Number(e.target.value)))}
-          className="h-7 w-20 tabular-nums"
-          aria-label="Anzahl Truppen"
-        />
-        <span className="text-ink-soft">
-          / {available} {base.id === null ? 'zu Hause' : 'vor Ort'}
-        </span>
-        <Button onClick={() => setTroops(available)} disabled={available === 0}>
-          Alle
-        </Button>
-      </div>
-    </div>
-  );
-
-  const store = base.resources.stone;
-  const tradeFields = trade && (
-    <div className="space-y-2">
-      {/* The deal at a glance: x stone in, y gold + z wood out. */}
-      <div className="flex items-center justify-center gap-2 border border-ink/30 bg-parchment-dark px-2 py-1.5 text-base tabular-nums">
-        <span className="inline-flex items-center gap-1">
-          <ResourceIcon resource="stone" size={22} title={RESOURCE_NAMES.stone} />
-          <b>{stone}</b>
-        </span>
-        <ArrowRightIcon className="size-4 text-ink-soft" aria-hidden />
-        <span className="inline-flex items-center gap-1">
-          <ResourceIcon resource="gold" size={22} title={RESOURCE_NAMES.gold} />
-          <b>{gold}</b>
-        </span>
-        <span className="text-ink-soft">+</span>
-        <span className="inline-flex items-center gap-1">
-          <ResourceIcon resource="wood" size={22} title={RESOURCE_NAMES.wood} />
-          <b>{wood}</b>
-        </span>
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="trade-stone" className="gap-1">
-            <ResourceIcon resource="stone" size={16} title={RESOURCE_NAMES.stone} />
-            Stein
-          </Label>
-          <Slider
-            min={0}
-            max={Math.max(store, 1)}
-            step={1}
-            value={[stone]}
-            onValueChange={([value]) => setStone(value ?? 0)}
-            disabled={store === 0}
-            className="flex-1 py-1"
-            aria-label="Stein zum Tauschen"
-          />
-          <Input
-            id="trade-stone"
-            type="number"
-            min={0}
-            max={store}
-            value={stone}
-            onChange={(e) => setStone(Math.max(0, Math.floor(Number(e.target.value))))}
-            className="h-7 w-16 tabular-nums"
-          />
-          <Button size="sm" onClick={() => setStone(store)} disabled={store === 0}>
-            Alles
-          </Button>
-        </div>
-        {store === 0 && (
-          <div className="text-seal">
-            {bases.length > 1
-              ? 'Hier lagert kein Stein — wähle einen anderen Ort.'
-              : 'Kein Stein im Lager.'}
-          </div>
-        )}
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex w-12 items-center gap-1">
-            <ResourceIcon resource="gold" size={16} title={RESOURCE_NAMES.gold} /> Gold
-          </span>
-          <Slider
-            min={0}
-            max={1}
-            step={0.01}
-            value={[1 - goldShare]}
-            onValueChange={([value]) => setGoldShare(1 - (value ?? 0.5))}
-            className="flex-1 py-1"
-            aria-label="Aufteilung Gold / Holz"
-          />
-          <span className="inline-flex w-12 items-center justify-end gap-1">
-            Holz <ResourceIcon resource="wood" size={16} title={RESOURCE_NAMES.wood} />
-          </span>
-        </div>
-        <div className="flex gap-1">
-          {(
-            [
-              ['Alles Gold', 1],
-              ['Halb / halb', 0.5],
-              ['Alles Holz', 0],
-            ] as const
-          ).map(([label, share]) => (
-            <Button
-              key={label}
-              size="sm"
-              className="flex-1"
-              variant={goldShare === share ? 'selected' : 'default'}
-              onClick={() => setGoldShare(share)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <Locked className="mt-2 space-y-2 border-t border-ink/30 pt-2">
-      {/* Raids list their own field armies (with meeting points) in RaidOptions; the trader
-          only takes stone straight from a store. */}
-      {target.kind !== 'army' && !trade && (
+      {/* Raids list their own field armies (with meeting points) in RaidOptions. */}
+      {target.kind !== 'army' && (
         <FieldRedirect
           view={view}
           target={target}
@@ -400,36 +259,10 @@ function SendForm({
           }
         />
       )}
-      {trade ? (
-        <div className="grid gap-x-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <SectionLabel>Tausch</SectionLabel>
-            {tradeFields}
-          </div>
-          <div className="space-y-2">
-            <SectionLabel>Träger</SectionLabel>
-            {baseSelect}
-            {troopFields}
-          </div>
-        </div>
-      ) : (
-        <>
-          {baseSelect}
-          {troopFields}
-        </>
-      )}
+      <BaseSelect bases={bases} base={base} onChange={setFromId} />
+      <TroopFields base={base} troops={troops} onChange={setTroops} />
       {activeCard && cardUsable && (
-        <Tip label={CARDS[activeCard].description}>
-          <Label className="gap-1.5 leading-snug">
-            <Checkbox
-              checked={useCard}
-              onCheckedChange={(checked) => setUseCard(checked === true)}
-            />
-            <span>
-              Aktive Karte mitschicken: <b>{CARDS[activeCard].name}</b>
-            </span>
-          </Label>
-        </Tip>
+        <CardToggle card={activeCard} checked={useCard} onChange={setUseCard} />
       )}
       {troops < minTroops && <div className="text-seal">Mindestens {minTroops} Truppen nötig.</div>}
       {preview && <div className="text-ink-soft">{preview(troops)}</div>}
@@ -439,9 +272,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : trade
-              ? `Hin und zurück ${formatGameDuration(2 * (arrival ?? travel))} · beladen ${formatPercent(LOADED_SPEED)} Tempo${barefoot(view) ? ' · barfuß' : ''}`
-              : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(arrival ?? travel)}${stone > 0 ? ` · beladen ${formatPercent(LOADED_SPEED)} Tempo` : ''}${barefoot(view) ? ' · barfuß' : ''}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(travel)}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
