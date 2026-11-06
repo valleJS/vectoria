@@ -2040,6 +2040,7 @@ export class GameState {
         routed: p.routed ?? false,
         attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
+        caravanTrip: hasResources(p.caravan ?? emptyResources()) ? (p.caravanTrip ?? null) : null,
       })),
       spots: this.data.spots,
       outposts: this.data.outposts,
@@ -2058,9 +2059,6 @@ export class GameState {
         fortifiedUntil: self.fortifiedUntil,
         harvestDays: self.harvestDays ?? 0,
         caravan: self.caravan ?? emptyResources(),
-        caravanTrip: hasResources(self.caravan ?? emptyResources())
-          ? (self.caravanTrip ?? null)
-          : null,
         pacts: (this.data.pacts ?? [])
           .filter((pact) => this.inPact(pact, self.id))
           .map(({ meet: _meet, ...pact }) => ({

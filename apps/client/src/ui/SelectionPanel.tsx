@@ -24,6 +24,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   cssColor,
   describeTarget,
+  findCaravanWagon,
   formatGameDuration,
   formatPercent,
   formatResources,
@@ -921,17 +922,18 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
       );
     }
     case 'caravan': {
-      const trip = view.self.caravanTrip;
-      const wagon = trip?.wagons[Number(selection.id)];
-      if (!trip || !wagon) return null;
+      const found = findCaravanWagon(view, selection.id);
+      if (!found) return null;
+      const { ownerId, trip, wagon } = found;
+      const own = ownerId === view.self.id;
       const arrival = new Date(trip.arrivesAt).toLocaleTimeString('de-DE', {
         hour: '2-digit',
         minute: '2-digit',
       });
       return (
         <>
-          <Title icon={<CaravanIcon color={cssColor(playerColor(view, view.self.id))} size={26} />}>
-            Deine Karawane
+          <Title icon={<CaravanIcon color={cssColor(playerColor(view, ownerId))} size={26} />}>
+            {own ? 'Deine Karawane' : `Karawane von ${playerName(view, ownerId)}`}
           </Title>
           <div>Ladung: {formatResources(wagon.load)}</div>
           <div className="text-ink-soft">Ankunft in der Burg: {arrival} Uhr</div>
@@ -958,7 +960,7 @@ function selectionExists(view: GameView, selection: Selection): boolean {
     case 'chest':
       return view.chests.some((c) => c.id === selection.id);
     case 'caravan':
-      return view.self.caravanTrip?.wagons[Number(selection.id)] !== undefined;
+      return findCaravanWagon(view, selection.id) !== null;
   }
 }
 

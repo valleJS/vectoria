@@ -661,6 +661,7 @@ const CHAPTERS: Chapter[] = [
             'Das Bollwerk schützt nur die Basis, nie einen Stützpunkt.',
             'Truppen kaufen und Ressourcen ausgeben geht nur in der Basis. Ein Stützpunkt ist Lager und Startpunkt, sonst nichts.',
             'Die Karawane braucht keine Truppen und kann nicht überfallen oder geplündert werden: Nachts ruht die Spieluhr. Was vor 18 Uhr mit einem Stützpunkt erobert wird, gehört aber dem Eroberer.',
+            'Die Karawanen sind für alle sichtbar, samt Ladung, so wie das Lager eines Stützpunkts. Klicke einen fremden Wagen an, um zu sehen, was er heimbringt.',
             'Truppen zu der Burg schicken, in der sie schon stehen, geht nicht.',
             'Fällt ein Stützpunkt, laufen deine Züge, die von dort aufgebrochen sind, später zur Basis statt dorthin zurück.',
           ]}

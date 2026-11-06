@@ -51,6 +51,11 @@ export interface PlayerPublic {
   /** Game clock of the last assault on the home castle, won or lost; null if never attacked. */
   attackedAt: number | null;
   online: boolean;
+  /**
+   * The player's night caravan on its way (drawn on the map); null while none travels. Public,
+   * like the outpost stock it carries.
+   */
+  caravanTrip: CaravanTrip | null;
 }
 
 export interface ResourceSpot {
@@ -210,8 +215,6 @@ export interface SelfState {
    * the home castle at the next gameday start. Not spendable, not plunderable meanwhile.
    */
   caravan: Resources;
-  /** The night caravan on its way (drawn on the map); null while none travels. */
-  caravanTrip: CaravanTrip | null;
   /** Game clock until which own marches start barefoot (shoes stolen); null if not. */
   barefootUntil: number | null;
   /** Victory points bought this gameday (capped at `VICTORY_POINTS_PER_GAMEDAY`). */
@@ -219,7 +222,7 @@ export interface SelfState {
   log: LogEntry[];
 }
 
-/** One wagon of the night caravan: it sets out from an own outpost with that outpost's stock. */
+/** One wagon of a night caravan: it sets out from an owned outpost with that outpost's stock. */
 export interface CaravanWagon {
   from: Vec2;
   load: Resources;

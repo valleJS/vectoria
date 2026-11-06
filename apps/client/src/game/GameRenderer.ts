@@ -32,7 +32,13 @@ import {
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
 import { Camera } from './Camera';
-import { formatResources, playerColor, playerHeraldry, playerName } from './format';
+import {
+  caravanSelectionId,
+  formatResources,
+  playerColor,
+  playerHeraldry,
+  playerName,
+} from './format';
 import { pointedDashes } from './glyphs';
 import {
   CARGO_GOLD,
@@ -205,10 +211,15 @@ interface ArmySprite {
 const CARAVAN_WIDTH = 41;
 
 /**
- * A wagon of the own night caravan, rolling from its outpost to the home castle by real time
- * (the game clock stands still at night).
+ * A wagon of a player's night caravan, rolling from its outpost to that player's home castle by
+ * real time (the game clock stands still at night).
  */
 interface CaravanSprite {
+  /** Selection id: `<ownerId>:<wagon index>` (see `caravanSelectionId`). */
+  id: string;
+  ownerId: string;
+  departedAt: number;
+  arrivesAt: number;
   container: Container;
   figure: Container;
   /** Land route, world px; the wagon stands at `pointAlong(route, progress)`. */
@@ -310,10 +321,9 @@ export class GameRenderer {
   /** Armies, painted back to front; gather badges always on top. */
   private readonly armyLayer = new Container({ sortableChildren: true });
   private readonly armies = new Map<string, ArmySprite>();
-  /** Wagons of the own night caravan, with the trip they were built for. */
+  /** Wagons of every player's night caravan. */
   private caravans: CaravanSprite[] = [];
   private caravanKey = '';
-  private caravanTrip: { departedAt: number; arrivesAt: number } | null = null;
   /** Night rest: darkness, lights, fireflies, stars (see night.ts). */
   private readonly night: NightScene;
   private readonly unsubscribe: () => void;
@@ -449,10 +459,10 @@ export class GameRenderer {
         selection: { kind: 'chest' as const, id: c.id },
         position: c.position,
       })),
-      ...this.caravans.map((wagon, i) => {
+      ...this.caravans.map((wagon) => {
         const { x, y } = this.caravanFocus(wagon);
         return {
-          selection: { kind: 'caravan' as const, id: String(i) },
+          selection: { kind: 'caravan' as const, id: wagon.id },
           position: { x: x / size, y: y / size },
         };
       }),
@@ -591,67 +601,79 @@ export class GameRenderer {
     if (view) this.night.setNight(isNightRest(view));
     this.drawSites(view, selfId);
     this.drawArmies(view);
-    this.drawCaravan(view, selfId);
+    this.drawCaravans(view);
     this.drawAlerts(view);
   }
 
   /**
-   * The own night caravan: one wagon per outpost it set out from, on the land route to the home
-   * castle, with its load beside it (`cargoPile`). Rebuilt only when the trip (or the colour) changes.
+   * Every player's night caravan, as public as the outpost stock it carries: one wagon per
+   * outpost it set out from, on the land route to that player's home castle, in the owner's
+   * colour with its load beside it (`cargoPile`). Rebuilt only when a trip (or a colour) changes.
    */
-  private drawCaravan(view: GameView | null, selfId: string | null): void {
-    const trip = view?.self.caravanTrip ?? null;
-    const castle = view?.players.find((p) => p.id === selfId)?.castle ?? null;
-    const color = view && selfId ? playerColor(view, selfId) : 0;
-    const art = trip && castle ? this.art.pieces.caravan(color) : null;
-    const key = trip && castle && art ? JSON.stringify([trip, castle, color, this.unit]) : '';
+  private drawCaravans(view: GameView | null): void {
+    const trips = (view?.players ?? []).flatMap((player) => {
+      const { caravanTrip: trip, castle } = player;
+      if (!view || !trip || !castle) return [];
+      const color = playerColor(view, player.id);
+      const art = this.art.pieces.caravan(color);
+      return art ? [{ ownerId: player.id, trip, castle, color, art }] : [];
+    });
+    const key = trips.length
+      ? JSON.stringify([
+          trips.map(({ ownerId, trip, castle, color }) => [ownerId, trip, castle, color]),
+          this.unit,
+        ])
+      : '';
     if (key === this.caravanKey) return;
     this.caravanKey = key;
     for (const wagon of this.caravans) wagon.container.destroy({ children: true });
     this.caravans = [];
-    this.caravanTrip =
-      trip && art ? { departedAt: trip.departedAt, arrivesAt: trip.arrivesAt } : null;
-    if (!trip || !castle || !art || !this.map) return;
+    if (!this.map) return;
     const u = this.unit;
-    for (const wagon of trip.wagons) {
-      const path = findPath(this.map, wagon.from, castle) ?? [wagon.from, castle];
-      const container = new Container();
-      const figure = new Container();
-      const light = new Sprite(this.art.glow);
-      light.anchor.set(0.5);
-      light.tint = FIRELIGHT;
-      light.blendMode = 'add';
-      light.scale.set((40 * u) / this.art.glow.width);
-      const sprite = artSprite(art, CARAVAN_WIDTH * u);
-      const k = (CARAVAN_WIDTH * u) / (art.width - art.pad * 2);
-      light.position.set(
-        (CARAVAN_LANTERN.x + art.pad - art.anchor.x) * k,
-        (CARAVAN_LANTERN.y + art.pad - art.anchor.y) * k,
-      );
-      figure.addChild(light, sprite);
-      const tag = this.cargoPile(wagon.load, u);
-      tag.position.set(-9 * u, -28 * u);
-      container.addChild(figure, tag);
-      this.armyLayer.addChild(container);
-      this.caravans.push({
-        container,
-        figure,
-        route: path.map((p) => this.px(p)),
-        light,
-        tag,
-        stride: Math.random() * Math.PI * 2,
+    for (const { ownerId, trip, castle, art } of trips) {
+      trip.wagons.forEach((wagon, index) => {
+        const path = findPath(this.map!, wagon.from, castle) ?? [wagon.from, castle];
+        const container = new Container();
+        const figure = new Container();
+        const light = new Sprite(this.art.glow);
+        light.anchor.set(0.5);
+        light.tint = FIRELIGHT;
+        light.blendMode = 'add';
+        light.scale.set((40 * u) / this.art.glow.width);
+        const sprite = artSprite(art, CARAVAN_WIDTH * u);
+        const k = (CARAVAN_WIDTH * u) / (art.width - art.pad * 2);
+        light.position.set(
+          (CARAVAN_LANTERN.x + art.pad - art.anchor.x) * k,
+          (CARAVAN_LANTERN.y + art.pad - art.anchor.y) * k,
+        );
+        figure.addChild(light, sprite);
+        const tag = this.cargoPile(wagon.load, u);
+        tag.position.set(-9 * u, -28 * u);
+        container.addChild(figure, tag);
+        this.armyLayer.addChild(container);
+        this.caravans.push({
+          id: caravanSelectionId(ownerId, index),
+          ownerId,
+          departedAt: trip.departedAt,
+          arrivesAt: trip.arrivesAt,
+          container,
+          figure,
+          route: path.map((p) => this.px(p)),
+          light,
+          tag,
+          stride: Math.random() * Math.PI * 2,
+        });
       });
     }
   }
 
   /** Night caravan wagons roll on by real time between departure and arrival. */
   private animateCaravan(seconds: number, k: number): void {
-    const trip = this.caravanTrip;
-    if (!trip) return;
-    const span = Math.max(1, trip.arrivesAt - trip.departedAt);
-    const p = Math.min(1, Math.max(0, (Date.now() - trip.departedAt) / span));
+    const now = Date.now();
     const u = this.unit;
     for (const wagon of this.caravans) {
+      const span = Math.max(1, wagon.arrivesAt - wagon.departedAt);
+      const p = Math.min(1, Math.max(0, (now - wagon.departedAt) / span));
       const at = pointAlong(wagon.route, p);
       const ahead = pointAlong(wagon.route, Math.min(1, p + 0.01));
       wagon.container.position.copyFrom(at);
@@ -1529,9 +1551,9 @@ export class GameRenderer {
       case 'chest':
         return site(view.chests.find((c) => c.id === selection.id)?.position, 22, CARGO_GOLD);
       case 'caravan': {
-        const wagon = this.caravans[Number(selection.id)];
+        const wagon = this.caravans.find((w) => w.id === selection.id);
         return wagon
-          ? { ...this.caravanFocus(wagon), color: playerColor(view, view.self.id) }
+          ? { ...this.caravanFocus(wagon), color: playerColor(view, wagon.ownerId) }
           : null;
       }
     }
