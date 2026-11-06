@@ -1430,25 +1430,27 @@ export class GameState {
   }
 
   /**
-   * The home castle fell: every army of the player turns home to the castle on the spot (cargo
-   * kept), and every outpost is given up — it turns back into a ruin, its garrison marching home
-   * with the stock. The player cannot act until all of these are back (see `removeArmy`).
+   * The home castle fell: every army of the player heads home to the castle from where it stands
+   * and drops its resource cargo (chests are kept) — those already on their way home too, re-timed
+   * at normal speed. Every outpost is given up — it turns back into a ruin, its garrison marching
+   * home empty-handed while the stock stays in the ruin. The player cannot act until all of these
+   * are back (see `removeArmy`).
    */
   private rout(player: PlayerRecord): void {
     for (const army of this.data.armies) {
       // A duo attack goes on whatever happens at home: the pact binds.
       if (army.ownerId !== player.id || army.pactId) continue;
-      if (army.status === 'returning' && army.baseId === null) continue;
       army.baseId = null;
+      army.cargo = emptyResources();
       this.startReturn(army, this.armyPosition(army));
     }
     let abandoned = 0;
     for (const outpost of this.data.outposts) {
       if (outpost.ownerId !== player.id) continue;
-      // Stock only leaves with a garrison to carry it; otherwise it stays in the ruin.
       if (outpost.troops > 0) {
-        const stock = takeShare(outpost.resources, 1);
-        this.data.armies.push(this.fleeingArmy(player, outpost.position, outpost.troops, stock));
+        this.data.armies.push(
+          this.fleeingArmy(player, outpost.position, outpost.troops, emptyResources()),
+        );
       }
       outpost.ownerId = null;
       outpost.troops = 0;

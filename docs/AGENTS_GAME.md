@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-05
+last_verified: 2026-11-06
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
@@ -111,8 +111,9 @@ troops than the other side brought (stops 1-troop harassment).
 | Defender wins | 100 % | 25 % | — |
 
 **Castle fall** (`GameState.rout`): the defender's armies all turn for the home castle on the spot
-(cargo kept), and every outpost is given up: it turns back into an unowned ruin, its garrison
-marching home with the whole stock (no garrison → the stock stays in the ruin). `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
+and lose their resource cargo (chests kept), those already heading home too (re-timed at normal speed),
+and every outpost is given up: it turns back into an unowned ruin, its garrison marching home
+empty-handed while the stock stays in the ruin. `PlayerRecord.routed` (public as `PlayerPublic.routed`) then blocks every player
 command in `requirePlaying` until the player's last army is gone (`removeArmy` lifts it). Nobody
 in the field → no lockout. The client greys out every action (`ui/Routed.tsx` `Locked`, `inert`)
 and shows a "Handlungsunfähig" stamp in the top bar. While routed, the castle itself is off limits too: the
