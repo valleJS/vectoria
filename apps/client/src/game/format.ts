@@ -4,6 +4,8 @@ import {
   SPOT_NAMES,
   RESOURCES,
   type ArmyTarget,
+  type CaravanTrip,
+  type CaravanWagon,
   type CardType,
   type GameView,
   type Outpost,
@@ -26,6 +28,23 @@ export function formatGameDuration(ms: number): string {
  */
 export function playerColor(view: Pick<GameView, 'players'>, playerId: string): number {
   return playerHeraldry(view, playerId).color;
+}
+
+/** Selection id of a night caravan wagon: its owner and its index in the owner's trip. */
+export function caravanSelectionId(ownerId: string, index: number): string {
+  return `${ownerId}:${index}`;
+}
+
+/** The caravan wagon a selection id points at, with its owner and trip; null once it arrived. */
+export function findCaravanWagon(
+  view: Pick<GameView, 'players'>,
+  id: string,
+): { ownerId: string; trip: CaravanTrip; wagon: CaravanWagon } | null {
+  const split = id.lastIndexOf(':');
+  const ownerId = id.slice(0, split);
+  const trip = view.players.find((p) => p.id === ownerId)?.caravanTrip;
+  const wagon = trip?.wagons[Number(id.slice(split + 1))];
+  return trip && wagon ? { ownerId, trip, wagon } : null;
 }
 
 /** Number of castle styles (`art/svg.ts` `castle`). */

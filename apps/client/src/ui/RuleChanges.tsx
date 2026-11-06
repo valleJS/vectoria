@@ -38,6 +38,18 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'caravans-public',
+    date: '2026-11-06',
+    title: 'Karawanen sind für alle sichtbar',
+    body: (
+      <>
+        Nachts siehst du jetzt <b>die Karawanen aller Spieler</b> auf der Karte, jede in der Farbe
+        ihres Besitzers. Ein Klick auf einen Wagen zeigt seine Ladung, so wie man tagsüber das Lager
+        jedes Stützpunkts sieht. Überfallen lässt sich eine Karawane weiterhin nicht.
+      </>
+    ),
+  },
+  {
     id: 'victory-points-per-gameday',
     date: '2026-11-05',
     title: 'Höchstens 3 Siegpunkte pro Spieltag',
