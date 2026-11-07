@@ -3,10 +3,10 @@ type: Codemap
 description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, email login, WebSocket + HTTP API, Postgres/Redis wiring.
 audience: agent
 category: codemap
-last_verified: 2026-11-05
+last_verified: 2026-11-07
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
+sources_stamp: e91af5a314e733b4e1d55afd848735bf32feb570
 ---
 
 # Server codemap (`apps/server`)
@@ -31,7 +31,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
 | `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation; `joinLand` sinks islets and bridges larger islands so all land is one mass |
 | `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` (1/s + on commands and events) |
-| `src/net/http.ts` | `/healthz`, `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
+| `src/net/http.ts` | `/healthz`, `/source` (302 → `SOURCE_URL`), `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
 | `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`, brotli/gzip for text files, compressed once in memory) for the production container |
 | `src/db/schema.ts`, `client.ts` | Drizzle schema + `pg` pool |
 | `drizzle/` | Generated migrations (`npm run db:generate`) |
@@ -64,4 +64,5 @@ themselves in between. Commands mutate state only through
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | unset / `587` / `false` | **host required in production**; unset = codes in the log |
 | `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | unset / unset / `Vectoria <vectoria@localhost>` | |
 | `PUBLIC_URL` | request `Origin` | base for login links in emails |
+| `SOURCE_URL` | `https://github.com/valleJS/vectoria` | target of `GET /source`; AGPL-3.0 §13 source offer, forks point it at their repo |
 | `DATABASE_URL` / `REDIS_URL` | unset = disabled | if set, connection failure is fatal |

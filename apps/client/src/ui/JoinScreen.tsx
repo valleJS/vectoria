@@ -5,6 +5,7 @@ import type { LoginLink } from '../net/loginLink';
 import { useGameStore } from '../state/store';
 import { HandbookInvite } from './Handbook';
 import { Button, Panel } from './Panel';
+import { SourceLink } from './SourceLink';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -44,7 +45,12 @@ function PlayerList({ names }: { names: string[] }) {
 function Centered({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-3">{children}</div>
+      <div className="w-full max-w-md space-y-3">
+        {children}
+        <p className="text-center">
+          <SourceLink />
+        </p>
+      </div>
     </div>
   );
 }

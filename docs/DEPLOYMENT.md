@@ -3,10 +3,10 @@ type: Runbook
 description: Step-by-step deployment of vectoria to the Contabo VPS — Docker container behind the existing Nginx Proxy Manager, GitHub Actions deploys every push to main, rollback, backups, operations.
 audience: human, agent
 category: runbook
-last_verified: 2026-11-04
+last_verified: 2026-11-07
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: 6d5f707d7fdd7635248024a5ca701bc5cb1ad997
+sources_stamp: e91af5a314e733b4e1d55afd848735bf32feb570
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)
@@ -107,7 +107,8 @@ chmod 755 deploy.sh
 chown deploy:deploy compose.yml deploy.sh vectoria.env
 ```
 
-Admin-Token erzeugen und `vectoria.env` ausfüllen (Domain, SMTP, Token):
+Admin-Token erzeugen und `vectoria.env` ausfüllen (Domain, SMTP, Token). `SOURCE_URL` bleibt auf
+diesem Repo, solange der Server unveränderten Code aus `main` fährt (AGPL §13, Link `/source`):
 
 ```bash
 openssl rand -base64 32        # Ausgabe als ADMIN_TOKEN eintragen

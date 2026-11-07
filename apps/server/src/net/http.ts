@@ -18,6 +18,8 @@ export interface HttpContext {
   newSeed: () => number;
   /** Built client directory; when set, other GET paths serve the page. */
   clientDir?: string;
+  /** Repository of the running code; `GET /source` redirects there (AGPL-3.0 §13). */
+  sourceUrl: string;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -95,6 +97,9 @@ export async function handleHttp(
           phase: ctx.state.phase,
           connections: ctx.connectionCount(),
         });
+      case 'GET /source':
+        res.writeHead(302, { location: ctx.sourceUrl });
+        return void res.end();
       case 'GET /api/lobby':
         return json(res, 200, ctx.state.lobby());
       case 'POST /api/auth/start': {

@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-05
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
+sources_stamp: e91af5a314e733b4e1d55afd848735bf32feb570
 ---
 
 # Architecture
@@ -88,7 +88,8 @@ close code `4001` (client drops its token and shows the join screen).
 
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
 `POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state`,
-`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`.
+`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`, `GET /source` (redirect to the
+repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).
 
 `pathfinding.ts` is shared so the client previews routes, travel times and raid meeting points
 with exactly the server's maths.

@@ -36,3 +36,6 @@ export const api = {
       body: JSON.stringify(action),
     }),
 };
+
+/** Server redirect to the source of the running code (AGPL-3.0 §13). */
+export const SOURCE_HREF = `${BASE}/source`;

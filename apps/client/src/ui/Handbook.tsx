@@ -60,6 +60,7 @@ import {
   TentIcon,
 } from './icons';
 import { Button, Tip } from './Panel';
+import { SourceLink } from './SourceLink';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeftIcon, ChevronRightIcon, MenuIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -1237,7 +1238,10 @@ function Book({
               <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
               <span className="md:hidden">Zurück</span>
             </Button>
-            <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
+            <span className="flex flex-col items-center gap-0.5">
+              <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
+              <SourceLink className="text-[11px]" />
+            </span>
             <Button
               variant="ghost"
               size="sm"
