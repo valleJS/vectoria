@@ -88,7 +88,8 @@ close code `4001` (client drops its token and shows the join screen).
 
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
 `POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state`,
-`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`.
+`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`, `GET /source` (redirect to the
+repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).
 
 `pathfinding.ts` is shared so the client previews routes, travel times and raid meeting points
 with exactly the server's maths.

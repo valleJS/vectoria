@@ -3,7 +3,7 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed shadcn/ui + Tailwind HUD, design tokens and design sheet.
 audience: agent
 category: codemap
-last_verified: 2026-11-06
+last_verified: 2026-11-07
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
 sources_stamp: 18e7df387044dec41e9eaf2fbabdba30c10bc92c
@@ -21,7 +21,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/App.tsx` | Routing: `/?design` → design sheet; `/?admin` → admin panel; no token → join; registration → lobby; else game |
 | `src/state/store.ts` | zustand store — token, `GameView`, map, selection, toast |
 | `src/net/socket.ts` | `GameSocket`: token connect, reconnect w/ backoff (immediately when back online or visible), ping/RTT, 8 s silence watchdog, writes to the store; reloads the page once when the server protocol version differs or, after a reconnect, the served entry bundle changed (a deploy) |
-| `src/net/api.ts` | HTTP client for email auth, lobby, admin |
+| `src/net/api.ts` | HTTP client for email auth, lobby, admin; `SOURCE_HREF` (`/source`) |
 | `src/net/loginLink.ts` | Reads (and strips) `?email=&code=` from an emailed login link |
 | `src/game/GameCanvas.tsx` | React mount point for Pixi |
 | `src/game/GameRenderer.ts` | Pixi layers (terrain, marching routes in the owner's colour, each dash pointed toward the target (`pointedDashes`), castles in the owner's colour + style, outposts as watchtowers / ruins, resource deposits and the trader (the gold mine shines: breathing glow + glints at `GOLD_MINE_GLINTS`), twinkling chests with troop requirement, attack alerts, no destination ring (the route ends there; only a planned raid gets crossed strokes, `raidMarks`), walking armies with their load as a roundel at the figure's shoulder (parchment disc, ink rim, one icon per carried resource, no amounts; `cargoPile`, `art.cargo`, `CARGO_SIZE`) or chest (moved along their route by the client clock between the 1/s state pushes), raid crosses), every player's night caravan (`drawCaravans`: one wagon per outpost in each `PlayerPublic.caravanTrip`, in the owner's colour, on the land route to that player's home castle, placed by real time between `departedAt` and `arrivesAt` since the game clock stands still at night; load via `cargoPile`, lantern glow by night). Outpost plates name only the owner (or "Ruine"), smaller than castle plates. The own castle stands on a base in its colour (ellipse at the ground line + soft glow) and its plate carries a gold star (`nameplate({ home })`). Each army has a figure mode (`drawFigure`): soldiers, tent at night, a ship with rolling motion and foam wake while a Seeweg leg (`army.sea`) crosses drawn water (`Terrain.isWater`; boards/lands with a splash only after `SHORE_S` past the coastline, bow follows the route direction), or a heraldic shield with the troop count while gathering, on a ring around the deposit (`GATHER_RING`, a wider ring once full). Armies within `STACK_RADIUS_TILES` fan out side by side (`armyOffsets`, eased in `animate`). Focus ring (`drawFocus`, every frame at the piece as drawn via `focusTarget` / `armyFocus`): soft disc on the ground; parchment band with orbiting studs and four breathing arrowheads in the accent colour in `focusTop`, the topmost map layer (above sites, labels and armies); locks on over `LOCK_MS`. Night caravan wagons are pickable too (client-only selection kind `caravan`, id `<ownerId>:<wagon index>` via `caravanSelectionId` / `findCaravanWagon` in `format.ts`). Click → nearest pick at the drawn position (fan-out, badge); clicking the same spot again cycles through everything stacked there. Coloured pieces come from the lazy `art.pieces` cache; `onReady` redraws once a new colour is rasterised |
@@ -47,6 +47,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/ui/CardFace.tsx` | Large trading-card face and the card profile modal (activate / disarm; a target picker for cards with `CardInfo.target`) |
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (`SendForm` from the parts `BaseSelect` / `TroopFields` / `CardToggle`, ETA over land; the trader only links to the trade menu; `FieldRedirect` lists own field armies to re-route to this target — cargo-free ones, plus loaded ones on their way home when the target is an own base; `StoreRedirect` does the same from the army) / recall / raid (redirect or send, meeting point) for the selected object |
+| `src/ui/SourceLink.tsx` | "Quellcode (AGPL-3.0)" link to `/source` (AGPL §13 source offer); on the join/lobby screens (`Centered`) and in the handbook footer |
 | `src/ui/JoinScreen.tsx`, `AdminPanel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails; game status as a fact grid, phone-sized tap targets; players as cards that stack on phones, with a step picker (1 · 10 · 100) and its own −/+ for troops and for each resource (`grant` action); no free-form amount) |
 | `src/ui/Panel.tsx` | Game vocabulary over shadcn/ui: `Panel` (Card), `SectionLabel`, `Button` (`default`/`primary`/`danger`/`selected`/`ghost`/`outline`/`link`/`plain`), `Tip` (Tooltip) |
 | `src/components/ui/` | shadcn/ui components (button incl. `plain` variant for illustrated buttons, card, tabs, dialog incl. `bare` content, badge incl. `plate`, input, label, select, slider, checkbox, collapsible, toggle-group, progress, separator, tooltip), restyled for parchment; `components.json` configures the CLI (`npx shadcn add …`, alias `@/`) |
@@ -54,7 +55,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/ui/DesignSheet.tsx` | `/?design`: every token (with CSS drift check), castle styles × colours, outposts, resources, troops, treasure, smoke, scenery and the UI components |
 | `src/index.css` | Tailwind theme tokens (mirror of `theme/tokens.ts`), shadcn semantic variables mapped onto them, night panels (`data-night` on `<html>`, set in `App.tsx`: HUD/tooltips/selects swap to a night-blue ramp with a firelight glow, dialogs only dim), serif font, chest animations |
 | `public/` | Logo medallion as `favicon.svg` (also the top-bar logo), `favicon-32.png` fallback, `apple-touch-icon.png` |
-| `vite.config.ts` | Dev proxy `/ws` and `/api` → `localhost:3001`; alias `@/` → `src` |
+| `vite.config.ts` | Dev proxy `/ws`, `/api` and `/source` → `localhost:3001`; alias `@/` → `src` |
 
 ## Rules
 

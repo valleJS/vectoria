@@ -81,6 +81,11 @@ export const config = {
   mailFrom: optional('MAIL_FROM') ?? 'Vectoria <vectoria@localhost>',
   /** Base URL for login links in emails; falls back to the request's Origin header. */
   publicUrl: optional('PUBLIC_URL')?.replace(/\/+$/, ''),
+  /**
+   * Where `/source` redirects (AGPL-3.0 §13: players must be offered the running code).
+   * Forks that change the code must point this at their own repository.
+   */
+  sourceUrl: optional('SOURCE_URL') ?? 'https://github.com/valleJS/vectoria',
   databaseUrl: optional('DATABASE_URL'),
   redisUrl: optional('REDIS_URL'),
 };

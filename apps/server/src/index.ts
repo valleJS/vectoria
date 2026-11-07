@@ -28,6 +28,7 @@ async function main(): Promise<void> {
         onChange: () => gameServer.broadcastState(),
         newSeed,
         clientDir: config.clientDir,
+        sourceUrl: config.sourceUrl,
       },
       req,
       res,

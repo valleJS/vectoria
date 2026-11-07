@@ -12,6 +12,7 @@ export default defineConfig({
       // Dev only: forward the game socket and HTTP API so the client can use same-origin URLs.
       '/ws': { target: 'ws://localhost:3001', ws: true },
       '/api': { target: 'http://localhost:3001' },
+      '/source': { target: 'http://localhost:3001' },
     },
   },
 });
