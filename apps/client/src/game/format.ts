@@ -90,7 +90,7 @@ export function playerName(view: GameView, id: string): string {
 }
 
 /** "Ruine" or "Stützpunkt <owner>". */
-export function outpostLabel(view: GameView, outpost: Outpost): string {
+export function outpostLabel(view: GameView, outpost: Pick<Outpost, 'ownerId'>): string {
   return outpostName(outpost.ownerId ? playerName(view, outpost.ownerId) : null);
 }
 
@@ -145,7 +145,8 @@ export function ownBases(view: GameView): BaseInfo[] {
           id: null,
           name: 'Basis',
           position: me.castle,
-          troops: me.homeTroops,
+          // Own bases are never hidden from their owner.
+          troops: me.homeTroops ?? 0,
           resources: view.self.resources,
         },
       ]
@@ -155,7 +156,7 @@ export function ownBases(view: GameView): BaseInfo[] {
       id: o.id,
       name: outposts.length > 1 ? `Stützpunkt ${i + 1}` : 'Stützpunkt',
       position: o.position,
-      troops: o.troops,
+      troops: o.troops ?? 0,
       resources: o.resources,
     });
   });

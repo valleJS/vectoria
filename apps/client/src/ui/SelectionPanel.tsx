@@ -581,7 +581,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             {own ? 'Deine Burg' : `Burg von ${player.name}`}
           </Title>
           <div>
-            {player.homeTroops} Verteidiger · {player.victoryPoints} Siegpunkte
+            {player.homeTroops ?? '?'} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
           {player.fortified && <div className="text-fortify italic">Bollwerk aktiv (+50 %)</div>}
           {player.barefoot && (
@@ -652,7 +652,7 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           </Title>
           <div>
             {outpost.ownerId ? '' : 'Verfallen und unbesetzt · '}
-            {outpost.troops} Truppen
+            {outpost.troops ?? '?'} Truppen
           </div>
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
           <p className="mt-1 text-xs text-ink-soft">

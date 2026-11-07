@@ -30,6 +30,7 @@ import {
   STARTING_TROOPS,
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
+  TROPHY_VP_INTERVAL,
   VICTORY_POINT_BASE_COST,
   VICTORY_POINTS_PER_GAMEDAY,
   type ResourceType,
@@ -56,6 +57,7 @@ import {
   SoldiersIcon,
   SpotIcon,
   StarIcon,
+  TrophyIcon,
   SunIcon,
   TentIcon,
 } from './icons';
@@ -306,6 +308,17 @@ const CHAPTERS: Chapter[] = [
         <P>
           Pro Spieltag kannst du höchstens <b>{VICTORY_POINTS_PER_GAMEDAY} Siegpunkte</b> kaufen.
         </P>
+        <H icon={<TrophyIcon size={18} />}>Trophäen</H>
+        <P>
+          Für jeden {TROPHY_VP_INTERVAL}. Siegpunkt brauchst du <b>Trophäen</b>: für den{' '}
+          {TROPHY_VP_INTERVAL}. eine, den {TROPHY_VP_INTERVAL * 2}. drei, den{' '}
+          {TROPHY_VP_INTERVAL * 3}. sechs und so weiter. Trophäen werden dabei{' '}
+          <b>nicht verbraucht</b> – sie sind dein Ruf und stehen für alle sichtbar in der Rangliste.
+          Eine Trophäe bekommst du für jeden <b>Sieg</b> über andere: einen geglückten Überfall,
+          einen eroberten Stützpunkt oder eine gestürmte Burg (auch im Duo, dann jeder von euch).
+          Trophäen landen sofort auf deinem Konto – sie müssen nicht heimgetragen werden und lassen
+          sich nicht stehlen.
+        </P>
         <Remember>
           Siegpunkte kann dir niemand wegnehmen. Ressourcen und Truppen dagegen schon.
         </Remember>
@@ -319,6 +332,7 @@ const CHAPTERS: Chapter[] = [
             'Kaufst du mehrere Siegpunkte auf einmal, zahlst du die Summe der einzelnen, steigenden Preise.',
             `Die Grenze von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten gilt von einem Spieltagbeginn (10 Uhr) bis zum nächsten. Abend und Nacht gehören also noch zum alten Tag.`,
             'Siegpunkte gehen nie verloren, auch nicht, wenn deine Burg gestürmt wird.',
+            'Eine leere Ruine wieder aufzubauen bringt keine Trophäe – nur ein Sieg über einen anderen Spieler zählt. Wer verliert, verliert keine Trophäen.',
             'Beendet der Admin das Spiel bei Gleichstand, gewinnt, wer sich früher angemeldet hat.',
           ]}
         />
@@ -705,8 +719,8 @@ const CHAPTERS: Chapter[] = [
               eigenen Lager: Wähle ihn an, dann „Abliefern in“.
             </>,
             <>
-              <b>Heimweg:</b> ist immer für alle sichtbar, auch wenn der Hinweg getarnt war. Mit
-              Ressourcen geht es nur mit {formatPercent(LOADED_SPEED)} Tempo heim.
+              <b>Heimweg:</b> Nebel, Tarnung und Seeweg gelten auch auf dem Heimweg – bis du den Zug
+              umleitest. Mit Ressourcen geht es nur mit {formatPercent(LOADED_SPEED)} Tempo heim.
             </>,
           ]}
         />
@@ -714,7 +728,7 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Zurückgerufen wird von der aktuellen Position aus, zur Burg, aus der der Zug kam.',
             'Wer schon heimkehrt, kann nicht zurückgerufen werden – ohne Ladung aber umgeleitet.',
-            'Mit Ladung oder Truhe geht Umleiten nur zu einer eigenen Burg (Basis oder Stützpunkt). Ein umgeleiteter Zug ohne Ladung behält Nebel, Tarnung und Eilmarsch.',
+            'Mit Ladung oder Truhe geht Umleiten nur zu einer eigenen Burg (Basis oder Stützpunkt). Umleiten beendet Nebel, Tarnung und Seeweg; Eilmarsch bleibt.',
             'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
             'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe. Unterwegs kann niemand dazustoßen.',
             'Truhenträger ohne Ladung marschieren normal schnell. Nur Ressourcen bremsen.',
@@ -892,6 +906,7 @@ const CHAPTERS: Chapter[] = [
             'Wird ein Zug ganz aufgerieben, ist er weg. Ausnahme: Ein Truhenträger behält immer mindestens 1 Truppe.',
             'Der Räuber kommt genau zum geplanten Zeitpunkt am Treffpunkt an. Ist der Zug dann nicht mehr da (schon daheim, oder ein anderer hat ihn schon ausgeraubt und er ist schneller geworden), geht der Überfall ins Leere und der Räuber kehrt leer um.',
             'Wurde der Zug vorher schon von jemand anderem ausgeraubt, gibt es nichts mehr zu holen – ein leerer Zug wird nicht überfallen.',
+            'Getarnte Züge sind vor Überfällen sicher: Wer seine Ladung mit Tarnung heimbringt, kann nicht abgefangen werden – solange der Zug nicht umgeleitet wird.',
             'Eilmarsch macht den Räuberzug schneller und erlaubt einen früheren Treffpunkt. Mit Nebel sieht das Opfer nicht, wie stark der Räuber ist.',
             'Eigene Züge kannst du nicht überfallen.',
           ]}
@@ -1047,11 +1062,12 @@ const CHAPTERS: Chapter[] = [
           items={[
             'Eine scharf geschaltete Marschkarte bleibt in deiner Hand, bis ein Zug sie mitnimmt. Du kannst sie wieder entschärfen oder durch eine andere ersetzen.',
             'Beim Losschicken entscheidest du, ob die scharfe Karte mitgeht. Umleiten verbraucht keine Karte.',
-            'Nebel gilt für das ganze Leben des Zuges, auch auf dem Heimweg: Andere sehen nur „?“, auch im Liveticker.',
-            'Tarnung verbirgt Ziel, Route und Ankunftszeit nur auf dem Hinweg (auch nach Umleiten). Der Heimweg ist immer offen.',
+            'Nebel verbirgt die Truppenzahl des Zuges und der Burg oder des Stützpunkts, aus dem er aufbrach – hin und zurück, auch im Liveticker. Leitest du den Zug um, ist der Nebel weg: Zug und Basis zeigen wieder offene Zahlen.',
+            'Tarnung verbirgt Ziel, Route und Ankunftszeit auf Hin- und Rückweg. Leitest du den Zug um, endet die Tarnung.',
+            'Tarnung bringt Ressourcen sicher heim: Ein getarnter Zug kann nicht überfallen werden – auf dem Hinweg nicht und auf dem Heimweg mit voller Ladung auch nicht. Schick deine Sammler also getarnt los, wenn die Ladung sicher ankommen soll. Zurückrufen behält die Tarnung, erst Umleiten macht den Zug angreifbar.',
             'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
             'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
-            'Seeweg führt den Hinweg schnurgerade zum Ziel, auch übers Wasser – der Zug wird dort zum Schiff. Heim geht es wieder über Land. Wer umleitet, verlässt den Seeweg; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
+            'Seeweg führt Hin- und Rückweg schnurgerade, auch übers Wasser – der Zug wird dort zum Schiff. Zurückrufen behält den Seeweg, Umleiten beendet ihn; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
             'Füllhorn zahlt an den nächsten drei Spieltag-Anfängen je +1 Holz, Stein und Gold zusätzlich in deine Burg. Mehrere Füllhörner verlängern um je drei Spieltage.',
             'Schuhe klauen trifft alle Züge, die die gewählte Person in den nächsten 8 Stunden Spielzeit losschickt (auch Heimwege und Umleitungen): 75 % Tempo, beladen also nur noch etwa 56 %. Schon laufende Züge behalten ihr Tempo.',
             'Hofumzug tauscht die Orte deiner Burg und eines deiner Stützpunkte. Truppen und Lager bleiben, wo sie hingehören: Die Burg nimmt ihre mit, der Stützpunkt seine. Züge auf dem Weg zu einer der beiden laufen zum neuen Ort weiter. Hofumzug ist seltener als die anderen Karten.',
@@ -1084,7 +1100,7 @@ const CHAPTERS: Chapter[] = [
       <>
         <P>
           Auf der Karte sehen alle alles: Burgen, Truppen, Lager und Züge. Nur Karten verbergen
-          etwas – Nebel die Truppenzahl, Tarnung das Ziel.
+          etwas – Nebel die Truppenzahl (des Zuges und seiner Basis), Tarnung das Ziel.
         </P>
         <H>Liveticker und Chronik</H>
         <P>

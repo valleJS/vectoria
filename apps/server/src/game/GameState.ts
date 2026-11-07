@@ -43,6 +43,7 @@ import {
   TROOP_BATCH_SIZE,
   travelMs,
   victoryPointsCost,
+  victoryPointsTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
   type AdminState,
   type ArmyStatus,
@@ -58,6 +59,7 @@ import {
   type LogEntry,
   type MapData,
   type Outpost,
+  type OutpostView,
   type ResourceSpot,
   type Resources,
   type ResourceType,
@@ -136,6 +138,8 @@ interface PlayerRecord {
   victoryPointsBought?: { gameday: number; count: number };
   /** Game clock of the last assault on the home castle; absent in older saves. */
   attackedAt?: number;
+  /** Won in raids and assaults on other players, spent on every 4th VP; absent in older saves. */
+  trophies?: number;
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
   routed?: boolean;
   /** Outpost stock on the night caravan, home at the next gameday start. Absent in older saves. */
@@ -195,6 +199,8 @@ export interface SavedGame {
   caravanDay?: number;
   /** Duo attack offers and pacts; absent in older saves. */
   pacts?: PactRecord[];
+  /** Calendar days (YYYY-MM-DD) the admin declared without a gameday; absent in older saves. */
+  breakDays?: string[];
   winnerId: string | null;
   nextId: number;
   players: PlayerRecord[];
@@ -272,14 +278,12 @@ export class GameState {
   map: MapData | null = null;
 
   private readonly options: GameOptions;
-  private readonly schedule: Schedule;
   private data: SavedGame;
   private running = false;
   private readonly online = new Map<string, number>();
 
   constructor(options: GameOptions, saved?: AnySavedGame) {
     this.options = options;
-    this.schedule = { ...WEEKDAY_SCHEDULE, timezone: options.timezone };
     if (saved?.mapSize) {
       this.map = generateMap(saved.mapSize, saved.mapSize, saved.seed);
     }
@@ -290,6 +294,15 @@ export class GameState {
       if ((this.data.gathererFix ?? 0) < GATHERER_FIX) this.moveGatherersToNearestSpot();
     }
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
+  }
+
+  /** Mon–Fri gameday hours in the game time zone, minus the admin's break days. */
+  private get schedule(): Schedule {
+    return {
+      ...WEEKDAY_SCHEDULE,
+      timezone: this.options.timezone,
+      breakDays: this.data.breakDays ?? [],
+    };
   }
 
   get phase(): GamePhase {
@@ -307,14 +320,22 @@ export class GameState {
     if (this.data.phase !== 'registration') {
       throw new RuleError('Die Anmeldung ist geschlossen.');
     }
+    const name = this.cleanName(rawName);
+    if (this.playerIdForEmail(email)) throw new RuleError('Diese E-Mail ist schon angemeldet.');
+    return name;
+  }
+
+  /** `rawName` trimmed, if valid and not taken by anyone but `ownerId`. */
+  private cleanName(rawName: string, ownerId?: string): string {
     const name = rawName.trim().replace(/\s+/g, ' ');
     if (name.length < 2 || name.length > MAX_NAME_LENGTH) {
       throw new RuleError(`Name muss 2–${MAX_NAME_LENGTH} Zeichen lang sein.`);
     }
-    if (this.data.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+    if (
+      this.data.players.some((p) => p.id !== ownerId && p.name.toLowerCase() === name.toLowerCase())
+    ) {
       throw new RuleError('Dieser Name ist schon vergeben.');
     }
-    if (this.playerIdForEmail(email)) throw new RuleError('Diese E-Mail ist schon angemeldet.');
     return name;
   }
 
@@ -377,6 +398,14 @@ export class GameState {
     const times = item === 'troops' ? count : 1;
     if (!canAfford(player.resources, cost, times)) {
       throw new RuleError('Nicht genug Ressourcen in deiner Burg.');
+    }
+    // Every 4th victory point needs a trophy reputation; trophies are not spent.
+    const trophies =
+      item === 'victoryPoint' ? victoryPointsTrophiesNeeded(player.victoryPoints, count) : 0;
+    if (trophies > (player.trophies ?? 0)) {
+      throw new RuleError(
+        `Dafür brauchst du ${trophies} Trophäe${trophies === 1 ? '' : 'n'} — du hast ${player.trophies ?? 0}.`,
+      );
     }
     for (const r of RESOURCES) player.resources[r] -= cost[r] * times;
     if (item === 'troops') {
@@ -551,8 +580,8 @@ export class GameState {
       this.marchSpeed(player),
     );
     this.checkChestTroops(target, army.troops);
+    this.endRouteCards(army);
     army.status = 'outbound';
-    army.sea = false;
     army.path = destination.path;
     army.target = target;
     army.departClock = this.data.clock;
@@ -580,6 +609,7 @@ export class GameState {
       throw new RuleError('Der Zug ist schon dorthin unterwegs.');
     }
     army.baseId = baseId;
+    this.endRouteCards(army);
     this.startReturn(army, this.armyPosition(army));
     this.addFeed(
       'march',
@@ -1140,6 +1170,13 @@ export class GameState {
     const keeper =
       shares[0]! > shares[1]! ? 0 : shares[1]! > shares[0]! ? 1 : Math.random() < 0.5 ? 0 : 1;
 
+    // Owned outposts and castles only: rebuilding a ruin together is no victory.
+    if (castleOwner || outpost!.ownerId) {
+      for (const p of sides) {
+        this.awardTrophy(p);
+        this.addLog(p, 'Der Duo-Sieg bringt dir eine Trophäe.');
+      }
+    }
     sides.forEach((p, i) => {
       if (!castleOwner && i === keeper) {
         outpost!.ownerId = p.id;
@@ -1372,10 +1409,11 @@ export class GameState {
       addResources(army.cargo, plunder);
       // A chest out of nowhere, on top of the plunder; the defender's own chests stay put.
       army.chest = true;
+      this.awardTrophy(attacker);
       this.addLog(
         attacker,
-        `Sieg gegen ${defender.name}! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)} ` +
-          'und eine Truhe.',
+        `Sieg gegen ${defender.name}! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)}, ` +
+          'eine Truhe und eine Trophäe.',
       );
       this.addLog(
         defender,
@@ -1651,6 +1689,8 @@ export class GameState {
       this.data.armies.push(this.fleeingArmy(defender, outpost.position, outpost.troops, plunder));
     }
     if (defender) this.recallFromLostOutpost(defender, outpost.id, name);
+    // A trophy for taking it from someone; rebuilding an empty ruin is no victory.
+    if (defender) this.awardTrophy(attacker);
     outpost.ownerId = attacker.id;
     outpost.troops = Math.max(1, army.troops - losses.attacker);
     addResources(outpost.resources, army.cargo);
@@ -1658,7 +1698,8 @@ export class GameState {
       attacker,
       (defender ? `${name} erobert` : 'Ruine eingenommen und wiederaufgebaut') +
         (hasResources(outpost.resources) ? `, samt ${formatResources(outpost.resources)}` : '') +
-        `. ${losses.attacker} Verluste.`,
+        `. ${losses.attacker} Verluste.` +
+        (defender ? ' Eine Trophäe ist dein.' : ''),
     );
     if (defender) {
       this.addLog(
@@ -1732,9 +1773,10 @@ export class GameState {
       const plunder = takeShare(convoy.cargo, CONVOY_PLUNDER_SHARE);
       army.troops = Math.max(1, army.troops - losses.attacker);
       addResources(army.cargo, plunder);
+      this.awardTrophy(raider);
       this.addLog(
         raider,
-        `Überfall auf ${victim.name} geglückt! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)}.`,
+        `Überfall auf ${victim.name} geglückt! ${losses.attacker} Verluste, Beute: ${formatResources(plunder)} und eine Trophäe.`,
       );
       this.addLog(
         victim,
@@ -1967,8 +2009,8 @@ export class GameState {
   /** Re-plans an outbound army's march from `from` to `to` at its current pace. */
   private reroute(army: ArmyRecord, from: Vec2, to: Vec2): void {
     const map = this.map!;
-    army.path = findPath(map, from, to) ?? [from, to];
-    army.sea = false;
+    // A Seeweg march keeps sailing straight; only a redirect ends it (`endRouteCards`).
+    army.path = army.sea ? [from, to] : (findPath(map, from, to) ?? [from, to]);
     army.departClock = this.data.clock;
     const owner = this.player(army.ownerId);
     const speed =
@@ -2018,12 +2060,48 @@ export class GameState {
     this.dirty = true;
   }
 
+  /** Admin: renames a player (same rules as at registration). */
+  rename(playerId: string, rawName: string): void {
+    const player = this.player(playerId);
+    if (!player) throw new RuleError('Unbekannter Spieler.');
+    player.name = this.cleanName(rawName, playerId);
+    this.revision++;
+    this.dirty = true;
+  }
+
+  grantTrophies(playerId: string, amount: number): void {
+    const player = this.player(playerId);
+    if (!player) throw new RuleError('Unbekannter Spieler.');
+    player.trophies = Math.max(0, (player.trophies ?? 0) + amount);
+    this.dirty = true;
+  }
+
+  /**
+   * Admin: a calendar day (YYYY-MM-DD, game time zone) without a gameday — the clock stands still
+   * and no gameday starts, as on a weekend. `on` false lifts it.
+   */
+  setBreakDay(date: string, on: boolean): void {
+    if (Number.isNaN(Date.parse(`${date}T12:00:00Z`))) throw new RuleError('Ungültiges Datum.');
+    const days = new Set(this.data.breakDays ?? []);
+    if (on) days.add(date);
+    else days.delete(date);
+    this.data.breakDays = [...days].sort();
+    this.revision++;
+    this.dirty = true;
+  }
+
   // ---- Views ----
 
   viewFor(playerId: string): GameView | null {
     const self = this.player(playerId);
     if (!self) return null;
     const clock = this.data.clock;
+    // Bases a foreign Nebel march set out from show no troop count (`baseKey`).
+    const fogged = new Set(
+      this.data.armies
+        .filter((a) => a.fog && a.ownerId !== playerId)
+        .map((a) => baseKey(a.ownerId, a.baseId)),
+    );
     return {
       phase: this.data.phase,
       clock: this.clockState(),
@@ -2034,7 +2112,8 @@ export class GameState {
         name: p.name,
         castle: p.castle,
         victoryPoints: p.victoryPoints,
-        homeTroops: p.homeTroops,
+        trophies: p.trophies ?? 0,
+        homeTroops: fogged.has(baseKey(p.id, null)) ? null : p.homeTroops,
         fortified: (p.fortifiedUntil ?? 0) > clock,
         barefoot: (p.barefootUntil ?? 0) > clock,
         routed: p.routed ?? false,
@@ -2043,7 +2122,9 @@ export class GameState {
         caravanTrip: hasResources(p.caravan ?? emptyResources()) ? (p.caravanTrip ?? null) : null,
       })),
       spots: this.data.spots,
-      outposts: this.data.outposts,
+      outposts: this.data.outposts.map((o): OutpostView =>
+        o.ownerId && fogged.has(baseKey(o.ownerId, o.id)) ? { ...o, troops: null } : o,
+      ),
       chests: this.data.chests,
       armies: this.data.armies.map((a) => this.armyView(a, playerId)),
       feed: this.data.feed,
@@ -2085,6 +2166,7 @@ export class GameState {
         email: p.email,
         online: this.online.has(p.id),
         victoryPoints: p.victoryPoints,
+        trophies: p.trophies ?? 0,
         homeTroops: p.homeTroops,
         troopsAway:
           this.data.armies.filter((a) => a.ownerId === p.id).reduce((sum, a) => sum + a.troops, 0) +
@@ -2109,6 +2191,10 @@ export class GameState {
       timeScale: this.options.timeScale,
       gameday: this.data.gameday,
       mode: this.options.hours,
+      breakDays: this.data.breakDays ?? [],
+      breakToday:
+        this.options.hours === 'weekdays' &&
+        (this.data.breakDays ?? []).includes(dayKey(this.schedule, new Date())),
     };
   }
 
@@ -2351,6 +2437,10 @@ export class GameState {
             'Dieser Zug zieht sich nach dem Fall seiner Burg zurück — unantastbar.',
           );
         }
+        // Tarnung keeps a convoy safe as long as it stays on its route.
+        if (convoy.stealth) {
+          throw new RuleError('Ein getarnter Zug lässt sich nicht abfangen.');
+        }
         if (!isRaidable(convoy, false)) {
           throw new RuleError('Überfallen lassen sich nur Züge, die Ressourcen tragen.');
         }
@@ -2402,18 +2492,33 @@ export class GameState {
     const base = this.base(owner, army.baseId) ?? this.base(owner, null)!;
     army.baseId = base.id;
     army.status = 'returning';
-    army.path = findPath(this.map!, from, base.position) ?? [from, base.position];
+    // Seeweg holds for the way home too, until the army is redirected (`endRouteCards`).
+    army.path = army.sea
+      ? [from, base.position]
+      : (findPath(this.map!, from, base.position) ?? [from, base.position]);
     army.target = base.id ? { kind: 'outpost', id: base.id } : { kind: 'castle', id: owner.id };
     army.departClock = this.data.clock;
     // Resource cargo slows the march home; chests and empty hands do not.
     const speed = (hasResources(army.cargo) ? LOADED_SPEED : 1) * this.marchSpeed(owner);
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
-    army.sea = false;
     delete army.trade;
-    // The way home is open for everyone to see (and to ambush).
-    army.stealth = false;
+    // Nebel, Tarnung and Seeweg hold on the way home too; Eilmarsch is for the way out only.
     army.forcedMarch = false;
+  }
+
+  /**
+   * Nebel, Tarnung and Seeweg last only as long as the army keeps the route it set out on: the
+   * player redirecting it (to a new target or another own base) ends them.
+   */
+  private endRouteCards(army: ArmyRecord): void {
+    army.fog = false;
+    army.stealth = false;
+    army.sea = false;
+  }
+
+  private awardTrophy(player: PlayerRecord): void {
+    player.trophies = (player.trophies ?? 0) + 1;
   }
 
   /** Victory points the player bought in the current gameday. */
@@ -2515,6 +2620,11 @@ function takeShare(from: Resources, share: number): Resources {
     from[r] -= taken[r];
   }
   return taken;
+}
+
+/** Identifies a base for fog hiding: the owner's castle (`baseId` null) or an outpost. */
+function baseKey(ownerId: string, baseId: string | null): string {
+  return baseId ?? `castle:${ownerId}`;
 }
 
 function addResources(into: Resources, add: Resources): void {

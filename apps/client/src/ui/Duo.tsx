@@ -58,12 +58,25 @@ function pace(view: GameView, playerId: string): number {
   return view.players.find((p) => p.id === playerId)?.barefoot ? BAREFOOT_SPEED : 1;
 }
 
-/** Troops a player has stationed: at home plus in all their outposts (public). */
-function stationed(view: GameView, playerId: string): number {
-  const home = view.players.find((p) => p.id === playerId)?.homeTroops ?? 0;
-  return view.outposts
-    .filter((o) => o.ownerId === playerId)
-    .reduce((sum, o) => sum + o.troops, home);
+/**
+ * Troops a player has stationed: at home plus in all their outposts (public). Bases hidden by a
+ * Nebel march count as 0; `hidden` says whether there are any.
+ */
+function stationed(view: GameView, playerId: string): { troops: number; hidden: boolean } {
+  const home = view.players.find((p) => p.id === playerId)?.homeTroops;
+  const counts = [
+    home ?? null,
+    ...view.outposts.filter((o) => o.ownerId === playerId).map((o) => o.troops),
+  ];
+  return {
+    troops: counts.reduce<number>((sum, n) => sum + (n ?? 0), 0),
+    hidden: counts.includes(null),
+  };
+}
+
+/** "120", or "120 + ?" when some of the bases are hidden by fog. */
+function stationedText({ troops, hidden }: { troops: number; hidden: boolean }): string {
+  return hidden ? `${troops} + ?` : String(troops);
 }
 
 /** A planned duo's timing (game ms from the start): meeting point, attack; or why there is none. */
@@ -305,7 +318,8 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
   const bases = ownBases(view).filter((b) => b.troops > 0);
   const own = toPicks(bases, picks);
   const ownTroops = own.reduce((sum, p) => sum + p.troops, 0);
-  const budget = partnerId ? stationed(view, partnerId) : 0;
+  const partnerStationed = partnerId ? stationed(view, partnerId) : null;
+  const budget = partnerStationed?.troops ?? 0;
   const partnerTroops = Math.min(asked, budget);
   const times = useDuoTimes(
     map,
@@ -345,7 +359,7 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
         <SelectContent>
           {partners.map((p) => (
             <SelectItem key={p.id} value={p.id}>
-              {p.name} ({stationed(view, p.id)} Truppen stationiert)
+              {p.name} ({stationedText(stationed(view, p.id))} Truppen stationiert)
             </SelectItem>
           ))}
         </SelectContent>
@@ -357,7 +371,7 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
         <div>
           <div className="text-ink-soft">
             Von {playerName(view, partnerId)}: <b className="text-ink">{partnerTroops}</b> /{' '}
-            {budget}
+            {partnerStationed ? stationedText(partnerStationed) : budget}
           </div>
           <Slider
             min={1}

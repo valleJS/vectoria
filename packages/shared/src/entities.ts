@@ -38,8 +38,16 @@ export interface PlayerPublic {
   /** Castle tile. Null during registration (no map yet). */
   castle: Vec2 | null;
   victoryPoints: number;
-  /** Troops at home — the castle's defence. Public, as everything on the map is visible. */
-  homeTroops: number;
+  /**
+   * Victories over other players (raid, outpost or castle taken): a public reputation, needed
+   * for every `TROPHY_VP_INTERVAL`-th victory point and never spent, carried or stolen.
+   */
+  trophies: number;
+  /**
+   * Troops at home — the castle's defence. Public, as everything on the map is visible; null for
+   * others while a Nebel march that set out from the castle is still on its first route.
+   */
+  homeTroops: number | null;
   fortified: boolean;
   /** Shoes stolen (card): marches started now go at `BAREFOOT_SPEED`. */
   barefoot: boolean;
@@ -56,6 +64,14 @@ export interface PlayerPublic {
    * like the outpost stock it carries.
    */
   caravanTrip: CaravanTrip | null;
+}
+
+/**
+ * An outpost as one player sees it: `troops` is null for others while a Nebel march that set out
+ * from it is still on its first route.
+ */
+export interface OutpostView extends Omit<Outpost, 'troops'> {
+  troops: number | null;
 }
 
 export interface ResourceSpot {
@@ -249,6 +265,10 @@ export interface ClockState {
   timeScale: number;
   gameday: number;
   mode: 'weekdays' | 'always';
+  /** Calendar days (YYYY-MM-DD, game time zone) without a gameday: the clock stands still. */
+  breakDays: string[];
+  /** Today is one of `breakDays`. */
+  breakToday: boolean;
 }
 
 export interface GameView {
@@ -258,7 +278,7 @@ export interface GameView {
   winnerId: string | null;
   players: PlayerPublic[];
   spots: ResourceSpot[];
-  outposts: Outpost[];
+  outposts: OutpostView[];
   chests: Chest[];
   armies: ArmyView[];
   /** Live ticker, newest first. */

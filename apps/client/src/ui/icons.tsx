@@ -96,6 +96,20 @@ export function StarIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+/** A trophy cup: won by beating other players, spent on every 4th victory point. */
+export function TrophyIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Glyph size={size}>
+      <g stroke={INK} strokeWidth={0.9} strokeLinejoin="round">
+        <path d="M-6-8h12v4a6 6 0 0 1-12 0z" fill="#e0a526" />
+        <path d="M-6-6h-3v1.5a4 4 0 0 0 4 4M6-6h3v1.5a4 4 0 0 1-4 4" fill="none" />
+        <path d="M-1.5 2h3v4h-3z" fill="#e0a526" />
+        <path d="M-5 6h10v3h-10z" fill="#8a6410" />
+      </g>
+    </Glyph>
+  );
+}
+
 export function SunIcon({ size = 18, lit = true }: { size?: number; lit?: boolean }) {
   return (
     <Glyph size={size}>

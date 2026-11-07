@@ -8,7 +8,7 @@ import {
 import type { MapData } from './map';
 import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
 
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** WebSocket close code for an unknown or revoked session token. */
 export const CLOSE_UNKNOWN_TOKEN = 4001;
@@ -221,6 +221,7 @@ export interface AdminPlayer {
   email: string | null;
   online: boolean;
   victoryPoints: number;
+  trophies: number;
   homeTroops: number;
   troopsAway: number;
   resources: Record<ResourceType, number>;
@@ -253,6 +254,11 @@ export type AdminAction =
   /** Swaps the two players' home castle positions; everything else stays with each player. */
   | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
+  | { action: 'rename'; playerId: string; name: string }
+  /** Marks a calendar day (YYYY-MM-DD, game time zone) as a break day, or lifts it. */
+  | { action: 'setBreakDay'; date: string; on: boolean }
+  /** Adds `amount` (may be negative) trophies. */
+  | { action: 'grantTrophies'; playerId: string; amount: number }
   /** Adds `amount` (may be negative) of one resource to the home castle. */
   | { action: 'grant'; playerId: string; resource: ResourceType; amount: number }
   /** Adds `amount` (may be negative) troops to the home castle. */
@@ -479,8 +485,19 @@ export function parseAdminAction(value: unknown): AdminAction | null {
         ? { action: 'grant', playerId: msg.playerId, resource: msg.resource, amount: msg.amount }
         : null;
     case 'grantTroops':
+    case 'grantTrophies':
       return isId(msg.playerId) && isAdminAmount(msg.amount)
-        ? { action: 'grantTroops', playerId: msg.playerId, amount: msg.amount }
+        ? { action: msg.action, playerId: msg.playerId, amount: msg.amount }
+        : null;
+    case 'rename':
+      return isId(msg.playerId) && typeof msg.name === 'string' && msg.name.length <= 64
+        ? { action: 'rename', playerId: msg.playerId, name: msg.name }
+        : null;
+    case 'setBreakDay':
+      return typeof msg.date === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(msg.date) &&
+        typeof msg.on === 'boolean'
+        ? { action: 'setBreakDay', date: msg.date, on: msg.on }
         : null;
     default:
       return null;
