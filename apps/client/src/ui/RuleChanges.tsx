@@ -8,6 +8,7 @@ import {
   SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
   OUTPOST_DAILY_INCOME,
+  TROPHY_VP_INTERVAL,
   VICTORY_POINTS_PER_GAMEDAY,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
@@ -37,6 +38,34 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'trophies',
+    date: '2026-11-07',
+    title: 'Trophäen für jeden 4. Siegpunkt',
+    body: (
+      <>
+        Für jeden {TROPHY_VP_INTERVAL}. Siegpunkt brauchst du jetzt <b>Trophäen</b>: für den{' '}
+        {TROPHY_VP_INTERVAL}. eine, den {TROPHY_VP_INTERVAL * 2}. drei, den {TROPHY_VP_INTERVAL * 3}
+        . sechs usw. Trophäen werden dabei <b>nicht verbraucht</b> – sie sind dein Ruf und stehen
+        für alle sichtbar in der Rangliste. Eine Trophäe gibt es für jeden Sieg über andere: einen
+        geglückten Überfall, einen eroberten Stützpunkt oder eine gestürmte Burg. Sie landet sofort
+        auf deinem Konto und muss nicht heimgetragen werden.
+      </>
+    ),
+  },
+  {
+    id: 'route-cards',
+    date: '2026-11-07',
+    title: 'Nebel, Tarnung und Seeweg: hin und zurück',
+    body: (
+      <>
+        <b>Seeweg</b> und <b>Tarnung</b> wirken jetzt auch auf dem Rückweg – ein getarnter Zug
+        bringt seine Ressourcen also sicher heim. <b>Nebel</b> verbirgt zusätzlich die Truppenzahl
+        der Burg oder des Stützpunkts, aus dem der Zug aufbrach. Alle drei gelten nur, solange der
+        Zug auf seiner ursprünglichen Route bleibt: <b>wer umleitet, beendet den Effekt</b>.
+      </>
+    ),
+  },
   {
     id: 'caravans-public',
     date: '2026-11-06',

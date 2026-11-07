@@ -805,7 +805,10 @@ export class GameRenderer {
       // The watchtower already says "Stützpunkt": the plate names only the owner (or the ruin).
       const name = outpost.ownerId ? playerName(view, outpost.ownerId) : 'Ruine';
       const labels = [
-        this.nameplate(`${name} · ${outpost.troops}`, color, u, { top: 17 * u, size: 10 * u }),
+        this.nameplate(`${name} · ${outpost.troops ?? '?'}`, color, u, {
+          top: 17 * u,
+          size: 10 * u,
+        }),
       ];
       if (hasResources(outpost.resources)) {
         labels.push(
@@ -826,7 +829,7 @@ export class GameRenderer {
       const { color, style } = playerHeraldry(view, player.id);
       const home = player.id === view.self.id;
       const castle = place(player.castle, [
-        this.nameplate(`${player.name} · ${player.homeTroops}`, color, u, { home }),
+        this.nameplate(`${player.name} · ${player.homeTroops ?? '?'}`, color, u, { home }),
       ]);
       const art = this.art.pieces.castle(color, style);
       const rings = new Graphics();

@@ -8,6 +8,8 @@ export interface Schedule {
   days: readonly number[];
   startHour: number;
   endHour: number;
+  /** Calendar days (YYYY-MM-DD in `timezone`) without a gameday, set by the admin. */
+  breakDays?: readonly string[];
 }
 
 export const WEEKDAY_SCHEDULE = {
@@ -42,8 +44,13 @@ function partsIn(timezone: string, date: Date) {
 }
 
 export function isGameTime(schedule: Schedule, date: Date): boolean {
-  const { weekday, hour } = partsIn(schedule.timezone, date);
-  return schedule.days.includes(weekday) && hour >= schedule.startHour && hour < schedule.endHour;
+  const { weekday, hour, dayKey } = partsIn(schedule.timezone, date);
+  return (
+    schedule.days.includes(weekday) &&
+    hour >= schedule.startHour &&
+    hour < schedule.endHour &&
+    !schedule.breakDays?.includes(dayKey)
+  );
 }
 
 /** Calendar date (YYYY-MM-DD in the schedule's zone) — identifies one gameday. */

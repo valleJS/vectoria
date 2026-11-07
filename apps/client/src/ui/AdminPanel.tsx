@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
-import { OnlineDot, ResourceIcon, SoldiersIcon } from './icons';
+import { OnlineDot, ResourceIcon, SoldiersIcon, TrophyIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
 import { Input } from '@/components/ui/input';
 import {
@@ -114,7 +114,20 @@ function PlayerCard({
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex min-w-0 items-center gap-1.5 font-bold">
           <OnlineDot online={p.online} />
-          <span className="truncate">{p.name}</span>
+          <Tip label="Namen ändern">
+            <Button
+              variant="link"
+              className="min-w-0 truncate text-left font-bold decoration-dotted"
+              onClick={() => {
+                const name = window.prompt(`Neuer Name für ${p.name}:`, p.name);
+                if (name && name.trim() !== p.name) {
+                  run({ action: 'rename', playerId: p.id, name });
+                }
+              }}
+            >
+              {p.name}
+            </Button>
+          </Tip>
         </span>
         <span className="shrink-0 tabular-nums">{p.victoryPoints} SP</span>
       </div>
@@ -153,6 +166,13 @@ function PlayerCard({
             onAdjust={(amount) => run({ action: 'grant', playerId: p.id, resource: r, amount })}
           />
         ))}
+        <AdjustRow
+          icon={<TrophyIcon size={18} />}
+          label="Trophäen"
+          value={p.trophies}
+          step={step}
+          onAdjust={(amount) => run({ action: 'grantTrophies', playerId: p.id, amount })}
+        />
       </div>
       <div className="text-xs text-ink-soft">
         Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
@@ -168,6 +188,80 @@ function PlayerCard({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** "Mi, 11.11.2026" for a `YYYY-MM-DD` calendar day. */
+function formatDay(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString('de-DE', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** Calendar days without a gameday (e.g. a holiday): the game clock stands still all day. */
+function BreakDays({
+  days,
+  run,
+}: {
+  days: string[];
+  run: (action: AdminAction, confirmText?: string) => void;
+}) {
+  const [date, setDate] = useState('');
+  return (
+    <Panel title="Pausentage">
+      <p className="mb-2 text-xs text-ink-soft">
+        An einem Pausentag steht die Spieluhr den ganzen Tag still und kein neuer Spieltag beginnt —
+        wie am Wochenende. Die Karawane vom Vorabend kommt am nächsten Spieltag an.
+      </p>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!date) return;
+          run({ action: 'setBreakDay', date, on: true });
+          setDate('');
+        }}
+      >
+        <Input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          aria-label="Datum des Pausentags"
+          className="h-10 w-44 sm:h-7"
+        />
+        <Button type="submit" className="h-10 sm:h-7" disabled={!date}>
+          Hinzufügen
+        </Button>
+      </form>
+      {days.length > 0 ? (
+        <ul className="mt-2 divide-y divide-ink/15">
+          {days.map((day) => (
+            <li key={day} className="flex items-center justify-between gap-2 py-1">
+              <span className="tabular-nums">{formatDay(day)}</span>
+              <Button
+                size="sm"
+                className="h-9 sm:h-7"
+                onClick={() =>
+                  run(
+                    { action: 'setBreakDay', date: day, on: false },
+                    `Pausentag ${formatDay(day)} aufheben?`,
+                  )
+                }
+              >
+                Aufheben
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-ink-soft">Keine Pausentage geplant.</p>
+      )}
+    </Panel>
   );
 }
 
@@ -249,7 +343,13 @@ export function AdminPanel() {
 
   const running = state?.phase === 'running';
   const clockText = (clock: AdminState['clock']) =>
-    clock.paused ? 'pausiert' : clock.running ? 'läuft' : 'außerhalb Spielzeit';
+    clock.paused
+      ? 'pausiert'
+      : clock.breakToday
+        ? 'Pausentag'
+        : clock.running
+          ? 'läuft'
+          : 'außerhalb Spielzeit';
   // Bigger tap targets on phones, the usual compact size from `sm` up.
   const tap = 'h-10 sm:h-7';
 
@@ -364,6 +464,8 @@ export function AdminPanel() {
               )}
             </div>
           </Panel>
+
+          {state.phase !== 'ended' && <BreakDays days={state.clock.breakDays} run={run} />}
 
           {running && state.players.length > 1 && (
             <Panel title="Hauptburgen tauschen">

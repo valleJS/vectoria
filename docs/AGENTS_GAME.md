@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-06
+last_verified: 2026-11-07
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 16dac199e82ccc87acf4ffbf30a4204037593217
@@ -18,7 +18,9 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 
 `registration` → admin "Anmeldung schließen & starten" → `running` → `ended` (a player reaches
 `VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
-registration (closed system). Admin tools while running: kick (armies vanish, outposts turn
+registration (closed system). Admin tools: rename (`rename`, same name rules as registration) and
+`setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
+Game clock); while running also kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
 stays with each player; armies heading for either castle re-route from where they stand). The
 map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
@@ -37,6 +39,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 
 - `clock` = accumulated gameday milliseconds. It advances only Mon–Fri 10–18 in
   `GAME_TIMEZONE` (`GAME_HOURS=weekdays`) or always (`always`, dev), times `TIME_SCALE`.
+- **Break days** (`SavedGame.breakDays`, admin `setBreakDay`, YYYY-MM-DD in `GAME_TIMEZONE`):
+  `calendar.isGameTime` treats them like a weekend day — no clock, no gameday start; catch-up and
+  the caravan's `arrivesAt` skip them too. `ClockState.breakDays` / `breakToday` reach the client.
 - All durations (travel, gathering, card effects) are in clock ms, so they pause overnight.
 - After downtime the server catches the clock up (`calendar.gameTimeBetween`); only one daily
   payout is granted for missed days.
@@ -62,7 +67,8 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | Resources | wood, stone, gold (`Holz`, `Stein`, `Gold`) |
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
 | Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
-| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources; at most `VICTORY_POINTS_PER_GAMEDAY` (3) per gameday, counted in `PlayerRecord.victoryPointsBought` and shown as `SelfState.victoryPointsToday` |
+| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources; every `TROPHY_VP_INTERVAL`-th (4th) VP needs trophies, which are not spent (`victoryPointTrophiesNeeded`: 4th 1, 8th 3, 12th 6, … = 1+…+k); at most `VICTORY_POINTS_PER_GAMEDAY` (3) per gameday, counted in `PlayerRecord.victoryPointsBought` and shown as `SelfState.victoryPointsToday` |
+| Trophies | a public reputation: `PlayerRecord.trophies` (`PlayerPublic.trophies`, shown in the leaderboard), never spent; +1 per win over another player (`awardTrophy`): a raid, an owned outpost taken (not a ruin), a castle stormed; a won duo gives each participant one (not for a ruin). Booked straight into the account, never carried, never lost |
 | Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (leaves 18:00, arrives at the next gameday start) |
 | Start | 50 troops, 2 of each resource |
 | Spot layout | `spots.placeBalancedSpots` over the four `SPOT_KINDS`. Hard rules (per castle, nearest spot of each kind, real routes): every spot ≥ `SPOT_NEAR_HOURS` (1 h) from every castle; **exactly one** kind `SPOT_FAR_HOURS`–`SPOT_MAX_HOURS` (2–4 h) away and it is one of `SPOT_FAR_KINDS` (wood/gold), the other three < 2 h; spots ≥ `SPOT_GAP_HOURS` (1 h, straight line) apart, same kind ≥ `SPOT_SAME_GAP_HOURS` (2 h); no inner-land tile farther than `SPOT_HOLE_HOURS` (1.5 h, grid walk) from a spot, castle or outpost. Soft: totals within `SPOT_BALANCE_TOLERANCE_HOURS`, wood/gold far split ~50/50, few spots. Search on the 8-way `distanceField` with margins that carry to real routes (real ≤ grid ≤ real × `GRID_EXCESS`): greedy seed per castle ring (near 1–2 h, far 2–4 h) plus hole fill, then annealing (violation × `HARD` + soft; repair / retype / swap / jitter / jump / add / remove), then a `findPath` polish that never adds violation. `crampedCastles` precheck (no room for 3 spots 1 h apart under 2 h, or no far tile): `createWorld` throws such castle placements away (≤ 20 tries, ≤ 4 full searches); a running game searches anyway (`force`). Annealing runs a fixed step budget (`SEARCH_STEPS` + `SEARCH_STEPS_PER_CASTLE` × castles, ≤ `ATTEMPTS` 4, stops after `VALID_ATTEMPTS` 2 valid ones), not a time box, so a seed gives the same layout on every machine: a re-layout checked offline on a copy of the live save is exactly what the server produces. `evaluate` is the hot loop (flat arrays, no closures). The re-layout runs synchronously at server start before `/healthz` answers, and `deploy.sh` (fixed on the server, not updated by CI) rolls back after ≈ 60 s, so it uses `quick` (first valid attempt): live save, 18 castles ≈ 1.8 s on a dev Mac; the VPS is ≥ 4× slower (a 14 s version timed out there on 2026-11-05). `relayoutSpots` (once per running game, `SPOT_LAYOUT` 6): marchers keep start + depart time and re-route to the nearest same-resource spot; gatherers move there with their loading time left. `moveGatherersToNearestSpot` (once, `GATHERER_FIX` 1): gatherers move on to the same-resource spot nearest their home castle over land, loading time kept, and return to the home castle (`baseId` null) |
@@ -94,7 +100,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. A loaded army (cargo or chest) may only switch to another own base (`redirectHome`: new `baseId`, then `startReturn`, so it stays loaded-slow and raidable); stock that reached a base stays there (castle until spent, outpost until the night caravan).
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
   straight home (see Cards); too few troops return empty-handed. Sending too few is refused.
-- The way home is never hidden (stealth is dropped on return); cargo is always visible.
+- Nebel, Tarnung and Seeweg hold on the way home too (`startReturn` keeps them; recall, rout and
+  re-routes after a castle move as well) until the player redirects the army (`redirectArmy` /
+  `redirectHome` → `endRouteCards`). Cargo is always visible.
 - Heading home with resource cargo is slower: `startReturn` passes `LOADED_SPEED` (0.75)
   to `travelMs`. Chest bearers and empty armies march at normal speed; a convoy robbed of all
   cargo is re-timed from where it stands and walks on at normal speed.
@@ -174,11 +182,11 @@ redirect) is not announced at all.
 
 | Card | Use | Effect |
 | ---- | --- | ------ |
-| Nebel (`fog`) | on send | others see `?` for troop count |
-| Tarnung (`stealth`) | on send | others don't see the target, route or arrival time (`arriveClock` = `departClock`); the march is not in the ticker |
+| Nebel (`fog`) | on send | others see `?` for the army's troop count and for the base it left from (`PlayerPublic.homeTroops` / `OutpostView.troops` null, `viewFor`), out and home, until redirected |
+| Tarnung (`stealth`) | on send | others don't see the target, route or arrival time (`arriveClock` = `departClock`), out and home, until redirected; the march is not in the ticker; a stealthed convoy cannot be raided (`destination` refuses it; the client sees no route) — resources come home safe |
 | Eilmarsch (`forcedMarch`) | on send | outbound trip takes half as long |
 | Bollwerk (`fortify`) | instant | castle defends ×1.5 for one gameday |
-| Seeweg (`sea`) | on send | outbound path is the straight line `[from, to]`, over water too (`ArmyView.sea`); home, redirects and reroutes go by land again; refused for raids, and armies on water cannot be intercepted (no land path to the meeting point) |
+| Seeweg (`sea`) | on send | outbound and home path are the straight line `[from, to]`, over water too (`ArmyView.sea`); a redirect ends it (by land again); refused for raids, and armies on water cannot be intercepted (no land path to the meeting point) |
 | Füllhorn (`harvest`) | instant | `harvestDays += HARVEST_GAMEDAYS` (3): each gameday start pays `HARVEST_BONUS` (+1) of every resource extra |
 | Schuhe klauen (`stealShoes`) | instant, target player | victim's `barefootUntil` = clock + `BAREFOOT_DURATION_MS` (one gameday); every leg the victim starts meanwhile (send, redirect, return, reroute, raid intercept) runs at `BAREFOOT_SPEED` (0.75, stacks with `LOADED_SPEED`); legs already under way keep their pace. `PlayerPublic.barefoot` |
 | Hofumzug (`relocate`) | instant, target own outpost | home castle and that outpost swap positions; troops and stores stay with their base; armies heading for either re-route (`rerouteToMoved`, shared with the admin castle swap) |

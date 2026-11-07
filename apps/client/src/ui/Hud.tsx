@@ -8,6 +8,7 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   victoryPointCost,
+  victoryPointTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
   type ArmyView,
   type CardType,
@@ -42,6 +43,7 @@ import {
   ShieldIcon,
   StarIcon,
   SunIcon,
+  TrophyIcon,
 } from './icons';
 import { CardProfile } from './CardFace';
 import { ChestOpening } from './ChestOpening';
@@ -92,9 +94,11 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
   const { clock } = view;
   const clockLabel = clock.paused
     ? 'vom Admin pausiert'
-    : clock.running
-      ? 'Spielzeit läuft'
-      : 'Ruhezeit (Mo–Fr 10–18 Uhr)';
+    : clock.breakToday
+      ? 'Pausentag — heute ruht das Spiel'
+      : clock.running
+        ? 'Spielzeit läuft'
+        : 'Ruhezeit (Mo–Fr 10–18 Uhr)';
 
   return (
     <header
@@ -288,6 +292,8 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     gameSocket.send({ type: 'buy', item, count });
   const owned = view.players.find((p) => p.id === self.id)?.victoryPoints ?? 0;
   const vpCost = victoryPointCost(owned);
+  const trophies = view.players.find((p) => p.id === self.id)?.trophies ?? 0;
+  const vpTrophies = victoryPointTrophiesNeeded(owned);
   const vpLeft = Math.max(0, VICTORY_POINTS_PER_GAMEDAY - self.victoryPointsToday);
   return (
     <>
@@ -327,14 +333,30 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
           <span className="flex items-center gap-1">
             <StarIcon size={16} /> {owned + 1}. Siegpunkt
             <span className="ml-1 text-xs text-ink-soft">
-              {vpLeft > 0 ? <Cost cost={vpCost} /> : 'heute keiner mehr'}
+              {vpLeft > 0 ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Cost cost={vpCost} />
+                  {vpTrophies > 0 && (
+                    <Tip label={`Braucht ${vpTrophies} Trophäen (werden nicht verbraucht)`}>
+                      <span
+                        className={`inline-flex items-center gap-0.5 tabular-nums ${trophies < vpTrophies ? 'text-seal' : ''}`}
+                      >
+                        ab {vpTrophies}
+                        <TrophyIcon size={16} />
+                      </span>
+                    </Tip>
+                  )}
+                </span>
+              ) : (
+                'heute keiner mehr'
+              )}
             </span>
           </span>
           <Button
             variant="primary"
             className="px-2 py-0.5"
             onClick={() => buy('victoryPoint', 1)}
-            disabled={vpLeft === 0 || !canAfford(self.resources, vpCost)}
+            disabled={vpLeft === 0 || !canAfford(self.resources, vpCost) || trophies < vpTrophies}
             title={`Noch ${vpLeft} von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten heute`}
           >
             1×
@@ -437,6 +459,12 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
       <CardHeader className="border-b border-ink/40 bg-muted py-1.5">
         <ShieldIcon color={cssColor(playerColor(view, self.id))} size={18} />
         <b className="min-w-0 flex-1 truncate italic">{self.name}</b>
+        <Tip label="Trophäen — für jeden 4. Siegpunkt nötig">
+          <span className="flex items-center gap-0.5 tabular-nums">
+            <TrophyIcon size={18} />
+            <b>{me?.trophies ?? 0}</b>
+          </span>
+        </Tip>
         <Tip label="Siegpunkte">
           <span className="flex items-center gap-1 tabular-nums">
             <StarIcon size={18} />
@@ -618,6 +646,12 @@ function Leaderboard({ view }: { view: GameView }) {
                 {p.name}
               </span>
               <OnlineDot online={p.online} />
+              <Tip label={`${p.trophies} Trophäen`}>
+                <span className="flex items-center gap-0.5 text-xs text-ink-soft">
+                  <TrophyIcon size={14} />
+                  {p.trophies}
+                </span>
+              </Tip>
               <Progress
                 value={(p.victoryPoints / view.victoryPointsToWin) * 100}
                 indicatorColor={color}

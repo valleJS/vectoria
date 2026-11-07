@@ -56,6 +56,12 @@ export const VICTORY_POINT_BASE_COST: Resources = { wood: 1, stone: 2, gold: 1 }
 export const VICTORY_POINT_STEP_ORDER: readonly ResourceType[] = ['stone', 'wood', 'gold'];
 /** At most this many victory points can be bought per gameday (evening and night included). */
 export const VICTORY_POINTS_PER_GAMEDAY = 3;
+/**
+ * Every `TROPHY_VP_INTERVAL`-th victory point needs trophies — a reputation, not a currency: they
+ * are never spent. The 4th VP needs 1, the 8th 3, the 12th 6, … (1 + 2 + … + k for the 4k-th).
+ * Trophies are won by victories over other players (raid, outpost, castle) and are public.
+ */
+export const TROPHY_VP_INTERVAL = 4;
 
 /** Travelling the full map width (along land) takes this many gameday hours. */
 export const CROSS_MAP_HOURS = 10;
@@ -156,14 +162,16 @@ export interface CardInfo {
 export const CARDS: Record<CardType, CardInfo> = {
   fog: {
     name: 'Nebel',
-    description: 'Andere sehen die Truppenstärke dieses Zuges nicht.',
+    description:
+      'Andere sehen die Truppenstärke dieses Zuges und der Basis, aus der er aufbricht, nicht — bis er umgeleitet wird.',
     flavor: 'Wer zählt, was er nicht sieht?',
     use: 'march',
     weight: 1,
   },
   stealth: {
     name: 'Tarnung',
-    description: 'Andere sehen das Ziel dieses Zuges nicht.',
+    description:
+      'Andere sehen Ziel und Weg dieses Zuges nicht, hin und zurück — bis er umgeleitet wird.',
     flavor: 'Kein Späher weiß, wohin der Weg führt.',
     use: 'march',
     weight: 1,
@@ -184,7 +192,8 @@ export const CARDS: Record<CardType, CardInfo> = {
   },
   sea: {
     name: 'Seeweg',
-    description: 'Der Hinweg führt schnurgerade zum Ziel, auch übers Wasser.',
+    description:
+      'Hin- und Rückweg führen schnurgerade, auch übers Wasser — bis der Zug umgeleitet wird.',
     flavor: 'Wo andere ein Ufer sehen, sieht der Kapitän eine Abkürzung.',
     use: 'march',
     weight: 1,
@@ -291,6 +300,24 @@ export function victoryPointsCost(owned: number, count: number): Resources {
     for (const r of RESOURCES) total[r] += cost[r];
   }
   return total;
+}
+
+/**
+ * Trophies a player who owns `owned` VP must have to buy the next one (0 for most): the 4k-th
+ * needs 1 + 2 + … + k. Trophies are not spent.
+ */
+export function victoryPointTrophiesNeeded(owned: number): number {
+  const nth = owned + 1;
+  if (nth % TROPHY_VP_INTERVAL !== 0) return 0;
+  const k = nth / TROPHY_VP_INTERVAL;
+  return (k * (k + 1)) / 2;
+}
+
+/** Trophies needed to buy the next `count` victory points at once (the highest threshold). */
+export function victoryPointsTrophiesNeeded(owned: number, count: number): number {
+  let needed = 0;
+  for (let i = 0; i < count; i++) needed = Math.max(needed, victoryPointTrophiesNeeded(owned + i));
+  return needed;
 }
 
 export function canAfford(have: Resources, cost: Resources, times = 1): boolean {
