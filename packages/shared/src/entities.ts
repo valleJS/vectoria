@@ -147,6 +147,11 @@ export interface ArmyView {
    * the meeting point only to the two participants.
    */
   duoWith: string | null;
+  /**
+   * Bestechung: the own army this one marches to join (a bribed army). Its `target` is then that
+   * army, but it is no raid. Null otherwise.
+   */
+  joining: string | null;
 }
 
 /**
@@ -158,6 +163,24 @@ export function isRaidable(
   ownerRouted: boolean,
 ): boolean {
   return !ownerRouted && army.status !== 'gathering' && hasResources(army.cargo);
+}
+
+/**
+ * An army Bestechung can win over: marching (not gathering or waiting), carrying neither
+ * resources nor a chest, not part of a duo, and its owner not routed.
+ */
+export function isBribable(
+  army: Pick<ArmyView, 'status' | 'cargo'> & { chest?: boolean },
+  inDuo: boolean,
+  ownerRouted: boolean,
+): boolean {
+  return (
+    !ownerRouted &&
+    !inDuo &&
+    (army.status === 'outbound' || army.status === 'returning') &&
+    !army.chest &&
+    !hasResources(army.cargo)
+  );
 }
 
 /** Where duo troops come from: an own outpost id, or null for the home castle. */
@@ -235,6 +258,11 @@ export interface SelfState {
   barefootUntil: number | null;
   /** Victory points bought this gameday (capped at `VICTORY_POINTS_PER_GAMEDAY`). */
   victoryPointsToday: number;
+  /**
+   * Langfinger: how many cards each other player holds (not which). Sent only while the player
+   * holds a Langfinger card; null otherwise.
+   */
+  cardCounts: { playerId: string; count: number }[] | null;
   log: LogEntry[];
 }
 

@@ -35,6 +35,7 @@ import {
   playerName,
   type BaseInfo,
 } from '../game/format';
+import { bribeHostFor } from '../game/bribe';
 import { barefoot, eta, nearestBase, trackOf } from '../game/march';
 import { NEUTRAL_COLOR } from '../game/palette';
 import { gameSocket } from '../net/socket';
@@ -72,8 +73,15 @@ const STATUS_NAMES: Record<ArmyView['status'], string> = {
   outbound: 'unterwegs',
   gathering: 'sammelt',
   returning: 'auf dem Heimweg',
-  waiting: 'wartet am Duo-Treffpunkt',
+  waiting: 'wartet',
 };
+
+/** What a waiting army waits for: duo partners, bribed troops coming to join, or its host. */
+function waitingText(army: ArmyView): string {
+  if (army.duoWith) return 'wartet am Duo-Treffpunkt';
+  if (army.joining) return 'wartet auf den Zug, zu dem er stößt';
+  return 'wartet vor dem Ziel auf übergelaufene Truppen';
+}
 
 /** What the trader does, for the side panel and the trade menu. */
 export const TRADER_TEXT =
@@ -463,7 +471,8 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
           : `Heerzug von ${own ? 'dir' : playerName(view, army.ownerId)}`}
       </Title>
       <div>
-        {army.troops ?? '?'} Truppen · {STATUS_NAMES[army.status]}
+        {army.troops ?? '?'} Truppen ·{' '}
+        {army.status === 'waiting' ? waitingText(army) : STATUS_NAMES[army.status]}
       </div>
       <div className="text-ink-soft">
         Ziel: {describeTarget(view, army.target)}
@@ -497,6 +506,12 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
             .join(' · ')}
         </div>
       )}
+      {army.joining && (
+        <div className="mt-1 text-xs text-fortify italic">
+          Bestochen: stößt zu {own ? 'deinem' : 'einem'} Zug
+          {own && ' — umleiten oder zurückrufen löst ihn davon'}.
+        </div>
+      )}
       {own && (carrying || army.chest) && <StoreRedirect view={view} army={army} />}
       {army.duoWith && (army.ownerId === view.self.id || army.duoWith === view.self.id) && (
         <div className="mt-1 text-xs text-ink-soft italic">
@@ -516,7 +531,37 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
         </div>
       )}
       {!own && isRaidable(army, ownerRouted) && <RaidOptions view={view} convoy={army} />}
+      {!own && <BribeOption view={view} army={army} />}
     </>
+  );
+}
+
+/** Bestechung on a foreign army in reach: shown while the player holds the card. */
+function BribeOption({ view, army }: { view: GameView; army: ArmyView }) {
+  const map = useGameStore((s) => s.map);
+  const setBribing = useGameStore((s) => s.setBribing);
+  if (!map || !view.self.cards.includes('bribe')) return null;
+  const host = bribeHostFor(view, map.width, army);
+  if (!host) return null;
+  return (
+    <Locked className="mt-2 border-t border-ink/30 pt-2">
+      <div className="font-bold">Bestechen</div>
+      <p className="text-xs text-ink-soft">
+        Die {army.troops ?? '?'} Truppen laufen über und stoßen zu deinem Zug ({host.troops}) →{' '}
+        {describeTarget(view, host.target)}. Kann er sie vor dem Ziel nicht treffen, wartet er dort
+        auf sie.
+      </p>
+      <Button
+        variant="primary"
+        className="mt-1"
+        onClick={() => {
+          gameSocket.send({ type: 'activateCard', card: 'bribe', target: army.id });
+          setBribing(false);
+        }}
+      >
+        Bestechen (Karte einsetzen)
+      </Button>
+    </Locked>
   );
 }
 

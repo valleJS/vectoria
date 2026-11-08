@@ -81,6 +81,8 @@ interface GameStore {
   ruleChanges: boolean;
   /** Rule changes already shown in this browser. */
   seenRuleChanges: string[];
+  /** Bestechung is being aimed: the map marks the armies in reach until one is picked. */
+  bribing: boolean;
 
   setStatus(status: ConnectionStatus): void;
   setLatency(latencyMs: number): void;
@@ -97,6 +99,7 @@ interface GameStore {
   setHandbook(open: boolean): void;
   setTraderMenu(open: boolean): void;
   setRuleChanges(open: boolean): void;
+  setBribing(bribing: boolean): void;
   /** Remembers these rule changes as seen, so they lose their "Neu" mark. */
   markRuleChangesSeen(ids: string[]): void;
 }
@@ -120,6 +123,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   traderMenu: false,
   ruleChanges: false,
   seenRuleChanges: readSeenRuleChanges(),
+  bribing: false,
 
   setStatus: (status) => set({ status }),
   setLatency: (latencyMs) => set({ latencyMs }),
@@ -152,6 +156,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   revealCard: (revealedCard) => set({ revealedCard }),
   setHandbook: (handbook) => set({ handbook }),
   setRuleChanges: (ruleChanges) => set({ ruleChanges }),
+  setBribing: (bribing) => set({ bribing }),
   markRuleChangesSeen: (ids) =>
     set((s) => {
       const seen = [...new Set([...s.seenRuleChanges, ...ids])];

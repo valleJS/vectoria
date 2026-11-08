@@ -3,10 +3,10 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-07
+last_verified: 2026-11-08
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 538f92383b3139450e29ef696a978bea56d56ca2
+sources_stamp: 4ed2ddface8330525193ba8450728f0649db0efd
 ---
 
 # Architecture
@@ -74,7 +74,7 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
-| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id or player id, for cards that aim); march card: armed for the next army; `null` disarms |
+| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id, player id or foreign army id, for cards that aim); march card: armed for the next army; `null` disarms |
 | C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
 | C→S | `duoOffer` | Duo attack offer: `partnerId`, `target` (enemy castle/outpost), own `sources` (`{from, troops}[]`), `partnerTroops` |
 | C→S | `duoAnswer` | Partner accepts (with own `sources` summing to the asked troops) or declines |

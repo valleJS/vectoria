@@ -1,4 +1,5 @@
 import {
+  bribeRangeTiles,
   findPath,
   getTile,
   hasResources,
@@ -31,6 +32,7 @@ import {
 } from '../art/svg';
 import { useGameStore, type Selection } from '../state/store';
 import { COMPACT_BELOW, HUD_INSETS } from '../ui/layout';
+import { bribableArmies, bribeHosts } from './bribe';
 import { Camera } from './Camera';
 import {
   caravanSelectionId,
@@ -317,6 +319,8 @@ export class GameRenderer {
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
+  /** Bestechung being aimed: reach around own armies, pulsing rings on armies in reach. */
+  private readonly bribeMarks = new Graphics();
   private focus: { key: string; radius: number; color: number; since: number } | null = null;
   /** Armies, painted back to front; gather badges always on top. */
   private readonly armyLayer = new Container({ sortableChildren: true });
@@ -383,6 +387,7 @@ export class GameRenderer {
       this.spotLayer,
       this.labelLayer,
       this.alertLayer,
+      this.bribeMarks,
       this.armyLayer,
       this.night.fireflies,
       this.focusTop,
@@ -998,7 +1003,7 @@ export class GameRenderer {
         const alpha = faded ? 0.5 : 1;
         this.routeLines.push({ points: route, color, alpha });
         // The route itself ends at the destination; only a planned ambush gets a mark.
-        if (army.target?.kind === 'army') this.raidMarks.push({ ...to, color });
+        if (army.target?.kind === 'army' && !army.joining) this.raidMarks.push({ ...to, color });
       }
 
       let sprite = this.armies.get(army.id);
@@ -1799,5 +1804,39 @@ export class GameRenderer {
     this.drawWakes(seconds, tint);
     this.animateAlerts(seconds);
     this.drawFocus(seconds, now, tint);
+    this.drawBribeMarks(seconds);
   };
+
+  /**
+   * While Bestechung is aimed (`bribing`): a faint disc of reach around every own army that can
+   * bribe, and a pulsing gold ring around each foreign army in reach. Redrawn every frame, at the
+   * armies as drawn.
+   */
+  private drawBribeMarks(seconds: number): void {
+    const g = this.bribeMarks.clear();
+    const view = this.view;
+    const map = this.map;
+    if (!useGameStore.getState().bribing || !view || !map) return;
+    const s = this.unit * this.pieceScale;
+    const reach = bribeRangeTiles(map.width) * map.tileSize;
+    const at = (army: ArmyView) => {
+      const sprite = this.armies.get(army.id);
+      return sprite ? this.armyFocus(sprite) : { ...this.px(army.position), radius: 12 * s };
+    };
+    for (const host of bribeHosts(view)) {
+      const { x, y } = at(host);
+      g.circle(x, y, reach)
+        .fill({ color: CARGO_GOLD, alpha: 0.07 })
+        .stroke({ width: 1.2 * s, color: CARGO_GOLD, alpha: 0.55 });
+    }
+    const pulse = 0.5 + 0.5 * Math.sin(seconds * 4);
+    for (const army of bribableArmies(view, map.width)) {
+      const { x, y, radius } = at(army);
+      const r = radius * (1.25 + 0.2 * pulse);
+      g.circle(x, y, r)
+        .stroke({ width: 5 * s, color: INK, alpha: 0.7 })
+        .circle(x, y, r)
+        .stroke({ width: 3 * s, color: CARGO_GOLD, alpha: 0.6 + 0.4 * pulse });
+    }
+  }
 }
