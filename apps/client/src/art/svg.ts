@@ -1216,16 +1216,22 @@ export function flame(): Art {
 
 // ---- Portraits ----
 
-/** One finger as an ink-outlined capsule from knuckle (x1, y1) to tip (x2, y2). */
-function finger(x1: number, y1: number, x2: number, y2: number, w: number): string {
-  const d = `M${n(x1)} ${n(y1)}L${n(x2)} ${n(y2)}`;
-  // Nail: a short light dash just short of the tip.
+/**
+ * One finger as an ink-outlined capsule from knuckle (x1, y1) to tip (x2, y2), bowed sideways by
+ * `bend` (positive bows to the left of the knuckle → tip direction).
+ */
+function finger(x1: number, y1: number, x2: number, y2: number, w: number, bend = 0): string {
   const len = Math.hypot(x2 - x1, y2 - y1);
-  const ux = (x2 - x1) / len;
-  const uy = (y2 - y1) / len;
+  const cx = (x1 + x2) / 2 + ((y2 - y1) / len) * bend;
+  const cy = (y1 + y2) / 2 - ((x2 - x1) / len) * bend;
+  const d = `M${n(x1)} ${n(y1)}Q${n(cx)} ${n(cy)} ${n(x2)} ${n(y2)}`;
+  // Nail: a short light dash just short of the tip, along the curve's end tangent.
+  const tl = Math.hypot(x2 - cx, y2 - cy);
+  const ux = (x2 - cx) / tl;
+  const uy = (y2 - cy) / tl;
   const nail = `M${n(x2 - ux * 5)} ${n(y2 - uy * 5)}L${n(x2 - ux * 1.5)} ${n(y2 - uy * 1.5)}`;
-  return `<path d="${d}" stroke="${INK}" stroke-width="${n(w + 3)}" stroke-linecap="round"/>
-    <path d="${d}" stroke="${SKIN}" stroke-width="${n(w)}" stroke-linecap="round"/>
+  return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${n(w + 3)}" stroke-linecap="round"/>
+    <path d="${d}" fill="none" stroke="${SKIN}" stroke-width="${n(w)}" stroke-linecap="round"/>
     <path d="${nail}" stroke="${shade(SKIN, 1.35)}" stroke-width="${n(w * 0.45)}" stroke-linecap="round"/>`;
 }
 
@@ -1347,17 +1353,23 @@ export function merchant(): Art {
     <circle cx="${x + 1.8}" cy="${y - 0.6}" r=".7" fill="${PARCHMENT}"/>
     <path d="M${x - 8} ${y - 1.5 - lift}Q${x} ${y - 6 - lift} ${x + 8} ${y - 1.5 - lift}L${x + 8} ${y - 1}Q${x} ${y - 2.5} ${x - 8} ${y - 0.5}Z" fill="${shade(SKIN, 0.86)}"/>
     <path d="M${x - 8} ${y - 0.5}Q${x} ${y - 3} ${x + 8} ${y - 1}" stroke="${INK}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+  // One hand of the steeple (the viewer's left; the other is its mirror), after the photo: the
+  // fingers fan out of a palm in the lower corner, the index steep and meeting its twin at the
+  // apex, each lower finger flatter, its tip lower and a little short of the centre line, the
+  // pinky low and nearly level. The thumbs sit on the far side, out of sight; of the palm only a
+  // sliver shows. [knuckle x, knuckle y, tip x, tip y, width, bend].
+  const steeple: [number, number, number, number, number, number][] = [
+    [150, 342, 193.5, 321, 7.5, 2], // pinky
+    [146, 331, 194.5, 300, 8.5, 2.5], // ring
+    [147, 319, 195.5, 280, 9, 3], // middle
+    [153, 307, 196.5, 259, 8.5, 2], // index
+  ];
+  const fingers = steeple.map((f) => finger(...f)).join('');
   const hand = `
-    <path d="M92 340L124 302Q140 288 158 300L150 340Z" fill="${suit}" ${line}/>
-    <path d="M124 302Q140 288 158 300L154 312Q140 302 130 312Z" fill="${shirt}" ${line}/>
-    ${finger(171, 330, 196, 300, 8)}
-    ${finger(170, 320, 197, 288, 8.5)}
-    ${finger(172, 310, 197, 276, 9)}
-    ${finger(176, 300, 197, 263, 9)}
-    ${finger(186, 334, 196, 316, 9.5)}
-    <path d="M138 340L148 308Q158 294 176 296L182 306Q176 318 182 340Z" fill="${SKIN}" ${line}/>
-    <path d="M166 302Q172 300 177 304M164 312Q170 310 174 314M164 322Q169 320 173 324" stroke="${shade(SKIN, 0.68)}" stroke-width="1.3" fill="none"/>
-    <path d="M150 336Q154 318 162 306" stroke="${shade(SKIN, 1.2)}" stroke-width="3" fill="none" opacity=".8"/>`;
+    <path d="M96 340L120 316Q132 306 142 316L138 340Z" fill="${suit}" ${line}/>
+    ${fingers}
+    <path d="M130 340L135 322Q142 306 158 302Q150 322 160 340Z" fill="${SKIN}" ${line}/>
+    <path d="M139 336Q141 322 151 310" stroke="${shade(SKIN, 1.2)}" stroke-width="2.6" fill="none" opacity=".8"/>`;
   const person = `
     <path d="M200 120C160 120 146 145 148 178C150 210 146 240 134 272L160 284L172 240H228L240 284L266 272C254 240 250 210 252 178C254 145 240 120 200 120Z" fill="${hair}" ${line}/>
     <path d="M156 190C156 220 152 244 144 266M164 200C164 230 162 250 156 274M244 190C244 220 248 244 256 266M236 200C236 230 238 250 244 274" stroke="${hairLit}" stroke-width="1.4" fill="none"/>
