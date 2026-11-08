@@ -28,7 +28,7 @@ Shape and protocol: [`docs/AGENTS_ARCHITECTURE.md`](docs/AGENTS_ARCHITECTURE.md)
 
 - The server is authoritative: clients send intents, the server validates and owns all game state.
 - Network message and game-entity types live only in `packages/shared`; never redeclare them in an app.
-- Licensed `AGPL-3.0-or-later` (`LICENSE`): keep the `/source` link (join screen, handbook) reachable.
+- Licensed `AGPL-3.0-or-later` (`LICENSE`): keep the `/source` link (end of the handbook's last chapter) reachable.
 - Agent docs live under `docs/`; never create root `ARCHITECTURE.md` or `DEPLOYMENT.md`.
 - One SSOT per topic: hubs (`AGENTS.md`, `docs/_index.md`) link, leaves own the detail.
 - Every `docs/**` leaf carries frontmatter: `audience`, `category`, `last_verified`, `load-when`.

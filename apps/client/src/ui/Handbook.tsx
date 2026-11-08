@@ -1241,6 +1241,11 @@ function Book({
             className="min-h-0 flex-1 overflow-y-auto pr-2 text-[15px] [&>p:first-child]:first-letter:float-left [&>p:first-child]:first-letter:mr-1.5 [&>p:first-child]:first-letter:text-5xl [&>p:first-child]:first-letter:leading-[0.9] [&>p:first-child]:first-letter:text-seal"
           >
             {chapter.body({ victoryPointsToWin })}
+            {index === CHAPTERS.length - 1 && (
+              <p className="mt-6 text-center">
+                <SourceLink className="text-[11px]" />
+              </p>
+            )}
           </div>
           <footer className="mt-3 flex items-center justify-between border-t border-ink/30 pt-2 text-sm">
             <Button
@@ -1254,10 +1259,7 @@ function Book({
               <span className="max-md:hidden">{CHAPTERS[index - 1]?.title ?? ''}</span>
               <span className="md:hidden">Zurück</span>
             </Button>
-            <span className="flex flex-col items-center gap-0.5">
-              <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
-              <SourceLink className="text-[11px]" />
-            </span>
+            <span className="text-xs text-ink-soft tabular-nums">— {index + 1} —</span>
             <Button
               variant="ghost"
               size="sm"
