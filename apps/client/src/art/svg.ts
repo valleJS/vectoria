@@ -310,10 +310,12 @@ export function deposit(resource: SpotKind): Art {
         <path d="M-9 8V-5h18V8Q0 11-9 8Z" fill="${TIMBER.shade}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
         <ellipse cx="0" cy="-5" rx="9" ry="3.6" fill="${END_GRAIN.base}" stroke="${INK}" stroke-width="2.2"/>
         <ellipse cx="0" cy="-5" rx="5" ry="1.8" fill="none" stroke="${END_GRAIN.ring}" stroke-width="1.2"/>
-        <path d="M1-6L9-24" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
-        <path d="M1-6L9-24" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M5-26L14-22L13-14L6-18Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
-        <path d="M13-22L12-15" stroke="${GRANITE.shade}" stroke-width="1.2"/>
+        <g transform="translate(-1 -9) rotate(-35)">
+          <path d="M1 0H20" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M1 0H20" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M-3-3H4V2L6 6.5Q1 8-4 6.5L-3 2Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M-2.5 4.6Q1 5.8 4.6 4.6" fill="none" stroke="${GRANITE.shade}" stroke-width="1.2"/>
+        </g>
       </g>
       ${log(14, 48, 30, 9, -8, INK)}
       ${log(31, 50, 26, 9, -8, INK)}
