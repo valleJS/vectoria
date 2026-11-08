@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Offers players the source of the running server and client. Required by AGPL-3.0 §13 for
- * anyone who hosts the game, so keep it reachable from every screen family (join/lobby, handbook).
+ * anyone who hosts the game, so keep it reachable: it sits at the end of the handbook's last chapter.
  */
 export function SourceLink({ className }: { className?: string }) {
   return (

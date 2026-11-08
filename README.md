@@ -306,6 +306,6 @@ Vectoria is free software under the
 
 You may use, modify and host it, including commercially. If you **run a modified version** that
 other people use over the network, you must offer those players the source code of your version
-under the same license (AGPL §13). The game does this for you. The join screen and the handbook
-link to `/source`, which redirects to `SOURCE_URL`. If you change the code, publish your fork
+under the same license (AGPL §13). The game does this for you. The end of the handbook
+links to `/source`, which redirects to `SOURCE_URL`. If you change the code, publish your fork
 and point `SOURCE_URL` at it.
