@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-08
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: f14983f6a1a1a7fcbf46774df9200d043f2a1e42
+sources_stamp: a1f1118923393a7dc1208bbd29a8241b55187899
 ---
 
 # Game rules (prototype)
@@ -22,8 +22,9 @@ registration (closed system). Admin tools: rename (`rename`, same name rules as 
 `setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
 Game clock); while running also kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
-stays with each player; attackers re-route from where they stand, armies returning home move
-along with their castle and keep their arrival time). The
+stays with each player; armies returning home move along with their castle and keep their arrival time;
+armies that set out from either castle keep target and progress (as a share of the way) but
+start from its new place; other attackers re-route from where they stand). The
 map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
 returns to registration, keeping registrations.
 
