@@ -296,6 +296,22 @@ const CARD_ART: Record<CardType, ReactNode> = {
       <path d="M-9-5q8-9 17 0M5-5.5h3.2v-3.2M-6-5.5h-3.2v-3.2" />
     </g>
   ),
+  // A hand reaching for a fanned-out card.
+  pickpocket: (
+    <g fill="none" stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M2-10h8v13h-8z" fill="#fff" fillOpacity={0.85} transform="rotate(12 6 -3)" />
+      <path d="M-14 9q0-6 6-8l8-2q3 0 2 3l-5 2" />
+      <path d="M-6 1l9-6q2-1 3 1l-6 6" />
+    </g>
+  ),
+  // A purse of coins changing hands.
+  bribe: (
+    <g stroke="#fff" strokeWidth={2} strokeLinejoin="round">
+      <path d="M-8-6h8l-2 3q8 3 6 11h-16q-2-8 6-11z" fill="#fff" fillOpacity={0.85} />
+      <circle cx={9} cy={-5} r={2.6} fill="none" />
+      <circle cx={12} cy={3} r={2.6} fill="none" />
+    </g>
+  ),
 };
 
 export function CardArt({ card, className = '' }: { card: CardType; className?: string }) {

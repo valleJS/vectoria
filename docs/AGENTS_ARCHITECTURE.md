@@ -74,7 +74,7 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
-| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id or player id, for cards that aim); march card: armed for the next army; `null` disarms |
+| C→S | `activateCard` | Instant card: takes effect (with `target`: own outpost id, player id or foreign army id, for cards that aim); march card: armed for the next army; `null` disarms |
 | C→S | `openChest` | Open a chest brought home; answered with `chestOpened` |
 | C→S | `duoOffer` | Duo attack offer: `partnerId`, `target` (enemy castle/outpost), own `sources` (`{from, troops}[]`), `partnerTroops` |
 | C→S | `duoAnswer` | Partner accepts (with own `sources` summing to the asked troops) or declines |

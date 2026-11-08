@@ -3,6 +3,8 @@ import {
   BAREFOOT_DURATION_MS,
   BAREFOOT_SPEED,
   battleLosses,
+  BRIBE_RANGE_HOURS,
+  bribeRangeTiles,
   canAfford,
   CARDS,
   CASTLE_PLUNDER_SHARE,
@@ -25,6 +27,7 @@ import {
   HARVEST_GAMEDAYS,
   hasResources,
   HOUR_MS,
+  isBribable,
   isRaidable,
   OUTPOST_PLUNDER_SHARE,
   outpostName,
@@ -175,6 +178,17 @@ interface ArmyRecord {
   chest?: boolean;
   /** Part of a duo attack (`PactRecord`): a group on its way to the meeting point, or the united army. */
   pactId?: string;
+  /** Bestechung: a bribed army on its way to join `hostId`; see `planJoin`. */
+  joins?: JoinPlan;
+}
+
+/** A bribed army's march to the own army it joins (the host). */
+interface JoinPlan {
+  hostId: string;
+  /** The host's leg the plan was made for (`legKey`); a new leg means a new plan. */
+  hostLeg: string;
+  /** The host waits at its target (an assault) until this army has joined. */
+  hold: boolean;
 }
 
 /** A duo attack between two players; see `PactView` for the fields. */
@@ -262,6 +276,12 @@ interface Destination {
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 const last = <T>(items: readonly T[]): T => items[items.length - 1]!;
+
+/** Identifies an army's current leg: it changes whenever the army sets out anew or stops. */
+function legKey(army: ArmyRecord): string {
+  const end = last(army.path);
+  return `${army.status}|${army.departClock}|${army.arriveClock}|${end.x},${end.y}`;
+}
 
 /**
  * Authoritative game state. Mutated only by `update` and validated commands; every mutation sets
@@ -555,6 +575,8 @@ export class GameState {
     const army = this.data.armies.find((a) => a.id === armyId && a.ownerId === playerId);
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
     if (army.pactId) throw new RuleError('Ein Duo-Zug lässt sich nicht umleiten.');
+    // Sent elsewhere by hand, a bribed army no longer joins its host.
+    delete army.joins;
     // Stone bound for the trader goes there or back (recall), never to another store.
     if (army.trade && army.status === 'outbound') {
       throw new RuleError('Ein Zug zum Händler lässt sich nur zurückrufen.');
@@ -625,6 +647,7 @@ export class GameState {
     if (!army) throw new RuleError('Unbekannter Truppenzug.');
     if (army.pactId) throw new RuleError('Einen Duo-Angriff könnt ihr nur gemeinsam abbrechen.');
     if (army.status === 'returning') throw new RuleError('Der Zug ist bereits auf dem Rückweg.');
+    delete army.joins;
     this.startReturn(army, this.armyPosition(army));
     this.addFeed('march', `${this.armyLabel(army)} kehrt um.`, army.id);
     this.dirty = true;
@@ -699,8 +722,232 @@ export class GameState {
         if (!player.castle) throw new RuleError('Du hast keine Burg.');
         return () => this.relocate(player, outpost);
       }
+      case 'pickpocket': {
+        const victim = target ? this.player(target) : undefined;
+        if (!victim || !victim.castle) throw new RuleError('Wähle jemanden aus.');
+        if (victim === player) throw new RuleError('In die eigene Tasche greifen lohnt nicht.');
+        if (victim.cards.length === 0) throw new RuleError(`${victim.name} hat keine Karten.`);
+        return () => this.pickpocket(player, victim);
+      }
+      case 'bribe': {
+        const army = this.data.armies.find((a) => a.id === target);
+        const victim = army && this.player(army.ownerId);
+        if (!army || !victim || victim === player) throw new RuleError('Wähle einen fremden Zug.');
+        if (!isBribable(army, army.pactId !== undefined, victim.routed ?? false)) {
+          throw new RuleError(
+            'Bestechen lassen sich nur marschierende Züge ohne Ladung und Truhe.',
+          );
+        }
+        const host = this.bribeHost(player, army);
+        if (!host) {
+          throw new RuleError(
+            `Keiner deiner Züge ist nah genug dran (höchstens ${BRIBE_RANGE_HOURS} h Marsch).`,
+          );
+        }
+        return () => this.bribe(player, victim, army, host);
+      }
       default:
         throw new RuleError('Diese Karte wirkt nicht sofort.');
+    }
+  }
+
+  /** Langfinger: one of the victim's cards, drawn blind, changes hands. */
+  private pickpocket(player: PlayerRecord, victim: PlayerRecord): void {
+    const [card] = victim.cards.splice(Math.floor(Math.random() * victim.cards.length), 1);
+    if (!card) return;
+    player.cards.push(card);
+    if (victim.activeCard && !victim.cards.includes(victim.activeCard)) victim.activeCard = null;
+    this.addLog(player, `Langfinger: du hast ${victim.name} „${CARDS[card].name}“ gestohlen.`);
+    this.addLog(victim, `${player.name} hat dir die Karte „${CARDS[card].name}“ gestohlen.`);
+    this.addFeed('chest', `${player.name} stiehlt ${victim.name} eine Karte.`);
+  }
+
+  /** Bestechung: the nearest own army (not in a duo, not itself joining) within reach. */
+  private bribeHost(player: PlayerRecord, army: ArmyRecord): ArmyRecord | undefined {
+    const where = this.armyPosition(army);
+    const reach = bribeRangeTiles(this.map!.width);
+    return this.data.armies
+      .filter((a) => a.ownerId === player.id && !a.pactId && !a.joins)
+      .map((a) => ({ a, d: distance(this.armyPosition(a), where) }))
+      .filter(({ d }) => d <= reach)
+      .sort((x, y) => x.d - y.d)[0]?.a;
+  }
+
+  /** Bestechung: the army changes sides and heads off to join `host` (see `planJoin`). */
+  private bribe(
+    player: PlayerRecord,
+    victim: PlayerRecord,
+    army: ArmyRecord,
+    host: ArmyRecord,
+  ): void {
+    // Nebel hid the troop count until now; the ticker keeps it hidden.
+    const troops = army.fog ? '?' : String(army.troops);
+    army.ownerId = player.id;
+    army.baseId = null;
+    army.forcedMarch = false;
+    delete army.trade;
+    this.endRouteCards(army);
+    army.joins = { hostId: host.id, hostLeg: '', hold: false };
+    this.planJoin(army, host);
+    this.addLog(
+      player,
+      `Bestechung: ${army.troops} Truppen von ${victim.name} laufen über und stoßen zu deinem Zug.`,
+    );
+    this.addLog(
+      victim,
+      `${player.name} hat deinen Zug bestochen — ${army.troops} Truppen sind übergelaufen.`,
+    );
+    this.addFeed(
+      'battle',
+      `${player.name} besticht einen Zug von ${victim.name} (${troops} Truppen).`,
+      army.id,
+    );
+    this.liftRout(victim);
+  }
+
+  /**
+   * Plans a bribed army's way to its host: the earliest point on the host's current leg it can
+   * reach in time (`planIntercept`), else the end of that leg. A host heading for an own base is
+   * not chased: the army marches to that base itself. A host bound for an assault waits at the
+   * target until the army has joined (`hold`); gatherers and waiting hosts are met where they
+   * stand. Re-planned whenever the host starts a new leg (`syncJoiners`).
+   */
+  private planJoin(army: ArmyRecord, host: ArmyRecord): void {
+    const join = army.joins!;
+    const owner = this.player(army.ownerId)!;
+    const map = this.map!;
+    const now = this.data.clock;
+    const from = this.armyPosition(army);
+    const speed = this.marchSpeed(owner);
+    join.hostLeg = legKey(host);
+    let to: Vec2;
+    let meetClock = now;
+    let hold = false;
+    if (host.status === 'gathering' || host.status === 'waiting') {
+      to = this.armyPosition(host);
+      hold = host.status === 'waiting';
+    } else {
+      const meeting = planIntercept(map, from, host, now, false, speed);
+      const base = this.legBase(host);
+      if (meeting) {
+        to = meeting.position;
+        meetClock = meeting.clock;
+      } else if (base !== undefined) {
+        delete army.joins;
+        army.baseId = base;
+        this.startReturn(army, from);
+        return;
+      } else {
+        to = last(host.path);
+        hold = host.target.kind === 'castle' || host.target.kind === 'outpost';
+      }
+    }
+    const path = findPath(map, from, to);
+    if (!path) {
+      this.leaveJoin(
+        army,
+        'Dein übergelaufener Zug findet keinen Weg zu deinem Zug und zieht heim.',
+      );
+      return;
+    }
+    army.status = 'outbound';
+    army.path = path;
+    army.target = { kind: 'army', id: host.id };
+    army.departClock = now;
+    army.arriveClock = Math.max(
+      meetClock,
+      now + travelMs(pathLength(path), map.width, false, speed),
+    );
+    join.hold = hold;
+  }
+
+  /** The own base an army's current leg ends at (outpost id, null = castle); undefined if none. */
+  private legBase(army: ArmyRecord): string | null | undefined {
+    if (army.status === 'returning') return army.baseId;
+    const { kind, id } = army.target;
+    if (kind === 'castle' && id === army.ownerId) return null;
+    if (
+      kind === 'outpost' &&
+      this.data.outposts.find((o) => o.id === id)?.ownerId === army.ownerId
+    ) {
+      return id;
+    }
+    return undefined;
+  }
+
+  /** A bribed army gives up joining and marches to its new owner's home castle. */
+  private leaveJoin(army: ArmyRecord, text: string): void {
+    delete army.joins;
+    army.baseId = null;
+    const owner = this.player(army.ownerId);
+    if (owner) this.addLog(owner, text);
+    this.startReturn(army, this.armyPosition(army));
+  }
+
+  /** Armies on their way to join `host` that it waits for at its target. */
+  private heldBy(host: ArmyRecord): boolean {
+    return this.data.armies.some((a) => a.joins?.hostId === host.id && a.joins.hold);
+  }
+
+  /** A bribed army reached its meeting point: it joins the host there, or waits for it. */
+  private joinArrive(army: ArmyRecord, owner: PlayerRecord): void {
+    const host = this.data.armies.find((a) => a.id === army.joins!.hostId);
+    const here = last(army.path);
+    if (
+      host &&
+      host.ownerId === army.ownerId &&
+      !host.pactId &&
+      distance(this.armyPosition(host), here) <= RAID_REACH_TILES
+    ) {
+      host.troops += army.troops;
+      this.data.armies = this.data.armies.filter((a) => a !== army);
+      this.addLog(
+        owner,
+        `${army.troops} übergelaufene Truppen sind zu deinem Zug gestoßen — er zählt jetzt ${host.troops}.`,
+      );
+      this.addFeed('march', `${this.armyLabel(host)} nimmt übergelaufene Truppen auf.`, host.id);
+      this.resumeHost(host);
+      return;
+    }
+    // Ahead of the host: wait here until it comes or starts a new leg (`syncJoiners`).
+    army.status = 'waiting';
+    army.path = [here];
+    army.departClock = this.data.clock;
+    army.arriveClock = this.data.clock;
+  }
+
+  /** A host waiting at its target for bribed troops moves on once none is still coming. */
+  private resumeHost(host: ArmyRecord): void {
+    if (host.status !== 'waiting' || host.pactId || host.joins || this.heldBy(host)) return;
+    host.status = 'outbound';
+    this.arrive(host);
+  }
+
+  /**
+   * Keeps bribed armies on course: a host that started a new leg means a new plan, a host that is
+   * gone (or changed hands) sends the army home, and hosts nobody is coming for any more move on.
+   */
+  private syncJoiners(): void {
+    for (const army of [...this.data.armies]) {
+      const join = army.joins;
+      if (!join || !this.data.armies.includes(army)) continue;
+      const host = this.data.armies.find((a) => a.id === join.hostId);
+      if (!host || host.ownerId !== army.ownerId || host.pactId) {
+        this.leaveJoin(
+          army,
+          'Dein übergelaufener Zug findet deinen Zug nicht mehr und zieht heim.',
+        );
+        this.revision++;
+      } else if (legKey(host) !== join.hostLeg) {
+        this.planJoin(army, host);
+        this.revision++;
+      }
+    }
+    for (const host of this.data.armies.filter((a) => a.status === 'waiting')) {
+      if (!host.pactId && !host.joins && !this.heldBy(host)) {
+        this.resumeHost(host);
+        this.revision++;
+      }
     }
   }
 
@@ -727,6 +974,8 @@ export class GameState {
     for (const army of this.data.armies) {
       if (army.status === 'gathering' || !heads(army)) continue;
       const position = this.armyPosition(army);
+      // A host waiting at a moved target for bribed troops walks on to its new place.
+      if (army.status === 'waiting' && !army.pactId && !army.joins) army.status = 'outbound';
       if (army.status === 'returning') {
         this.startReturn(army, position);
         continue;
@@ -1243,6 +1492,7 @@ export class GameState {
   /** Moves the game clock forward, resolving every arrival in order. */
   private advance(dClock: number): void {
     const end = this.data.clock + dClock;
+    this.syncJoiners();
     for (;;) {
       // Duo groups waiting at the meeting point move on when the last one arrives.
       const next = this.data.armies
@@ -1251,6 +1501,7 @@ export class GameState {
       if (!next || this.data.phase !== 'running') break;
       this.data.clock = Math.max(this.data.clock, next.arriveClock);
       this.arrive(next);
+      this.syncJoiners();
       this.revision++;
     }
     this.data.clock = end;
@@ -1263,6 +1514,7 @@ export class GameState {
       this.removeArmy(army);
       return;
     }
+    if (army.joins) return this.joinArrive(army, owner);
     if (army.pactId && army.status === 'outbound') {
       const pact = this.pact(army.pactId);
       if (pact?.status === 'marching') return this.arriveAtMeet(army, pact);
@@ -1284,6 +1536,15 @@ export class GameState {
         army.baseId = null;
         this.startReturn(army, last(army.path));
       }
+      return;
+    }
+    // Bestechung: bribed troops are still coming — wait at the gates for them.
+    if (this.heldBy(army)) {
+      army.status = 'waiting';
+      army.path = [last(army.path)];
+      army.departClock = this.data.clock;
+      army.arriveClock = this.data.clock;
+      this.addLog(owner, 'Dein Zug wartet vor dem Ziel auf die übergelaufenen Truppen.');
       return;
     }
 
@@ -2190,6 +2451,12 @@ export class GameState {
           })),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
         victoryPointsToday: this.victoryPointsToday(self),
+        // Langfinger shows who holds how many cards, never which.
+        cardCounts: self.cards.includes('pickpocket')
+          ? this.data.players
+              .filter((p) => p.id !== self.id && p.castle)
+              .map((p) => ({ playerId: p.id, count: p.cards.length }))
+          : null,
         log: self.log,
       },
     };
@@ -2271,6 +2538,7 @@ export class GameState {
       sea: army.sea ?? false,
       chest: army.chest ?? false,
       duoWith: pact && (member || pact.status === 'united') ? other : null,
+      joining: visible ? (army.joins?.hostId ?? null) : null,
     };
   }
 

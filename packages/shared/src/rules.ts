@@ -140,6 +140,8 @@ export const CARD_TYPES = [
   'harvest',
   'stealShoes',
   'relocate',
+  'pickpocket',
+  'bribe',
 ] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 
@@ -153,8 +155,11 @@ export interface CardInfo {
    * effect as soon as they are activated.
    */
   use: 'march' | 'instant';
-  /** Instant cards aimed at something: one of the player's outposts, or another player. */
-  target?: 'ownOutpost' | 'player';
+  /**
+   * Instant cards aimed at something: one of the player's outposts, another player, or another
+   * player's army (picked on the map).
+   */
+  target?: 'ownOutpost' | 'player' | 'foreignArmy';
   /** Relative chance to be in a chest (1 = usual). */
   weight: number;
 }
@@ -222,6 +227,24 @@ export const CARDS: Record<CardType, CardInfo> = {
     target: 'ownOutpost',
     weight: 0.4,
   },
+  pickpocket: {
+    name: 'Langfinger',
+    description:
+      'Du siehst, wer wie viele Karten hat — nicht welche. Wähle jemanden und zieh blind eine davon.',
+    flavor: 'Was in fremden Taschen steckt, weiß man erst hinterher.',
+    use: 'instant',
+    target: 'player',
+    weight: 1,
+  },
+  bribe: {
+    name: 'Bestechung',
+    description:
+      'Ein fremder Zug ohne Ladung, höchstens 1 h Marsch von einem deiner Züge entfernt, läuft zu dir über und stößt zu deinem Zug.',
+    flavor: 'Jeder Söldner hat seinen Preis — meist einen kleinen.',
+    use: 'instant',
+    target: 'foreignArmy',
+    weight: 0.6,
+  },
 };
 
 /** A card drawn from a chest, weighted by `CardInfo.weight`. */
@@ -247,6 +270,17 @@ export const HARVEST_GAMEDAYS = 3;
 /** Schuhe klauen: marches the victim starts within the duration go at this pace. */
 export const BAREFOOT_SPEED = 0.75;
 export const BAREFOOT_DURATION_MS = GAMEDAY_MS;
+
+/**
+ * Bestechung: a foreign army can be bribed while one of the player's own armies is within this
+ * many marching hours of it (straight line, at normal pace), so the reach grows with the map.
+ */
+export const BRIBE_RANGE_HOURS = 1;
+
+/** Bestechung's reach in tiles on a map `mapWidth` tiles wide (see `travelMs`). */
+export function bribeRangeTiles(mapWidth: number): number {
+  return (mapWidth * BRIBE_RANGE_HOURS) / CROSS_MAP_HOURS;
+}
 
 export const FORTIFY_MULTIPLIER = 1.5;
 export const FORTIFY_DURATION_MS = GAMEDAY_MS;

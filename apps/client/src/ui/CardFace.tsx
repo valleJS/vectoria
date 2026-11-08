@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CARDS, type CardType } from '@vectoria/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { gameSocket } from '../net/socket';
 import { useGameStore } from '../state/store';
+import { bribableArmies } from '../game/bribe';
 import { cardColor, ownBases } from '../game/format';
 import { CardArt } from './icons';
 import { Button } from './Panel';
@@ -61,6 +62,8 @@ export function CardProfile() {
   const card = useGameStore((s) => s.cardProfile);
   const view = useGameStore((s) => s.view);
   const showCard = useGameStore((s) => s.showCard);
+  const map = useGameStore((s) => s.map);
+  const setBribing = useGameStore((s) => s.setBribing);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const self = view?.self;
   if (!card || !view || !self) return null;
@@ -71,7 +74,9 @@ export function CardProfile() {
     setPicked(undefined);
     showCard(null);
   };
-  // Cards aimed at something: the own outposts (Hofumzug) or the other players (Schuhe klauen).
+  // Cards aimed at something: the own outposts (Hofumzug) or the other players (Schuhe klauen,
+  // Langfinger — which shows how many cards each holds, and only those with any).
+  const counts = card === 'pickpocket' ? self.cardCounts : null;
   const targets =
     info.target === 'ownOutpost'
       ? ownBases(view).flatMap((b) =>
@@ -80,10 +85,18 @@ export function CardProfile() {
       : info.target === 'player'
         ? view.players
             .filter((p) => p.id !== self.id && p.castle)
-            .map((p) => ({ id: p.id, label: p.name }))
+            .flatMap((p) => {
+              if (!counts) return [{ id: p.id, label: p.name }];
+              const count = counts.find((c) => c.playerId === p.id)?.count ?? 0;
+              return count > 0
+                ? [{ id: p.id, label: `${p.name} · ${count} ${count === 1 ? 'Karte' : 'Karten'}` }]
+                : [];
+            })
         : [];
   const target = targets.find((t) => t.id === picked)?.id;
   const ready = !info.target || target !== undefined;
+  // Bestechung is aimed on the map: the armies in reach light up there.
+  const inReach = info.target === 'foreignArmy' && map ? bribableArmies(view, map.width).length : 0;
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
@@ -99,7 +112,7 @@ export function CardProfile() {
               <span>Im Besitz: {count}</span>
               {active && <b className="text-seal">aktiv</b>}
             </div>
-            {count > 0 && info.target && (
+            {count > 0 && info.target && info.target !== 'foreignArmy' && (
               <Select value={target ?? ''} onValueChange={setPicked}>
                 <SelectTrigger aria-label="Ziel der Karte" className="w-full">
                   <SelectValue
@@ -107,7 +120,9 @@ export function CardProfile() {
                       targets.length === 0
                         ? info.target === 'ownOutpost'
                           ? 'Du hast keinen Stützpunkt'
-                          : 'Niemand sonst da'
+                          : counts
+                            ? 'Niemand hat Karten'
+                            : 'Niemand sonst da'
                         : info.target === 'ownOutpost'
                           ? 'Stützpunkt wählen'
                           : 'Wen trifft es?'
@@ -123,7 +138,27 @@ export function CardProfile() {
                 </SelectContent>
               </Select>
             )}
+            {count > 0 && info.target === 'foreignArmy' && (
+              <>
+                <p className="text-xs text-ink-soft">
+                  {inReach > 0
+                    ? `${inReach} ${inReach === 1 ? 'Zug ist' : 'Züge sind'} gerade in Reichweite deiner Züge — sie leuchten auf der Karte.`
+                    : 'Gerade ist kein fremder Zug ohne Ladung nah genug an einem deiner Züge.'}
+                </p>
+                <Button
+                  variant="primary"
+                  disabled={inReach === 0}
+                  onClick={() => {
+                    setBribing(true);
+                    close();
+                  }}
+                >
+                  Zug auf der Karte wählen
+                </Button>
+              </>
+            )}
             {count > 0 &&
+              info.target !== 'foreignArmy' &&
               (active ? (
                 <Button onClick={() => gameSocket.send({ type: 'activateCard', card: null })}>
                   Deaktivieren
@@ -155,5 +190,44 @@ export function CardProfile() {
         </Card>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * While Bestechung is aimed: a banner over the map until an army is picked (its panel has the
+ * button) or the player cancels. Ends by itself once the card is gone.
+ */
+export function BribeBanner() {
+  const bribing = useGameStore((s) => s.bribing);
+  const setBribing = useGameStore((s) => s.setBribing);
+  const view = useGameStore((s) => s.view);
+  const map = useGameStore((s) => s.map);
+  const holds = view?.self.cards.includes('bribe') ?? false;
+  useEffect(() => {
+    if (bribing && !holds) setBribing(false);
+  }, [bribing, holds, setBribing]);
+  useEffect(() => {
+    if (!bribing) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setBribing(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bribing, setBribing]);
+  if (!bribing || !view || !map || !holds) return null;
+  const count = bribableArmies(view, map.width).length;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+      <Card className="pointer-events-auto max-w-md">
+        <CardContent className="flex items-center gap-3 p-2">
+          <CardArt card="bribe" className="h-7 w-10 shrink-0 rounded-[2px]" />
+          <span className="text-sm">
+            <b>Bestechung:</b>{' '}
+            {count > 0
+              ? 'Wähle einen leuchtenden Zug auf der Karte.'
+              : 'Gerade ist kein fremder Zug in Reichweite deiner Züge.'}
+          </span>
+          <Button onClick={() => setBribing(false)}>Abbrechen</Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

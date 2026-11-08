@@ -113,6 +113,7 @@ export function describeTarget(view: GameView, target: ArmyTarget | null): strin
       return 'Truhe';
     case 'army': {
       const army = view.armies.find((a) => a.id === target.id);
+      if (army?.ownerId === view.self.id) return 'deinen Zug';
       return army ? `Zug von ${playerName(view, army.ownerId)}` : 'Truppenzug';
     }
   }
@@ -172,6 +173,8 @@ const CARD_COLORS: Record<CardType, string> = {
   harvest: '#c9951b',
   stealShoes: '#9a5a3a',
   relocate: '#a3311f',
+  pickpocket: '#4f6b4a',
+  bribe: '#b07d2a',
 };
 
 /** Frame colour of a card, shared by the card art, the hand and the card profile. */

@@ -45,7 +45,7 @@ import {
   SunIcon,
   TrophyIcon,
 } from './icons';
-import { CardProfile } from './CardFace';
+import { BribeBanner, CardProfile } from './CardFace';
 import { ChestOpening } from './ChestOpening';
 import { TraderMenu } from './TraderMenu';
 import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
@@ -578,9 +578,11 @@ function armyStatusText(view: GameView, army: ArmyView): string {
         `Heimweg, ${left}` + (hasResources(army.cargo) ? ` · ${formatResources(army.cargo)}` : '')
       );
     case 'outbound':
+      if (army.joining) return `stößt zu deinem Zug in ${left}`;
       return `${army.target?.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${left}`;
     case 'waiting':
-      return `wartet am Duo-Treffpunkt, noch ${left}`;
+      if (army.duoWith) return `wartet am Duo-Treffpunkt, noch ${left}`;
+      return army.joining ? 'wartet auf deinen Zug' : 'wartet auf übergelaufene Truppen';
   }
 }
 
@@ -758,7 +760,7 @@ function Ticker({ view, collapsible = true }: { view: GameView; collapsible?: bo
       (a.target?.kind === 'castle' || a.target?.kind === 'outpost') &&
       a.target.id !== a.ownerId,
   ).length;
-  const raids = moving.filter((a) => a.target?.kind === 'army').length;
+  const raids = moving.filter((a) => a.target?.kind === 'army' && !a.joining).length;
   const gatherers = moving.filter(
     (a) => a.status === 'gathering' || (a.status === 'outbound' && a.target?.kind === 'spot'),
   ).length;
@@ -1074,6 +1076,7 @@ export function Hud() {
       <ChestOpening />
       <TraderMenu />
       <CardProfile />
+      <BribeBanner />
       <Handbook />
       <RuleChanges />
     </>

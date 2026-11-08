@@ -1,5 +1,6 @@
 import {
   BAREFOOT_SPEED,
+  BRIBE_RANGE_HOURS,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
   LOADED_SPEED,
@@ -38,6 +39,23 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'cards-pickpocket-bribe',
+    date: '2026-11-08',
+    title: 'Zwei neue Karten: Langfinger und Bestechung',
+    body: (
+      <>
+        <b>Langfinger</b>: Du siehst, wer wie viele Karten hat — aber nicht welche — und ziehst
+        jemandem blind eine davon. <b>Bestechung</b> (seltener): Ein fremder Zug ohne Ladung und
+        Truhe, höchstens {formatGameDuration(BRIBE_RANGE_HOURS * HOUR_MS)} Marsch (Luftlinie) von
+        einem deiner Züge entfernt, läuft zu dir über. Beim Ausspielen leuchten auf der Karte alle
+        Züge, die gerade in Reichweite sind. Die Übergelaufenen stoßen auf dem schnellsten Weg zu
+        deinem Zug; schaffen sie es nicht vor seinem Ziel, wartet dein Zug vor einem Angriff auf
+        sie. Zieht dein Zug heim, gehen sie direkt in dieselbe Burg. Details im Handbuch unter
+        „Karten“.
+      </>
+    ),
+  },
   {
     id: 'trophies',
     date: '2026-11-07',

@@ -70,7 +70,7 @@ export interface RedirectArmyMessage {
 export interface ActivateCardMessage {
   type: 'activateCard';
   card: CardType | null;
-  /** For cards with a `target`: the own outpost id or the other player's id. */
+  /** For cards with a `target`: the own outpost id, the other player's id or a foreign army id. */
   target?: string;
 }
 

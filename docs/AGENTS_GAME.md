@@ -179,7 +179,7 @@ redirect) is not announced at all.
 - Cards belong to the player, not to a base. One card can be active (`self.activeCard`): an
   instant card takes effect on activation; a march card is armed and goes with the next army
   sent (`sendArmy.useActiveCard`), then is used up. Instant cards with a `CardInfo.target`
-  (`ownOutpost` / `player`) need `activateCard.target`; it is checked before the card is spent
+  (`ownOutpost` / `player` / `foreignArmy`) need `activateCard.target`; it is checked before the card is spent
   (`GameState.instantCard`).
 
 | Card | Use | Effect |
@@ -192,6 +192,28 @@ redirect) is not announced at all.
 | Füllhorn (`harvest`) | instant | `harvestDays += HARVEST_GAMEDAYS` (3): each gameday start pays `HARVEST_BONUS` (+1) of every resource extra |
 | Schuhe klauen (`stealShoes`) | instant, target player | victim's `barefootUntil` = clock + `BAREFOOT_DURATION_MS` (one gameday); every leg the victim starts meanwhile (send, redirect, return, reroute, raid intercept) runs at `BAREFOOT_SPEED` (0.75, stacks with `LOADED_SPEED`); legs already under way keep their pace. `PlayerPublic.barefoot` |
 | Hofumzug (`relocate`) | instant, target own outpost | home castle and that outpost swap positions; troops and stores stay with their base; armies heading for either re-route (`rerouteToMoved`, shared with the admin castle swap) |
+| Langfinger (`pickpocket`) | instant, target player | one of the victim's cards, drawn at random, moves to the thief (victim's armed card is disarmed if it was the last copy); refused if the victim has none. While holding it, `SelfState.cardCounts` lists every other player's card count (never which cards) |
+| Bestechung (`bribe`) | instant, target foreign army | see below |
+
+**Bestechung** (`GameState.bribe`, `planJoin`, `syncJoiners`): the target must be `isBribable`
+(outbound or returning, no resource cargo, no chest, not in a duo, owner not routed) and within
+`bribeRangeTiles` (`BRIBE_RANGE_HOURS` 1 h of marching, straight line) of an own army that is not
+in a duo or itself joining — the nearest such army becomes the **host**. The bribed army changes
+owner (base: home castle; route cards and Eilmarsch end) and gets `ArmyRecord.joins`
+(`ArmyView.joining` = host id, `target` = the host, no raid). `planJoin` picks its way: the
+earliest point on the host's current leg it can reach in time (`planIntercept`); failing that, if
+the leg ends at an own base, the army simply marches to that base (no join); otherwise to the
+leg's end — for a castle/outpost assault with `hold`, so the host waits there (`status:
+'waiting'`, no `pactId`) instead of attacking until every holding joiner has arrived
+(`resumeHost`). A gathering or waiting host is met where it stands. On arrival within
+`RAID_REACH_TILES` the troops add to the host; arriving early, the joiner waits. `syncJoiners`
+runs before and after every arrival in `advance`: a new host leg (`legKey`) means a new plan, a
+host that is gone, changed hands or joined a duo sends the joiner home, and a waiting host nobody
+holds for any more moves on. Redirecting or recalling the joiner ends the join. Ticker: the bribe (troop
+count `?` under Nebel) and the union; waiting is not announced. Client:
+activating opens the aim mode (`store.bribing`, `BribeBanner`), the renderer draws reach discs
+around hosts and pulsing rings on bribable armies (`game/bribe.ts`), the army's panel has the
+button.
 
 ## Rule changes notice
 
