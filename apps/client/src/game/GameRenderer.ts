@@ -310,6 +310,8 @@ export class GameRenderer {
   }[] = [];
   /** Warm shine pulsing under gold mines. */
   private shines: { sprite: Sprite; phase: number }[] = [];
+  /** Castle decorations (admin), swaying on top of their castle. */
+  private decorations: { sprite: Sprite; phase: number }[] = [];
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
   /**
@@ -720,6 +722,7 @@ export class GameRenderer {
     }
     this.sparkles = [];
     this.shines = [];
+    this.decorations = [];
     if (!view || !this.map) return;
     this.buildGround(view);
     const u = this.unit;
@@ -870,6 +873,14 @@ export class GameRenderer {
       castle.addChild(rings);
       // Centre the castle body, not its ground line, on the castle tile.
       if (art) castle.addChild(artSprite(art, 58 * u, true));
+      if (art && player.castleDecoration === 'penis') {
+        // Stands on the castle's top edge, a little sunk into the towers, and sways (animate).
+        const k = (58 * u) / (art.width - art.pad * 2);
+        const sprite = artSprite(this.art.penis, 24 * u);
+        sprite.position.set(0, -(art.centreY - art.pad) * k + 6 * u);
+        castle.addChild(sprite);
+        this.decorations.push({ sprite, phase: Math.random() * Math.PI * 2 });
+      }
       if (!player.online) castle.alpha = 0.85;
     }
 
@@ -1792,6 +1803,9 @@ export class GameRenderer {
       sprite.alpha = twinkle;
       sprite.scale.set(((0.4 + 0.6 * twinkle) * size) / this.art.sparkle.width);
       if (spin) sprite.rotation = seconds * 0.8 + phase;
+    }
+    for (const { sprite, phase } of this.decorations) {
+      sprite.rotation = Math.sin(seconds * 2.2 + phase) * 0.12;
     }
     for (const { sprite, phase } of this.shines) {
       // Brighter in the dark, where the gold catches the moon.

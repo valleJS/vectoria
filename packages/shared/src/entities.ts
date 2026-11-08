@@ -32,6 +32,11 @@ export const ARMY_TARGET_KINDS: readonly ArmyTarget['kind'][] = [
   'army',
 ];
 
+/** Something the admin can put over a player's castle, seen by everyone; purely cosmetic. */
+export type CastleDecoration = 'penis';
+
+export const CASTLE_DECORATIONS: readonly CastleDecoration[] = ['penis'];
+
 export interface PlayerPublic {
   id: string;
   name: string;
@@ -64,6 +69,8 @@ export interface PlayerPublic {
    * like the outpost stock it carries.
    */
   caravanTrip: CaravanTrip | null;
+  /** Set by the admin, drawn over the castle for everyone; null for none. */
+  castleDecoration: CastleDecoration | null;
 }
 
 /**

@@ -177,7 +177,23 @@ function PlayerCard({
       <div className="text-xs text-ink-soft">
         Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-between gap-2">
+        <Tip label="Für alle sichtbar über der Burg, bis du ihn wieder abnimmst">
+          <Button
+            size="sm"
+            className="h-9 sm:h-7"
+            aria-pressed={p.castleDecoration === 'penis'}
+            onClick={() =>
+              run({
+                action: 'setCastleDecoration',
+                playerId: p.id,
+                decoration: p.castleDecoration === 'penis' ? null : 'penis',
+              })
+            }
+          >
+            {p.castleDecoration === 'penis' ? 'Penis abnehmen' : 'Penis über die Burg'}
+          </Button>
+        </Tip>
         <Button
           size="sm"
           variant="danger"

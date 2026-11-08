@@ -1,6 +1,8 @@
 import {
   ARMY_TARGET_KINDS,
+  CASTLE_DECORATIONS,
   type ArmyTarget,
+  type CastleDecoration,
   type DuoSourcePick,
   type GamePhase,
   type GameView,
@@ -227,6 +229,7 @@ export interface AdminPlayer {
   resources: Record<ResourceType, number>;
   cards: CardType[];
   pendingActivity: ResourceType | null;
+  castleDecoration: CastleDecoration | null;
 }
 
 export interface AdminState {
@@ -255,6 +258,8 @@ export type AdminAction =
   | { action: 'swapCastles'; playerId: string; otherId: string }
   | { action: 'setEmail'; playerId: string; email: string }
   | { action: 'rename'; playerId: string; name: string }
+  /** Puts a decoration over the player's castle for everyone to see, or removes it (null). */
+  | { action: 'setCastleDecoration'; playerId: string; decoration: CastleDecoration | null }
   /** Marks a calendar day (YYYY-MM-DD, game time zone) as a break day, or lifts it. */
   | { action: 'setBreakDay'; date: string; on: boolean }
   /** Adds `amount` (may be negative) trophies. */
@@ -492,6 +497,15 @@ export function parseAdminAction(value: unknown): AdminAction | null {
     case 'rename':
       return isId(msg.playerId) && typeof msg.name === 'string' && msg.name.length <= 64
         ? { action: 'rename', playerId: msg.playerId, name: msg.name }
+        : null;
+    case 'setCastleDecoration':
+      return isId(msg.playerId) &&
+        (msg.decoration === null || CASTLE_DECORATIONS.includes(msg.decoration as CastleDecoration))
+        ? {
+            action: 'setCastleDecoration',
+            playerId: msg.playerId,
+            decoration: msg.decoration as CastleDecoration | null,
+          }
         : null;
     case 'setBreakDay':
       return typeof msg.date === 'string' &&
