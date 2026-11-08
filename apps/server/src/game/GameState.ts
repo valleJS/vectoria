@@ -1988,8 +1988,9 @@ export class GameState {
 
   /**
    * Admin: swaps two players' home castle positions, nothing else (troops, resources, outposts
-   * stay with each player). Armies attacking either castle re-route from where they stand; armies
-   * returning home move along with their castle, keeping distance and arrival time.
+   * stay with each player). Armies returning home move along with their castle, keeping distance
+   * and arrival time; armies that set out from either castle keep target and progress but start
+   * from its new place; other attackers of either castle re-route from where they stand.
    */
   swapCastles(playerId: string, otherId: string): void {
     const a = this.player(playerId);
@@ -2018,9 +2019,23 @@ export class GameState {
       const owner = this.player(army.ownerId);
       if (owner?.castle) army.path[army.path.length - 1] = { ...owner.castle };
     }
+    // Armies that set out from either castle keep their target and their share of the way done,
+    // but now start from the castle's new place (attacks on the other swapped castle included).
+    const startedHere = new Set<ArmyRecord>();
+    for (const army of this.data.armies) {
+      const owner = army.ownerId === a.id ? a : army.ownerId === b.id ? b : undefined;
+      if (army.status !== 'outbound' || army.baseId !== null || !owner?.castle) continue;
+      const to =
+        army.target.kind === 'castle' && (army.target.id === a.id || army.target.id === b.id)
+          ? this.player(army.target.id)!.castle!
+          : last(army.path);
+      this.reroute(army, owner.castle, to, this.legFraction(army));
+      startedHere.add(army);
+    }
     this.rerouteToMoved(
       (army) =>
         army.status !== 'returning' &&
+        !startedHere.has(army) &&
         army.target.kind === 'castle' &&
         (army.target.id === a.id || army.target.id === b.id),
     );
@@ -2030,17 +2045,20 @@ export class GameState {
     this.dirty = true;
   }
 
-  /** Re-plans an outbound army's march from `from` to `to` at its current pace. */
-  private reroute(army: ArmyRecord, from: Vec2, to: Vec2): void {
+  /**
+   * Re-plans an outbound army's march from `from` to `to` at its current pace; `progress` (0–1)
+   * puts it that share of the way along the new leg already.
+   */
+  private reroute(army: ArmyRecord, from: Vec2, to: Vec2, progress = 0): void {
     const map = this.map!;
     // A Seeweg march keeps sailing straight; only a redirect ends it (`endRouteCards`).
     army.path = army.sea ? [from, to] : (findPath(map, from, to) ?? [from, to]);
-    army.departClock = this.data.clock;
     const owner = this.player(army.ownerId);
     const speed =
       (hasResources(army.cargo) ? LOADED_SPEED : 1) * (owner ? this.marchSpeed(owner) : 1);
-    army.arriveClock =
-      this.data.clock + travelMs(pathLength(army.path), map.width, army.forcedMarch, speed);
+    const ms = travelMs(pathLength(army.path), map.width, army.forcedMarch, speed);
+    army.departClock = this.data.clock - Math.round(progress * ms);
+    army.arriveClock = army.departClock + ms;
   }
 
   kick(playerId: string): void {
