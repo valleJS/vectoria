@@ -1988,17 +1988,41 @@ export class GameState {
 
   /**
    * Admin: swaps two players' home castle positions, nothing else (troops, resources, outposts
-   * stay with each player). Armies heading for either castle re-route from where they stand.
+   * stay with each player). Armies attacking either castle re-route from where they stand; armies
+   * returning home move along with their castle, keeping distance and arrival time.
    */
   swapCastles(playerId: string, otherId: string): void {
     const a = this.player(playerId);
     const b = this.player(otherId);
     if (!a || !b || a === b) throw new RuleError('Unbekannter Spieler.');
     if (!a.castle || !b.castle) throw new RuleError('Beide brauchen eine Burg.');
+    const moved = new Map([
+      [a.id, { x: b.castle.x - a.castle.x, y: b.castle.y - a.castle.y }],
+      [b.id, { x: a.castle.x - b.castle.x, y: a.castle.y - b.castle.y }],
+    ]);
     [a.castle, b.castle] = [b.castle, a.castle];
+    // Armies on their way home keep their distance and arrival time: the whole leg moves along
+    // with the castle (clamped to the map), clocks stay as they are.
+    const map = this.map!;
+    const clamp = (v: number, max: number) => Math.min(Math.max(v, 0.5), max - 0.5);
+    for (const army of this.data.armies) {
+      const shift =
+        army.status === 'returning' && army.target.kind === 'castle'
+          ? moved.get(army.target.id)
+          : undefined;
+      if (!shift) continue;
+      army.path = army.path.map((p) => ({
+        x: clamp(p.x + shift.x, map.width),
+        y: clamp(p.y + shift.y, map.height),
+      }));
+      const owner = this.player(army.ownerId);
+      if (owner?.castle) army.path[army.path.length - 1] = { ...owner.castle };
+    }
     this.rerouteToMoved(
       (army) =>
-        army.target.kind === 'castle' && (army.target.id === a.id || army.target.id === b.id),
+        army.status !== 'returning' &&
+        army.target.kind === 'castle' &&
+        (army.target.id === a.id || army.target.id === b.id),
     );
     this.addFeed('march', `Die Burgen von ${a.name} und ${b.name} tauschen die Plätze.`);
     for (const p of [a, b]) this.addLog(p, 'Deine Burg steht jetzt an einem neuen Ort.');

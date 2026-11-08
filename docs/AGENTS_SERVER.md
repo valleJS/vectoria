@@ -3,10 +3,10 @@ type: Codemap
 description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, email login, WebSocket + HTTP API, Postgres/Redis wiring.
 audience: agent
 category: codemap
-last_verified: 2026-11-07
+last_verified: 2026-11-08
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 538f92383b3139450e29ef696a978bea56d56ca2
+sources_stamp: f14983f6a1a1a7fcbf46774df9200d043f2a1e42
 ---
 
 # Server codemap (`apps/server`)
