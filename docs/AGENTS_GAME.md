@@ -22,7 +22,8 @@ registration (closed system). Admin tools: rename (`rename`, same name rules as 
 `setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
 Game clock); while running also kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
-stays with each player; armies heading for either castle re-route from where they stand). The
+stays with each player; attackers re-route from where they stand, armies returning home move
+along with their castle and keep their arrival time). The
 map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
 returns to registration, keeping registrations.
 
