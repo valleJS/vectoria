@@ -54,6 +54,7 @@ import {
   type ArmyView,
   type CardType,
   type CaravanTrip,
+  type CastleDecoration,
   type Chest,
   type FeedEntry,
   type GamePhase,
@@ -149,6 +150,8 @@ interface PlayerRecord {
   caravan?: Resources;
   /** Where the caravan's wagons set out and when it arrives (real time); absent when none travels. */
   caravanTrip?: CaravanTrip;
+  /** Admin's decoration over the castle; absent when none (and in older saves). */
+  castleDecoration?: CastleDecoration;
   log: LogEntry[];
 }
 
@@ -2372,6 +2375,16 @@ export class GameState {
     this.dirty = true;
   }
 
+  /** Admin: puts a decoration over the player's castle for everyone, or removes it. */
+  setCastleDecoration(playerId: string, decoration: CastleDecoration | null): void {
+    const player = this.player(playerId);
+    if (!player) throw new RuleError('Unbekannter Spieler.');
+    if (decoration) player.castleDecoration = decoration;
+    else delete player.castleDecoration;
+    this.revision++;
+    this.dirty = true;
+  }
+
   grantTrophies(playerId: string, amount: number): void {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
@@ -2423,6 +2436,7 @@ export class GameState {
         attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
         caravanTrip: hasResources(p.caravan ?? emptyResources()) ? (p.caravanTrip ?? null) : null,
+        castleDecoration: p.castleDecoration ?? null,
       })),
       spots: this.data.spots,
       outposts: this.data.outposts.map((o): OutpostView =>
@@ -2485,6 +2499,7 @@ export class GameState {
         resources: p.resources,
         cards: p.cards,
         pendingActivity: p.pendingActivity,
+        castleDecoration: p.castleDecoration ?? null,
       })),
       armies: this.data.armies.length,
       chests: this.data.chests.length,

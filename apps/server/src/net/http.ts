@@ -76,6 +76,8 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.setEmail(action.playerId, action.email);
     case 'rename':
       return state.rename(action.playerId, action.name);
+    case 'setCastleDecoration':
+      return state.setCastleDecoration(action.playerId, action.decoration);
     case 'setBreakDay':
       return state.setBreakDay(action.date, action.on);
     case 'grantTrophies':

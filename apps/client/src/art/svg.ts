@@ -310,10 +310,12 @@ export function deposit(resource: SpotKind): Art {
         <path d="M-9 8V-5h18V8Q0 11-9 8Z" fill="${TIMBER.shade}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>
         <ellipse cx="0" cy="-5" rx="9" ry="3.6" fill="${END_GRAIN.base}" stroke="${INK}" stroke-width="2.2"/>
         <ellipse cx="0" cy="-5" rx="5" ry="1.8" fill="none" stroke="${END_GRAIN.ring}" stroke-width="1.2"/>
-        <path d="M1-6L9-24" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
-        <path d="M1-6L9-24" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M5-26L14-22L13-14L6-18Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
-        <path d="M13-22L12-15" stroke="${GRANITE.shade}" stroke-width="1.2"/>
+        <g transform="translate(-1 -9) rotate(-35)">
+          <path d="M1 0H20" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M1 0H20" stroke="${TIMBER.light}" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M-3-3H4V2L6 6.5Q1 8-4 6.5L-3 2Z" fill="${STEEL}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M-2.5 4.6Q1 5.8 4.6 4.6" fill="none" stroke="${GRANITE.shade}" stroke-width="1.2"/>
+        </g>
       </g>
       ${log(14, 48, 30, 9, -8, INK)}
       ${log(31, 50, 26, 9, -8, INK)}
@@ -1188,6 +1190,30 @@ export function alarm(): Art {
     <circle cx="20" cy="20" r="14" fill="none" stroke="#d0604c" stroke-width="1.4"/>
     ${sword(-45)}${sword(45)}`;
   return { svg: svg(40, 40, body), width: 40, height: 40, anchor: { x: 20, y: 20 } };
+}
+
+/**
+ * Admin's decoration over a castle (`CastleDecoration` 'penis'), 40×56 standing on its bottom
+ * centre: a cartoon penis, upright, in skin tone with a rosier glans; lit from the top left.
+ */
+export function penis(): Art {
+  const skinShade = shade(SKIN, 0.82);
+  const glans = shade(SEAL, 1.5);
+  const body = `
+    <g ${LINE}>
+      <circle cx="12" cy="45" r="8.5" fill="${SKIN}"/>
+      <circle cx="28" cy="45" r="8.5" fill="${skinShade}"/>
+      <path d="M13 44V17H27V44Z" fill="${SKIN}"/>
+    </g>
+    <path d="M22 18H26V43H22Z" fill="${skinShade}"/>
+    <path d="M17 22V40" stroke="${shade(SKIN, 1.25)}" stroke-width="2" stroke-linecap="round"/>
+    <path d="M13 44V17M27 17V44" fill="none" ${LINE}/>
+    <path d="M10.5 19Q10 6 20 4.5Q30 6 29.5 19Q20 22 10.5 19Z" fill="${glans}" ${LINE}/>
+    <path d="M23 7Q28 9 28 17Q25 18.6 22 18.8Z" fill="${shade(glans, 0.85)}"/>
+    <path d="M10.5 19Q10 6 20 4.5Q30 6 29.5 19Q20 22 10.5 19Z" fill="none" ${LINE}/>
+    <path d="M20 5.5V9" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M14.5 10Q16 7.5 18.5 7" stroke="${shade(glans, 1.3)}" stroke-width="1.8" stroke-linecap="round" fill="none"/>`;
+  return { svg: svg(40, 56, body), width: 40, height: 56, anchor: { x: 20, y: 54 } };
 }
 
 /** Billowing smoke puff after an assault, 50×48 around its centre; `seed` varies the outline. */

@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-08
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
-sources_stamp: a6d2a54e3fd15b46aa46ccdc5ef8f2036357526e
+sources_stamp: 9936727203584d87e8351f64f469c0da64fb2c1c
 ---
 
 # Client codemap (`apps/client`)
@@ -49,7 +49,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/ui/icons.tsx` | HUD icons: resources from `art/svg.ts`, map art as `<img>` (castle, soldiers, chest, alarm), small glyphs (star, trophy, sun, cards), `OnlineDot` (green presence dot in ranking and admin list) |
 | `src/ui/SelectionPanel.tsx` | Sidebar content: details + send (`SendForm` from the parts `BaseSelect` / `TroopFields` / `CardToggle`, ETA over land; the trader only links to the trade menu; `FieldRedirect` lists own field armies to re-route to this target — cargo-free ones, plus loaded ones on their way home when the target is an own base; `StoreRedirect` does the same from the army) / recall / raid (redirect or send, meeting point) / bribe (`BribeOption`, while holding Bestechung and the army is in reach) for the selected object |
 | `src/ui/SourceLink.tsx` | "Quellcode (AGPL-3.0)" link to `/source` (AGPL §13 source offer); at the end of the handbook's last chapter |
-| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails; game status as a fact grid, phone-sized tap targets; players as cards that stack on phones, with a step picker (1 · 10 · 100) and its own −/+ for troops, each resource and trophies (`grant` / `grantTroops` / `grantTrophies`); name and login email editable by click (`rename` / `setEmail`); a "Pausentage" panel adds/lifts break days (`setBreakDay`); no free-form amount) |
+| `src/ui/JoinScreen.tsx`, `AdminPanel.tsx` | Email-code login/registration + lobby, admin panel (incl. login emails; game status as a fact grid, phone-sized tap targets; players as cards that stack on phones, with a step picker (1 · 10 · 100) and its own −/+ for troops, each resource and trophies (`grant` / `grantTroops` / `grantTrophies`); name and login email editable by click (`rename` / `setEmail`); a toggle puts the castle decoration on or off (`setCastleDecoration`, drawn swaying on the castle in `GameRenderer.drawSites`, art `penis()` in `art/svg.ts`); a "Pausentage" panel adds/lifts break days (`setBreakDay`); no free-form amount) |
 | `src/ui/Panel.tsx` | Game vocabulary over shadcn/ui: `Panel` (Card), `SectionLabel`, `Button` (`default`/`primary`/`danger`/`selected`/`ghost`/`outline`/`link`/`plain`), `Tip` (Tooltip) |
 | `src/components/ui/` | shadcn/ui components (button incl. `plain` variant for illustrated buttons, card, tabs, dialog incl. `bare` content, badge incl. `plate`, input, label, select, slider, checkbox, collapsible, toggle-group, progress, separator, tooltip), restyled for parchment; `components.json` configures the CLI (`npx shadcn add …`, alias `@/`) |
 | `src/lib/utils.ts` | `cn()` class merge |
