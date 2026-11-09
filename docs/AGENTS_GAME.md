@@ -33,7 +33,7 @@ returns to registration, keeping registrations.
 
 ## Map scaling
 
-`mapSizeForPlayers` sets the side to `16 + 8·√players` tiles (24–96), so each player gets less
+`mapSizeForPlayers` sets the side to `16 + 8·√players` tiles (24–96), times `MAP_SPREAD` (1.5 on this test branch, so pieces stand further apart on screen), so each player gets less
 land as the game grows (≈365 tiles each at 2 players, ≈92 at 100). Travel time is relative to the
 map width (`travelMs`: crossing = `CROSS_MAP_HOURS`), so neighbours move closer **in time**,
 roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players ≈8 h, 9 ≈4 h,

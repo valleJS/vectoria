@@ -358,9 +358,17 @@ export function canAfford(have: Resources, cost: Resources, times = 1): boolean 
   return RESOURCES.every((r) => have[r] >= cost[r] * times);
 }
 
+/**
+ * Test branch: the map is this much wider than on main, so castles, outposts and deposits stand
+ * further apart on screen (pieces are sized per tile). Travel times follow the map width
+ * (`travelMs`), so walking hours stay the same.
+ */
+export const MAP_SPREAD = 1.5;
+
 /** Map side length in tiles for a given number of registered players. */
 export function mapSizeForPlayers(players: number): number {
-  return Math.min(96, Math.max(24, Math.round(16 + 8 * Math.sqrt(Math.max(1, players)))));
+  const base = Math.min(96, Math.max(24, 16 + 8 * Math.sqrt(Math.max(1, players))));
+  return Math.round(base * MAP_SPREAD);
 }
 
 /** Speed of an army carrying resources (home from a spot, or between own bases), relative to normal. */
