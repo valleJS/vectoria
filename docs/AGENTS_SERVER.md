@@ -28,6 +28,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/spots.ts` | Spot layout over wood, stone, gold and trader: hard distance rules per castle (one far wood/gold 2–4 h, rest < 2 h, none < 1 h), minimum gaps, no holes; soft balance (see AGENTS_GAME „Spot layout“); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
+| `src/push.ts` | Web Push: `loadVapidKeys` (env, else generated once into `vapid.json` next to `DATA_FILE`), `PushSender` (`web-push`, skips players watching a page via `GameServer.isWatching`, forgets subscriptions the service answers 404/410 for). `GameState.onNotice` feeds it from `notify` (`deposit`, outpost taken, `warnTarget` on open attacks); subscriptions live in `PlayerRecord.push` as `PushDevice`s with the device's chosen `topics` (only matching notices go out; ≤ `MAX_PUSH_DEVICES`, kept across `reset`, never in views) |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
 | `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation; `joinLand` sinks islets and bridges larger islands so all land is one mass |
@@ -66,4 +67,6 @@ themselves in between. Commands mutate state only through
 | `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | unset / unset / `Vectoria <vectoria@localhost>` | |
 | `PUBLIC_URL` | request `Origin` | base for login links in emails |
 | `SOURCE_URL` | `https://github.com/valleJS/vectoria` | target of `GET /source`; AGPL-3.0 §13 source offer, forks point it at their repo |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | unset = generated into `vapid.json` beside `DATA_FILE` | Web Push key pair; set both or neither (`npx web-push generate-vapid-keys`). Changing it makes clients re-subscribe on their next connect |
+| `VAPID_SUBJECT` | `PUBLIC_URL` if https, else `mailto:` + `MAIL_FROM` address | contact for push services (Apple rejects `localhost`) |
 | `DATABASE_URL` / `REDIS_URL` | unset = disabled | if set, connection failure is fatal |

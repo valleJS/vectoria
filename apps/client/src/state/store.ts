@@ -60,6 +60,8 @@ interface GameStore {
   token: string | null;
   playerId: string | null;
   tickRate: number | null;
+  /** VAPID key from the welcome, to subscribe to push notifications; null = push off. */
+  pushKey: string | null;
   map: MapData | null;
   tick: number;
   view: GameView | null;
@@ -110,6 +112,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   token: readToken(),
   playerId: null,
   tickRate: null,
+  pushKey: null,
   map: null,
   tick: 0,
   view: null,
@@ -131,7 +134,8 @@ export const useGameStore = create<GameStore>()((set) => ({
     writeToken(token);
     set({ token, view: null, map: null, playerId: null, selection: null });
   },
-  applyWelcome: ({ playerId, tickRate, map }) => set({ playerId, tickRate, map, selection: null }),
+  applyWelcome: ({ playerId, tickRate, map, pushKey }) =>
+    set({ playerId, tickRate, map, pushKey, selection: null }),
   setMap: (map) => set({ map, selection: null }),
   // Chests waiting at home (on login, or a new one arriving) bring up the opening overlay.
   applyState: ({ tick, view }) =>

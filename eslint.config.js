@@ -29,6 +29,10 @@ export default defineConfig([
     languageOptions: { globals: globals.browser },
   },
   {
+    files: ['apps/client/public/sw.js'],
+    languageOptions: { globals: globals.serviceworker },
+  },
+  {
     // shadcn/ui components export their variant helpers (`buttonVariants`) beside the component.
     files: ['apps/client/src/components/ui/**/*.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },

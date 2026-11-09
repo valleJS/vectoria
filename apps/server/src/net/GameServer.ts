@@ -17,6 +17,13 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 const STATE_INTERVAL_MS = 1_000;
 const MAX_PAYLOAD_BYTES = 16 * 1024;
 const RATE_LIMIT_PER_SECOND = 30;
+/** Housekeeping, not moves: not counted as commands and no state push. */
+const PASSIVE_MESSAGES = new Set<ClientMessage['type']>([
+  'ping',
+  'visibility',
+  'pushSubscribe',
+  'pushUnsubscribe',
+]);
 
 interface Client {
   playerId: string;
@@ -26,12 +33,16 @@ interface Client {
   lastRefill: number;
   /** Last map sent, so a new one (game start / reset) is pushed once. */
   map: MapData | null;
+  /** The page is in the foreground (`visibility`); until it says so, taken as hidden. */
+  visible: boolean;
 }
 
 export interface GameServerOptions {
   tickRate: number;
   /** Empty = accept any origin. */
   allowedOrigins: string[];
+  /** VAPID public key for push subscriptions; null = push off. */
+  pushKey: string | null;
 }
 
 /**
@@ -67,6 +78,16 @@ export class GameServer {
 
   get connectionCount(): number {
     return this.clients.size;
+  }
+
+  /** One of the player's pages is open and in view. */
+  isWatching(playerId: string): boolean {
+    for (const [ws, client] of this.clients) {
+      if (client.playerId === playerId && client.visible && ws.readyState === WebSocket.OPEN) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -124,6 +145,7 @@ export class GameServer {
       tokens: RATE_LIMIT_PER_SECOND,
       lastRefill: Date.now(),
       map: this.state.map,
+      visible: false,
     };
     this.clients.set(ws, client);
     this.state.setOnline(playerId, true);
@@ -161,6 +183,7 @@ export class GameServer {
       playerId,
       tickRate: this.options.tickRate,
       map: this.state.map,
+      pushKey: this.options.pushKey,
     });
     // Everyone sees the new online dot with the next tick; the newcomer gets state with it.
     this.pushSoon = true;
@@ -168,8 +191,8 @@ export class GameServer {
 
   private handleMessage(ws: WebSocket, client: Client, message: ClientMessage): void {
     const { playerId } = client;
-    // Every message but ping is a command; its effect goes out with the next tick.
-    if (message.type !== 'ping') {
+    // Every message but these is a command; its effect goes out with the next tick.
+    if (!PASSIVE_MESSAGES.has(message.type)) {
       this.pushSoon = true;
       this.state.noteCommand(playerId);
     }
@@ -220,6 +243,13 @@ export class GameServer {
           return this.state.answerDuo(playerId, message.pactId, message.accept, message.sources);
         case 'duoAbort':
           return this.state.abortDuo(playerId, message.pactId);
+        case 'visibility':
+          client.visible = message.visible;
+          return;
+        case 'pushSubscribe':
+          return this.state.subscribePush(playerId, message.subscription, message.topics);
+        case 'pushUnsubscribe':
+          return this.state.unsubscribePush(playerId, message.endpoint);
       }
     } catch (error) {
       if (!(error instanceof RuleError)) throw error;

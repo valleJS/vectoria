@@ -59,7 +59,8 @@ export const VICTORY_POINTS_PER_GAMEDAY = 3;
 /**
  * Every `TROPHY_VP_INTERVAL`-th victory point needs trophies — a reputation, not a currency: they
  * are never spent. The 4th VP needs 1, the 8th 3, the 12th 6, … (1 + 2 + … + k for the 4k-th).
- * Trophies are won by victories over other players (raid, outpost, castle) and are public.
+ * Trophies are won by victories over other players (raid, outpost, castle) and are public; each
+ * outpost pays a given player only once (`PlayerRecord.outpostTrophies`).
  */
 export const TROPHY_VP_INTERVAL = 4;
 

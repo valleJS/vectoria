@@ -43,6 +43,18 @@ interface RuleChange {
  */
 const RULE_CHANGES: RuleChange[] = [
   {
+    id: 'one-trophy-per-outpost',
+    date: '2026-11-09',
+    title: 'Eine Trophäe pro Stützpunkt',
+    body: (
+      <>
+        Jeder <b>Stützpunkt</b> bringt dir nur noch <b>einmal</b> eine Trophäe — auch im Duo. Wer
+        denselben Stützpunkt immer wieder erobert, sammelt damit keine weiteren Trophäen mehr.
+        Überfälle und gestürmte Burgen zählen wie bisher.
+      </>
+    ),
+  },
+  {
     id: 'raid-limit-army-cap-assault-lock',
     date: '2026-11-09',
     title: 'Beute-Grenze, höchstens 10 Züge, Abzugssperre',

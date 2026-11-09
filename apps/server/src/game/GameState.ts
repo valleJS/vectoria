@@ -67,6 +67,9 @@ import {
   type MapData,
   type Outpost,
   type OutpostView,
+  type PushNotice,
+  type PushSubscriptionData,
+  type PushTopic,
   type ResourceSpot,
   type Resources,
   type ResourceType,
@@ -101,6 +104,8 @@ import {
 } from './world';
 
 const MAX_LOG = 30;
+/** Devices per player that get push notifications; a new one pushes out the oldest. */
+const MAX_PUSH_DEVICES = 5;
 const MAX_FEED = 60;
 const MAX_NAME_LENGTH = 24;
 /** A raid only lands if the convoy is within this many tiles of the planned meeting point. */
@@ -152,6 +157,13 @@ interface PlayerRecord {
   attackedAt?: number;
   /** Won in raids and assaults on other players, spent on every 4th VP; absent in older saves. */
   trophies?: number;
+  /** Outposts that already earned this player a trophy (one each); absent in older saves. */
+  outpostTrophies?: string[];
+  /**
+   * Devices that get push notifications, each with the topics it chose (`MAX_PUSH_DEVICES` at
+   * most); absent when none.
+   */
+  push?: PushDevice[];
   /** Home castle fell; locked out until every army is home again. Absent in older saves. */
   routed?: boolean;
   /** Outpost stock on the night caravan, home at the next gameday start. Absent in older saves. */
@@ -163,6 +175,11 @@ interface PlayerRecord {
   /** Online time and action counts for this round; absent in older saves. */
   stats?: PlayerStats;
   log: LogEntry[];
+}
+
+/** A device that gets push notifications, and on what. */
+export interface PushDevice extends PushSubscriptionData {
+  topics: PushTopic[];
 }
 
 interface ArmyRecord {
@@ -313,6 +330,11 @@ export class GameState {
    */
   revision = 0;
   map: MapData | null = null;
+  /**
+   * Called for events that call a player back to the game (troops usable again, an attack on
+   * them); `index.ts` turns them into Web Push notifications.
+   */
+  onNotice: ((playerId: string, notice: PushNotice) => void) | null = null;
 
   private readonly options: GameOptions;
   private data: SavedGame;
@@ -418,6 +440,32 @@ export class GameState {
     stats.commands++;
     stats.lastActionAt = Date.now();
     this.dirty = true;
+  }
+
+  /**
+   * Push notifications for this device on `topics`; a known device (same endpoint) gets its keys
+   * and topics renewed.
+   */
+  subscribePush(playerId: string, subscription: PushSubscriptionData, topics: PushTopic[]): void {
+    const player = this.player(playerId);
+    if (!player) return;
+    const others = (player.push ?? []).filter((s) => s.endpoint !== subscription.endpoint);
+    // The newest devices win; an old phone nobody uses any more drops out.
+    player.push = [...others, { ...subscription, topics }].slice(-MAX_PUSH_DEVICES);
+    this.dirty = true;
+  }
+
+  /** No more push notifications to this device (turned off, or the push service forgot it). */
+  unsubscribePush(playerId: string, endpoint: string): void {
+    const player = this.player(playerId);
+    if (!player?.push) return;
+    player.push = player.push.filter((s) => s.endpoint !== endpoint);
+    if (player.push.length === 0) delete player.push;
+    this.dirty = true;
+  }
+
+  pushSubscriptions(playerId: string): readonly PushDevice[] {
+    return this.player(playerId)?.push ?? [];
   }
 
   lobby(): LobbyInfo {
@@ -552,6 +600,7 @@ export class GameState {
           '.',
         army.id,
       );
+      this.warnTarget(army);
     }
     this.dirty = true;
   }
@@ -661,6 +710,7 @@ export class GameState {
         `${this.armyLabel(army)} schwenkt um und ${this.marchPhrase(army)}.`,
         army.id,
       );
+      this.warnTarget(army);
     }
     this.dirty = true;
   }
@@ -1344,6 +1394,7 @@ export class GameState {
       `${initiator.name} und ${partner.name} vereinen sich zum Duo-Zug (${duo.troops} Truppen) und ziehen gegen die ${this.targetName(pact.target)}.`,
       duo.id,
     );
+    this.warnTarget(duo, `${initiator.name} und ${partner.name} (${duo.troops})`);
   }
 
   /** Troops each participant has in the pact's armies: [initiator, partner]. */
@@ -1492,10 +1543,12 @@ export class GameState {
     const keeper =
       shares[0]! > shares[1]! ? 0 : shares[1]! > shares[0]! ? 1 : Math.random() < 0.5 ? 0 : 1;
 
-    // Owned outposts and castles only: rebuilding a ruin together is no victory.
+    // Owned outposts and castles only: rebuilding a ruin together is no victory. An outpost
+    // pays each participant once.
     if (castleOwner || outpost!.ownerId) {
       for (const p of sides) {
-        this.awardTrophy(p);
+        if (castleOwner) this.awardTrophy(p);
+        else if (!this.awardOutpostTrophy(p, outpost!.id)) continue;
         this.addLog(p, 'Der Duo-Sieg bringt dir eine Trophäe.');
       }
     }
@@ -1505,6 +1558,12 @@ export class GameState {
         outpost!.ownerId = p.id;
         outpost!.troops = survivors[i]!;
         outpost!.resources = parts[i]!;
+        this.notify(p, {
+          topic: 'outpost',
+          title: 'Stützpunkt erobert',
+          body: `${survivors[i]} Truppen halten jetzt den Stützpunkt und stehen bereit.`,
+          tag: `base:${outpost!.id}`,
+        });
         this.addLog(
           p,
           `Duo-Sieg: ${this.outpostName(outpost!.id)} gehört jetzt dir, samt ${formatResources(parts[i]!)}.`,
@@ -1709,6 +1768,18 @@ export class GameState {
 
   /** Troops and cargo move into one of the owner's bases; the army ends. */
   private deposit(army: ArmyRecord, owner: PlayerRecord, base: Base): void {
+    const load = [
+      ...(hasResources(army.cargo) ? [formatResources(army.cargo)] : []),
+      ...(army.chest ? ['eine Truhe'] : []),
+    ];
+    this.notify(owner, {
+      topic: base.id === null ? 'returned' : 'outpost',
+      title: base.id === null ? 'Truppen zurück in der Burg' : 'Truppen am Stützpunkt angekommen',
+      body:
+        `${army.troops} Truppen sind ${base.id === null ? 'daheim' : 'am Stützpunkt'} und stehen bereit.` +
+        (load.length > 0 ? ` Sie bringen ${load.join(' und ')}.` : ''),
+      tag: `base:${base.id ?? 'castle'}`,
+    });
     base.setTroops(base.troops + army.troops);
     for (const r of RESOURCES) base.resources[r] += army.cargo[r];
     if (hasResources(army.cargo)) {
@@ -2050,17 +2121,23 @@ export class GameState {
       this.data.armies.push(this.fleeingArmy(defender, outpost.position, outpost.troops, plunder));
     }
     if (defender) this.recallFromLostOutpost(defender, outpost.id, name);
-    // A trophy for taking it from someone; rebuilding an empty ruin is no victory.
-    if (defender) this.awardTrophy(attacker);
+    // A trophy for taking it from someone, once per outpost; rebuilding an empty ruin is no victory.
+    const trophy = defender !== undefined && this.awardOutpostTrophy(attacker, outpost.id);
     outpost.ownerId = attacker.id;
     outpost.troops = Math.max(1, army.troops - losses.attacker);
     addResources(outpost.resources, army.cargo);
+    this.notify(attacker, {
+      topic: 'outpost',
+      title: defender ? 'Stützpunkt erobert' : 'Ruine eingenommen',
+      body: `${outpost.troops} Truppen halten jetzt den Stützpunkt und stehen bereit.`,
+      tag: `base:${outpost.id}`,
+    });
     this.addLog(
       attacker,
       (defender ? `${name} erobert` : 'Ruine eingenommen und wiederaufgebaut') +
         (hasResources(outpost.resources) ? `, samt ${formatResources(outpost.resources)}` : '') +
         `. ${losses.attacker} Verluste.` +
-        (defender ? ' Eine Trophäe ist dein.' : ''),
+        (trophy ? ' Eine Trophäe ist dein.' : ''),
     );
     if (defender) {
       this.addLog(
@@ -2327,6 +2404,7 @@ export class GameState {
       ...this.newPlayer(p.name, p.email),
       id: p.id,
       token: p.token,
+      ...(p.push ? { push: p.push } : {}),
     }));
     this.data = this.emptyGame(seed, players);
     this.map = null;
@@ -2995,8 +3073,65 @@ export class GameState {
     army.sea = false;
   }
 
+  private notify(player: PlayerRecord, notice: PushNotice): void {
+    this.onNotice?.(player.id, notice);
+  }
+
+  /**
+   * Warns whoever an army openly marches on: the owner of the attacked castle or outpost, or of
+   * the hunted army. Hidden marches (Tarnung) and duo groups on their way to meet stay silent,
+   * like in the ticker. `who` names the attacker (default: owner and troop count, fog kept).
+   */
+  private warnTarget(army: ArmyRecord, who = this.armyLabel(army)): void {
+    if (army.stealth) return;
+    const { kind, id } = army.target;
+    const tag = `attack:${kind}:${id}`;
+    if (kind === 'castle') {
+      const victim = this.player(id);
+      if (!victim || victim.id === army.ownerId) return;
+      this.notify(victim, {
+        topic: 'attack',
+        title: 'Angriff auf deine Burg!',
+        body: `${who} greift deine Burg an.`,
+        tag,
+      });
+    } else if (kind === 'outpost') {
+      const ownerId = this.data.outposts.find((o) => o.id === id)?.ownerId;
+      const victim = ownerId ? this.player(ownerId) : undefined;
+      if (!victim || victim.id === army.ownerId) return;
+      this.notify(victim, {
+        topic: 'attack',
+        title: 'Angriff auf deinen Stützpunkt!',
+        body: `${who} zieht gegen deinen Stützpunkt.`,
+        tag,
+      });
+    } else if (kind === 'army') {
+      const hunted = this.data.armies.find((a) => a.id === id);
+      const victim = hunted ? this.player(hunted.ownerId) : undefined;
+      if (!hunted || !victim || victim.id === army.ownerId) return;
+      this.notify(victim, {
+        topic: 'raid',
+        title: 'Überfall auf deinen Zug!',
+        body: `${who} jagt deinen Zug (${hunted.troops} Truppen).`,
+        tag,
+      });
+    }
+  }
+
   private awardTrophy(player: PlayerRecord): void {
     player.trophies = (player.trophies ?? 0) + 1;
+  }
+
+  /**
+   * A trophy for taking `outpostId`, but only the first time this player takes it: an outpost
+   * passed back and forth pays each player once. True if one was awarded.
+   */
+  private awardOutpostTrophy(player: PlayerRecord, outpostId: string): boolean {
+    const won = (player.outpostTrophies ??= []);
+    if (won.includes(outpostId)) return false;
+    won.push(outpostId);
+    this.awardTrophy(player);
+    return true;
   }
 
   // ---- Stats ----

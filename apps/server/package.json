@@ -18,11 +18,13 @@
     "ioredis": "^6.0.0",
     "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
+    "web-push": "~3.6.7",
     "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
     "tsup": "^8.5.1",

@@ -81,7 +81,9 @@ close code `4001` (client drops its token and shows the join screen).
 | C→S | `duoAnswer` | Partner accepts (with own `sources` summing to the asked troops) or declines |
 | C→S | `duoWithdraw` | Initiator takes back an unanswered offer |
 | C→S | `duoAbort` | Ask to call a running duo off, agree to the other's request, or take the own request back |
-| S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start) |
+| C→S | `visibility` | Page in view or not; while one of a player's pages is in view, no push goes out |
+| C→S | `pushSubscribe` / `pushUnsubscribe` | Web Push on/off for this device (`PushSubscriptionData` + chosen `topics` from `PUSH_TOPICS`: `returned`, `outpost`, `attack`, `raid`; endpoint only https on known push services, `isPushEndpoint`) |
+| S→C | `welcome` | On connect: `playerId`, `tickRate`, `MapData` (null before start), `pushKey` (VAPID public key) |
 | S→C | `map` | Map changed (game start / reset) |
 | S→C | `state` | Every tick: this player's filtered `GameView` |
 | S→C | `chestOpened` | The card from the chest just opened (drives the reveal animation) |
@@ -92,6 +94,12 @@ HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `n
 per-player `stats`: online time, attacks started/executed/won …),
 `POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`, `GET /source` (redirect to the
 repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).
+
+Web Push (outside the socket): the server posts a `PushNotice` (`topic`, `title`, `body`, `tag`)
+to each subscribed device of a player that chose its topic, for events that call them back — troops usable again (home, at an
+own outpost, an outpost taken) and open attacks on them (castle, outpost, a hunted army; not
+stealth marches, not duo groups before they unite). Arrivals at deposits send nothing. The
+service worker (`apps/client/public/sw.js`) shows it; same `tag` replaces.
 
 `pathfinding.ts` is shared so the client previews routes, travel times and raid meeting points
 with exactly the server's maths; `calendar.ts` (gameday hours, break days) likewise, so the client

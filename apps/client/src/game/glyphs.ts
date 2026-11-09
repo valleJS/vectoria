@@ -6,7 +6,8 @@ import type { Graphics } from 'pixi.js';
  * Dashes along `points` as filled shapes `2 × halfWidth` wide whose leading end comes to a point
  * (`tip` long), so a route shows which way it runs without extra marks. The pattern runs on across
  * corners (a dash broken by one gets its point only where it ends); raising `phase` (world px)
- * moves the dashes forward, for marching routes. Call `fill` / `stroke` on the result.
+ * moves the dashes forward, for marching routes. Returns how many dashes it drew; call `fill` /
+ * `stroke` on `g` only if any — with none, Pixi's `fill()` would reuse the previous stroke's path.
  */
 export function pointedDashes(
   g: Graphics,
@@ -16,8 +17,9 @@ export function pointedDashes(
   halfWidth: number,
   tip: number,
   phase = 0,
-): Graphics {
+): number {
   const period = dash + gap;
+  let drawn = 0;
   let offset = ((-phase % period) + period) % period;
   for (let i = 1; i < points.length; i++) {
     const from = points[i - 1]!;
@@ -34,6 +36,7 @@ export function pointedDashes(
       const start = Math.max(0, d);
       const end = Math.min(d + dash, length);
       if (end <= start) continue;
+      drawn++;
       const pointed = end === d + dash && end - start > tip;
       if (pointed) {
         g.poly([
@@ -49,7 +52,7 @@ export function pointedDashes(
     }
     offset = (offset + length) % period;
   }
-  return g;
+  return drawn;
 }
 
 /** Dashed circle around (0, 0) with `segments` dashes. */

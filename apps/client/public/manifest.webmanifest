@@ -1,0 +1,14 @@
+{
+  "name": "Vectoria",
+  "short_name": "Vectoria",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f1e3bd",
+  "theme_color": "#f1e3bd",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
