@@ -28,6 +28,7 @@ import {
   type BaseInfo,
 } from '../game/format';
 import { isNightRest } from '../game/night';
+import { BrandMark } from './BrandMark';
 import { disablePush } from '../net/push';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
@@ -111,12 +112,7 @@ function TopBar({ view, compact }: { view: GameView; compact: boolean }) {
       }`}
     >
       <span className="flex shrink-0 items-center gap-1.5">
-        <img
-          src="/favicon.svg"
-          alt=""
-          className={`-my-1 w-auto ${compact ? 'h-7' : 'h-8'}`}
-          draggable={false}
-        />
+        <BrandMark className={`w-auto ${compact ? 'h-5' : 'h-6'}`} />
         <span className={`font-bold italic ${compact ? 'text-lg' : 'text-xl'}`}>Vectoria</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 leading-tight">
