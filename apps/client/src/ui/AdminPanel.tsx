@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
+import { AdminStats } from './AdminStats';
 import { OnlineDot, ResourceIcon, SoldiersIcon, TrophyIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
 import { Input } from '@/components/ui/input';
@@ -558,6 +559,8 @@ export function AdminPanel() {
               </div>
             )}
           </Panel>
+
+          <AdminStats state={state} />
         </>
       )}
     </div>

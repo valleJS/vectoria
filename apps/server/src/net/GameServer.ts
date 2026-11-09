@@ -169,7 +169,10 @@ export class GameServer {
   private handleMessage(ws: WebSocket, client: Client, message: ClientMessage): void {
     const { playerId } = client;
     // Every message but ping is a command; its effect goes out with the next tick.
-    if (message.type !== 'ping') this.pushSoon = true;
+    if (message.type !== 'ping') {
+      this.pushSoon = true;
+      this.state.noteCommand(playerId);
+    }
     try {
       switch (message.type) {
         case 'ping':
