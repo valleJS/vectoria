@@ -15,6 +15,12 @@ const isAdminRoute = params.has('admin');
 const isDesignRoute = params.has('design');
 const loginLink = isAdminRoute ? null : takeLoginLink();
 
+/** The tab icon follows the game's day and night: parchment tile by day, dark gold by night. */
+function setFavicon(night: boolean) {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]');
+  if (link) link.href = night ? '/favicon-night.svg' : '/favicon.svg';
+}
+
 function PlayerApp() {
   const token = useGameStore((s) => s.token);
   const phase = useGameStore((s) => s.view?.phase);
@@ -32,7 +38,11 @@ function PlayerApp() {
   // On <html>, so portalled dialogs and tooltips dim along with the HUD (index.css).
   useEffect(() => {
     document.documentElement.toggleAttribute('data-night', night);
-    return () => document.documentElement.removeAttribute('data-night');
+    setFavicon(night);
+    return () => {
+      document.documentElement.removeAttribute('data-night');
+      setFavicon(false);
+    };
   }, [night]);
 
   if (!token || link) return <JoinScreen link={link} onDone={() => setLink(null)} />;

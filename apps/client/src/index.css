@@ -102,6 +102,18 @@ body {
   filter: drop-shadow(0 0 6px rgb(255 154 64 / 0.3));
 }
 
+/* Brand mark (ui/BrandMark.tsx, brand/): ink and seal red by day, gold by night. */
+:root {
+  --brand-m1: #3b2a18;
+  --brand-m2: #6b5434;
+  --brand-m3: #a3311f;
+}
+:root[data-night] {
+  --brand-m1: #f2c230;
+  --brand-m2: #c9951b;
+  --brand-m3: #d4462e;
+}
+
 /* Night panels: HUD, tooltips and dropdowns turn to moonlit night-blue sheets with pale ink.
    The ramps swap (parchment dark, ink light), so inverted pieces (tooltips, selected buttons)
    stay inverted. Dialogs (handbook, chest, cards) keep their day look, only dimmed above.

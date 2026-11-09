@@ -57,7 +57,7 @@ overlay, zustand for state. Cross-cutting context: [AGENTS_ARCHITECTURE.md](./AG
 | `src/lib/utils.ts` | `cn()` class merge |
 | `src/ui/DesignSheet.tsx` | `/?design`: every token (with CSS drift check), castle styles × colours, outposts, resources, troops, treasure, smoke, scenery and the UI components |
 | `src/index.css` | Tailwind theme tokens (mirror of `theme/tokens.ts`), shadcn semantic variables mapped onto them, night panels (`data-night` on `<html>`, set in `App.tsx`: HUD/tooltips/selects swap to a night-blue ramp with a firelight glow, dialogs only dim), serif font, chest animations |
-| `public/` | Logo medallion as `favicon.svg` (also the top-bar logo), `favicon-32.png` fallback, `apple-touch-icon.png` |
+| `public/`, `src/ui/BrandMark.tsx` | Brand mark "Numeral V" (master files and generator in `brand/`): `BrandMark` is the top-bar logo, coloured by `--brand-*` in `index.css` (ink by day, gold under `data-night`); `favicon.svg` / `favicon-night.svg` (App.tsx swaps the tab icon with the night), `favicon-32.png` fallback, `apple-touch-icon.png`, manifest icons `icon-192/512.png` + `icon-maskable-512.png`, link preview `og-image.png` |
 | `vite.config.ts` | Dev proxy `/ws`, `/api` and `/source` → `localhost:3001`; alias `@/` → `src` |
 
 ## Rules
