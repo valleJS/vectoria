@@ -8,6 +8,7 @@ import {
   type GameView,
 } from './entities';
 import type { MapData } from './map';
+import type { PlayerStats } from './stats';
 import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
 
 export const PROTOCOL_VERSION = 6;
@@ -230,6 +231,8 @@ export interface AdminPlayer {
   cards: CardType[];
   pendingActivity: ResourceType | null;
   castleDecoration: CastleDecoration | null;
+  /** Online time and action counts for this round (online time includes the running session). */
+  stats: PlayerStats;
 }
 
 export interface AdminState {
@@ -239,6 +242,10 @@ export interface AdminState {
   winnerId: string | null;
   victoryPointsToWin: number;
   players: AdminPlayer[];
+  /** Today's calendar day (YYYY-MM-DD, game time zone): the key into `PlayerStats.onlineByDay`. */
+  today: string;
+  /** Server time (ms) the state was taken at; "last seen" times are relative to it. */
+  serverTime: number;
   armies: number;
   chests: number;
   outposts: number;
