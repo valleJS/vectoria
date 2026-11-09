@@ -13,6 +13,7 @@ const TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
@@ -21,7 +22,7 @@ const TYPES: Record<string, string> = {
 };
 
 /** Text files worth compressing (images and fonts are compressed already). */
-const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg']);
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.webmanifest', '.svg']);
 
 type Encoding = 'br' | 'gzip';
 

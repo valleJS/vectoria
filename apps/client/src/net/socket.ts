@@ -29,14 +29,19 @@ export class GameSocket {
   private lastMessageAt = 0;
   /** A welcome arrived before, so the next one is a reconnect (maybe after a deploy). */
   private wasOpen = false;
+  /** Called after every welcome (first connect and each reconnect), e.g. to renew push. */
+  readonly onWelcome = new Set<() => void>();
 
   constructor(url: string) {
     this.url = url;
     // Back online or back in the foreground: retry now instead of waiting out the backoff.
     window.addEventListener('online', () => this.reconnectNow());
     document.addEventListener('visibilitychange', () => {
+      this.sendVisibility();
       if (document.visibilityState === 'visible') this.reconnectNow();
     });
+    // Leaving the page: no longer watching, so push notifications reach the player again.
+    window.addEventListener('pagehide', () => this.send({ type: 'visibility', visible: false }));
   }
 
   connect(token: string): void {
@@ -117,6 +122,11 @@ export class GameSocket {
     this.reconnectTimer = setTimeout(() => this.open(), delay);
   }
 
+  /** Tells the server whether the page is in view; it holds back push notifications then. */
+  private sendVisibility(): void {
+    this.send({ type: 'visibility', visible: document.visibilityState === 'visible' });
+  }
+
   private sendPing(): void {
     this.send({ type: 'ping', id: this.nextPingId++, sentAt: performance.now() });
   }
@@ -133,6 +143,8 @@ export class GameSocket {
           if (reloadOnceFor(message.protocolVersion)) return;
         }
         store.applyWelcome(message);
+        this.sendVisibility();
+        for (const listener of this.onWelcome) listener();
         // Reconnected, perhaps because a deploy restarted the server: pick up a new client.
         if (this.wasOpen) void reloadIfNewBuild();
         this.wasOpen = true;

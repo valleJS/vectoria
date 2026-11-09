@@ -11,7 +11,7 @@ import type { MapData } from './map';
 import type { PlayerStats } from './stats';
 import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /** WebSocket close code for an unknown or revoked session token. */
 export const CLOSE_UNKNOWN_TOKEN = 4001;
@@ -120,7 +120,53 @@ export interface DuoAbortMessage {
   pactId: string;
 }
 
+/**
+ * A Web Push subscription (`PushSubscription.toJSON()` of the browser): where the push service
+ * takes messages for this device and the keys to encrypt them with.
+ */
+export interface PushSubscriptionData {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+/**
+ * What a device wants to be told about (set per device in its notification settings):
+ * `returned` troops back in the home castle, `outpost` troops arrived at an own outpost or an
+ * outpost taken, `attack` an open march on the own castle or an outpost, `raid` an own army
+ * hunted.
+ */
+export const PUSH_TOPICS = ['returned', 'outpost', 'attack', 'raid'] as const;
+export type PushTopic = (typeof PUSH_TOPICS)[number];
+
+/**
+ * Turns push notifications on for this device, or updates its subscription and `topics`. An
+ * empty `topics` list keeps the device subscribed but silent.
+ */
+export interface PushSubscribeMessage {
+  type: 'pushSubscribe';
+  subscription: PushSubscriptionData;
+  topics: PushTopic[];
+}
+
+/** Turns push notifications off for the device with this subscription `endpoint`. */
+export interface PushUnsubscribeMessage {
+  type: 'pushUnsubscribe';
+  endpoint: string;
+}
+
+/**
+ * The page went to the foreground or background. While any of a player's pages is in view, the
+ * server sends that player no push notifications: they see it on the map anyway.
+ */
+export interface VisibilityMessage {
+  type: 'visibility';
+  visible: boolean;
+}
+
 export type ClientMessage =
+  | PushSubscribeMessage
+  | PushUnsubscribeMessage
+  | VisibilityMessage
   | DuoOfferMessage
   | DuoWithdrawMessage
   | DuoAnswerMessage
@@ -143,6 +189,8 @@ export interface WelcomeMessage {
   tickRate: number;
   /** Null until the admin closes registration and the map is generated. */
   map: MapData | null;
+  /** VAPID public key (base64url) to subscribe to push notifications; null when push is off. */
+  pushKey: string | null;
 }
 
 export interface MapMessage {
@@ -180,6 +228,61 @@ export interface ErrorMessage {
 
 export type ServerMessage =
   WelcomeMessage | MapMessage | PongMessage | StateMessage | ChestOpenedMessage | ErrorMessage;
+
+// ---- Web Push ----
+
+/**
+ * Payload of a push message (JSON), shown by the service worker as a notification. Sent only for
+ * events that call the player back: troops usable again (home or at an own outpost, an outpost
+ * taken) and attacks on them.
+ */
+export interface PushNotice {
+  /** Only devices that chose this topic get the notice. */
+  topic: PushTopic;
+  title: string;
+  body: string;
+  /** Notifications with the same tag replace each other (one per base / attacked place). */
+  tag: string;
+}
+
+/**
+ * Push services a subscription may point at. The server posts to the endpoint, so it must not be
+ * just any URL: only https on these hosts (and their subdomains) — FCM (Chrome, Edge, Android),
+ * Mozilla autopush, Apple (Safari), WNS (older Edge).
+ */
+const PUSH_SERVICE_HOSTS = [
+  'googleapis.com',
+  'mozilla.com',
+  'push.apple.com',
+  'notify.windows.com',
+];
+
+function isPushEndpoint(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 1024) return false;
+  // https, a plain host name (no user info, no port), then a path.
+  const hostname = /^https:\/\/([a-z0-9.-]+)\/[^\s]*$/i.exec(value)?.[1]?.toLowerCase();
+  return (
+    hostname !== undefined &&
+    PUSH_SERVICE_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`))
+  );
+}
+
+const isPushKey = (value: unknown): value is string =>
+  typeof value === 'string' && /^[\w-]{8,256}=*$/.test(value);
+
+function parsePushTopics(value: unknown): PushTopic[] | null {
+  if (!Array.isArray(value) || value.length > PUSH_TOPICS.length) return null;
+  if (!value.every((topic) => PUSH_TOPICS.includes(topic as PushTopic))) return null;
+  return [...new Set(value as PushTopic[])];
+}
+
+function parsePushSubscription(value: unknown): PushSubscriptionData | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { endpoint, keys } = value as Record<string, unknown>;
+  if (!isPushEndpoint(endpoint) || typeof keys !== 'object' || keys === null) return null;
+  const { p256dh, auth } = keys as Record<string, unknown>;
+  return isPushKey(p256dh) && isPushKey(auth) ? { endpoint, keys: { p256dh, auth } } : null;
+}
 
 // ---- HTTP API ----
 
@@ -441,6 +544,17 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         : { type: 'activateCard', card: msg.card, target: msg.target };
     case 'openChest':
       return { type: 'openChest' };
+    case 'pushSubscribe': {
+      const subscription = parsePushSubscription(msg.subscription);
+      const topics = parsePushTopics(msg.topics);
+      return subscription && topics ? { type: 'pushSubscribe', subscription, topics } : null;
+    }
+    case 'pushUnsubscribe':
+      return isPushEndpoint(msg.endpoint)
+        ? { type: 'pushUnsubscribe', endpoint: msg.endpoint }
+        : null;
+    case 'visibility':
+      return typeof msg.visible === 'boolean' ? { type: 'visibility', visible: msg.visible } : null;
     default:
       return null;
   }

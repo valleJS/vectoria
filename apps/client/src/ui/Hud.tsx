@@ -28,6 +28,7 @@ import {
   type BaseInfo,
 } from '../game/format';
 import { isNightRest } from '../game/night';
+import { disablePush } from '../net/push';
 import { gameSocket } from '../net/socket';
 import { useGameStore, type ConnectionStatus } from '../state/store';
 import {
@@ -50,6 +51,7 @@ import { ChestOpening } from './ChestOpening';
 import { TraderMenu } from './TraderMenu';
 import { Handbook, HandbookButton, HandbookCorner } from './Handbook';
 import { RuleChanges, RuleChangesButton } from './RuleChanges';
+import { PushSettings } from './PushSettings';
 import { compactQuery } from './layout';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -547,15 +549,19 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
             )}
           </Locked>
 
-          <div className="mt-2 text-right">
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <PushSettings />
             <Button
               variant="link"
-              className="text-xs"
+              className="ml-auto text-xs"
               onClick={() => {
                 if (
                   window.confirm('Abmelden? Du kannst dich jederzeit per E-Mail wieder anmelden.')
                 ) {
-                  setToken(null);
+                  // A device someone logged out of gets no more of this player's notices.
+                  void disablePush()
+                    .catch(() => undefined)
+                    .finally(() => setToken(null));
                 }
               }}
             >

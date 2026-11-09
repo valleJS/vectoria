@@ -172,7 +172,10 @@ interface ArmySprite {
   mode: FigureMode;
   /** Holds the soldiers, tent, ship or badge. */
   figure: Container;
-  /** Troop count nameplate, rebuilt when `text` changes. */
+  /**
+   * Troop count nameplate, rebuilt when `text` changes. Lives in `armyTopLayer` above the focus
+   * ring (so the ring never covers a count) and follows `container` there in `animate`.
+   */
   plate: Container;
   text: string;
   /**
@@ -317,15 +320,21 @@ export class GameRenderer {
   /**
    * Focus ring around the selection: a soft disc on the ground under the piece, and over every
    * site, deposit and army the parchment band with orbiting studs and four arrowheads that point
-   * at it, so no piece hides it; labels and alarms stay in front, so it never covers a name.
+   * at it, so no piece hides it; labels (site plates, troop plates, gather shields) and alarms
+   * stay in front, so it never covers a name or a count.
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
   /** Bestechung being aimed: reach around own armies, pulsing rings on armies in reach. */
   private readonly bribeMarks = new Graphics();
   private focus: { key: string; radius: number; color: number; since: number } | null = null;
-  /** Armies, painted back to front; gather badges always on top. */
+  /** Armies, painted back to front. */
   private readonly armyLayer = new Container({ sortableChildren: true });
+  /**
+   * Above the focus ring: every army's troop plate and the gather shields around deposits (whole
+   * badge), back to front with the badges on top, so the ring never covers a count.
+   */
+  private readonly armyTopLayer = new Container({ sortableChildren: true });
   private readonly armies = new Map<string, ArmySprite>();
   /** Wagons of every player's night caravan. */
   private caravans: CaravanSprite[] = [];
@@ -374,7 +383,8 @@ export class GameRenderer {
     this.art = art;
     this.night = new NightScene(art);
     // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
-    // sites and their lamp light, deposits, armies, the focus ring, labels, alarms, fireflies.
+    // sites and their lamp light, deposits, armies, the focus ring, troop plates and gather
+    // shields, labels, alarms, fireflies.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -390,6 +400,7 @@ export class GameRenderer {
       this.bribeMarks,
       this.armyLayer,
       this.focusTop,
+      this.armyTopLayer,
       this.labelLayer,
       this.alertLayer,
       this.night.fireflies,
@@ -1023,11 +1034,14 @@ export class GameRenderer {
         const figure = new Container();
         const plate = new Container();
         const cargo = new Container();
-        container.addChild(figure, cargo, plate);
+        container.addChild(figure, cargo);
         container.position.copyFrom(target);
         const offset = offsets.get(army.id) ?? { x: 0, y: 0 };
         container.pivot.set(-offset.x, -offset.y);
         this.armyLayer.addChild(container);
+        plate.position.copyFrom(target);
+        plate.pivot.copyFrom(container.pivot);
+        this.armyTopLayer.addChild(plate);
         sprite = {
           container,
           army,
@@ -1069,12 +1083,14 @@ export class GameRenderer {
             }
           : null;
       sprite.container.alpha = faded ? 0.75 : 1;
+      sprite.plate.alpha = sprite.container.alpha;
       this.drawFigure(sprite);
     }
 
     for (const [id, sprite] of this.armies) {
       if (seen.has(id)) continue;
       sprite.container.destroy({ children: true });
+      sprite.plate.destroy({ children: true });
       this.armies.delete(id);
     }
   }
@@ -1249,9 +1265,16 @@ export class GameRenderer {
     const u = this.unit;
     const g = this.routes.clear();
     for (const { points, color, alpha } of this.routeLines) {
-      pointedDashes(g, points, 8 * u, 4 * u, 1.3 * u, 2.6 * u, this.routePhase)
-        .fill({ color, alpha })
-        .stroke({ width: 1 * u, color: INK, alpha: alpha * 0.8, join: 'round' });
+      // A route about to end can be shorter than a gap and show no dash this frame. Its fill must
+      // then be skipped: Pixi's `fill()` with no new shape since the last `stroke()` reuses that
+      // stroke's path, and would paint the previous route in this route's colour (blinking).
+      if (pointedDashes(g, points, 8 * u, 4 * u, 1.3 * u, 2.6 * u, this.routePhase) === 0) continue;
+      g.fill({ color, alpha }).stroke({
+        width: 1 * u,
+        color: INK,
+        alpha: alpha * 0.8,
+        join: 'round',
+      });
     }
     // Raid crosses grow with the pieces, like everything players act on.
     const s = u * this.pieceScale;
@@ -1736,6 +1759,15 @@ export class GameRenderer {
       container.scale.set(k);
       // Badges on top, the rest back to front.
       container.zIndex = container.y + (sprite.mode === 'badge' ? 1e7 : 0);
+      // Gather shields stand over the focus ring with the plates; the rest stays under it.
+      const layer = sprite.mode === 'badge' ? this.armyTopLayer : this.armyLayer;
+      if (container.parent !== layer) layer.addChild(container);
+      // The plate rides along in its own layer, just above its army.
+      const { plate } = sprite;
+      plate.position.copyFrom(container.position);
+      plate.pivot.copyFrom(container.pivot);
+      plate.scale.set(k);
+      plate.zIndex = container.zIndex + 0.5;
       // A Seeweg army boards at the coast and lands on the far side, with a splash.
       if (sprite.army.sea && sprite.army.status !== 'gathering') {
         const ground = {

@@ -336,6 +336,7 @@ const CHAPTERS: Chapter[] = [
             `Die Grenze von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten gilt von einem Spieltagbeginn (10 Uhr) bis zum nächsten. Abend und Nacht gehören also noch zum alten Tag.`,
             'Siegpunkte gehen nie verloren, auch nicht, wenn deine Burg gestürmt wird.',
             'Eine leere Ruine wieder aufzubauen bringt keine Trophäe – nur ein Sieg über einen anderen Spieler zählt. Wer verliert, verliert keine Trophäen.',
+            'Jeder Stützpunkt bringt dir nur einmal eine Trophäe: Eroberst du denselben Stützpunkt später noch einmal, gibt es keine weitere. Für andere Spieler zählt er weiter.',
             'Beendet der Admin das Spiel bei Gleichstand, gewinnt, wer sich früher angemeldet hat.',
           ]}
         />

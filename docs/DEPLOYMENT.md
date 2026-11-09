@@ -30,6 +30,8 @@ Browser ──443──▶ Nginx Proxy Manager (Container proxy-npm-1, Let's Enc
                          ├─ /ws, /api/*, /healthz  → Spielserver
                          └─ alles andere           → gebauter Client (CLIENT_DIR)
 Spielstand: /opt/vectoria/data/game.json (Volume) + Backups in /opt/vectoria/backups
+Push-Schlüssel: /opt/vectoria/data/vapid.json (beim ersten Start erzeugt; nicht löschen, sonst
+müssen alle Geräte Benachrichtigungen neu abonnieren — passiert beim nächsten Öffnen von selbst)
 ```
 
 **Warum der Contabo:** Gemessen am 2026-11-02 hatte er 6,8 GB RAM frei, 95 % CPU idle und 130 GB

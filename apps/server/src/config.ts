@@ -42,8 +42,17 @@ const isProduction = process.env.NODE_ENV === 'production';
 const adminToken = optional('ADMIN_TOKEN') ?? (isProduction ? undefined : 'admin');
 if (!adminToken) throw new Error('ADMIN_TOKEN must be set in production');
 
+const vapidPublicKey = optional('VAPID_PUBLIC_KEY');
+const vapidPrivateKey = optional('VAPID_PRIVATE_KEY');
+if (Boolean(vapidPublicKey) !== Boolean(vapidPrivateKey)) {
+  throw new Error('VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together');
+}
+
 const smtpHost = optional('SMTP_HOST');
 if (isProduction && !smtpHost) throw new Error('SMTP_HOST must be set in production (email login)');
+
+const mailFrom = optional('MAIL_FROM') ?? 'Vectoria <vectoria@localhost>';
+const publicUrl = optional('PUBLIC_URL')?.replace(/\/+$/, '');
 
 export const config = {
   isProduction,
@@ -78,9 +87,22 @@ export const config = {
         pass: optional('SMTP_PASS'),
       }
     : null,
-  mailFrom: optional('MAIL_FROM') ?? 'Vectoria <vectoria@localhost>',
+  mailFrom,
   /** Base URL for login links in emails; falls back to the request's Origin header. */
-  publicUrl: optional('PUBLIC_URL')?.replace(/\/+$/, ''),
+  publicUrl,
+  /**
+   * Web Push: the server's VAPID key pair (unset = generated once into `vapid.json` next to
+   * DATA_FILE) and the contact push services may reach the operator at (`mailto:` or https).
+   */
+  vapid: {
+    publicKey: vapidPublicKey,
+    privateKey: vapidPrivateKey,
+    subject:
+      optional('VAPID_SUBJECT') ??
+      (publicUrl?.startsWith('https://')
+        ? publicUrl
+        : `mailto:${/<([^>]+)>/.exec(mailFrom)?.[1] ?? mailFrom}`),
+  },
   /**
    * Where `/source` redirects (AGPL-3.0 §13: players must be offered the running code).
    * Forks that change the code must point this at their own repository.
