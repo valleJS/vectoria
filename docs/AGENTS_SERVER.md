@@ -24,13 +24,13 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/game/GameState.ts` | Authoritative game: phases, commands, bases, clock advance, arrivals, combat, raids, feed, views, save migration |
 | `src/game/GameState.ts` § Stats | Per-player `PlayerStats` (`packages/shared/src/stats.ts`) in the save, reset with the round: online time added each tick for connected players (`trackOnline`, per calendar day, gameday-hours share), sessions on first connection, `noteCommand` per client command (from `GameServer`); attacks counted *started* when ordered (`markAttack` on send/redirect, kind kept on the army as `attack`) and *executed*/*won* where the battle resolves (`assaultCastle`, `assaultOutpost`, `raid`, `duoAssault`); defenses, troop losses, gathering, plunder, chests, trades, cards alongside. `adminState` sends them with `today` and `serverTime` |
 | `src/game/calendar.ts` | Mon–Fri 10–18 schedule in a time zone, minus admin break days (`Schedule.breakDays`); downtime catch-up |
-| `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
+| `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass (distances the short way round the wrapped map) |
 | `src/game/spots.ts` | Spot layout over wood, stone, gold and trader: hard distance rules per castle (one far wood/gold 2–4 h, rest < 2 h, none < 1 h), minimum gaps, no holes; soft balance (see AGENTS_GAME „Spot layout“); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
-| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation; `joinLand` sinks islets and bridges larger islands so all land is one mass |
+| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation on a wrapped map (smoothing, islands and bridges run round the edges); `joinLand` sinks islets and bridges larger islands so all land is one mass |
 | `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` (1/s + on commands and events) |
 | `src/net/http.ts` | `/healthz`, `/source` (302 → `SOURCE_URL`), `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
 | `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`, brotli/gzip for text files, compressed once in memory) for the production container |
@@ -58,6 +58,7 @@ themselves in between. Commands mutate state only through
 | `ADMIN_TOKEN` | `admin` (dev) | **required in production** |
 | `GAME_HOURS` / `GAME_TIMEZONE` | `weekdays` / `Europe/Berlin` | `always` for dev |
 | `TIME_SCALE` | `1` | clock multiplier for testing |
+| `TEST_PLAYERS` | unset = 0 | dev only (refused in production): adds `Test 1`…`Test N` (`test1@vectoria.test`…) to registration at startup (`GameState.addTestPlayers`); ignored once the game runs |
 | `VICTORY_POINTS_TO_WIN` | `10` | |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
 | `CLIENT_DIR` | unset = API only | built client to serve; set in the Docker image |

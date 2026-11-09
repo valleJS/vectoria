@@ -1,6 +1,8 @@
 import {
   BAREFOOT_SPEED,
   findPath,
+  mapDistance,
+  nearestImage,
   pathLength,
   planIntercept,
   travelMs,
@@ -14,8 +16,6 @@ import type { BaseInfo } from './format';
 
 // March planning shared by the send forms (side panel) and the trade menu: travel time, the
 // preselected base, the barefoot penalty.
-
-const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** Convoy movement as seen now: the remaining route, walked until its arrival clock. */
 export function trackOf(view: GameView, army: ArmyView) {
@@ -43,7 +43,7 @@ export function eta(
     const meeting = track && planIntercept(map, from, track, view.clock.clock, forcedMarch, speed);
     return meeting ? meeting.clock - view.clock.clock : null;
   }
-  const path = sea ? [from, position] : findPath(map, from, position);
+  const path = sea ? [from, nearestImage(map, from, position)] : findPath(map, from, position);
   return path ? travelMs(pathLength(path), map.width, forcedMarch, speed) : null;
 }
 
@@ -51,11 +51,19 @@ export function barefoot(view: GameView): boolean {
   return (view.self.barefootUntil ?? 0) > view.clock.clock;
 }
 
-/** The base preselected for a march to `position`: the nearest one that has troops. */
-export function nearestBase(bases: BaseInfo[], position: Vec2): BaseInfo | undefined {
+/**
+ * The base preselected for a march to `position`: the nearest one (the short way round the
+ * wrapped map) that has troops.
+ */
+export function nearestBase(
+  bases: BaseInfo[],
+  position: Vec2,
+  map: Pick<MapData, 'width' | 'height'> | null,
+): BaseInfo | undefined {
+  const distance = (a: Vec2) =>
+    map ? mapDistance(map, a, position) : Math.hypot(a.x - position.x, a.y - position.y);
   return [...bases].sort(
     (a, b) =>
-      Number(b.troops > 0) - Number(a.troops > 0) ||
-      distance(a.position, position) - distance(b.position, position),
+      Number(b.troops > 0) - Number(a.troops > 0) || distance(a.position) - distance(b.position),
   )[0];
 }

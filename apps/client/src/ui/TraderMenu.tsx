@@ -162,7 +162,7 @@ function TradeOffer({
   const forced = withCard && activeCard === 'forcedMarch';
   const sea = withCard && activeCard === 'sea';
   const target = { kind: 'spot', id: spot.id } as const;
-  const base = bases.find((b) => b.id === fromId) ?? nearestBase(bases, spot.position);
+  const base = bases.find((b) => b.id === fromId) ?? nearestBase(bases, spot.position, map);
   const travel = useMemo(
     () => (map && base ? eta(map, view, base.position, target, spot.position, forced, sea) : null),
     // `target` is rebuilt every render but only depends on the spot.

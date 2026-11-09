@@ -96,7 +96,7 @@ export function CardProfile() {
   const target = targets.find((t) => t.id === picked)?.id;
   const ready = !info.target || target !== undefined;
   // Bestechung is aimed on the map: the armies in reach light up there.
-  const inReach = info.target === 'foreignArmy' && map ? bribableArmies(view, map.width).length : 0;
+  const inReach = info.target === 'foreignArmy' && map ? bribableArmies(view, map).length : 0;
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
@@ -213,7 +213,7 @@ export function BribeBanner() {
     return () => window.removeEventListener('keydown', onKey);
   }, [bribing, setBribing]);
   if (!bribing || !view || !map || !holds) return null;
-  const count = bribableArmies(view, map.width).length;
+  const count = bribableArmies(view, map).length;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
       <Card className="pointer-events-auto max-w-md">

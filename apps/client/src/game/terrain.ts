@@ -1,4 +1,4 @@
-import { TileType, type MapData } from '@vectoria/shared';
+import { TileType, wrapCoord, wrapDelta, type MapData } from '@vectoria/shared';
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { ArtTexture, MapArt } from '../art/textures';
 import {
@@ -18,8 +18,14 @@ import { COAST, FOREST, GRASS, ROCK, SEA, SHALLOW, hex } from '../theme/tokens';
 // as flat vector regions (deep sea, shallow band, land, forest, rock) and the coast is inked.
 // Trees, rocks and other details are sprites of the shared SVG art. All randomness is
 // hashed from positions, so every client draws the same map.
+// The map wraps at its edges: the margin around it shows the land from the opposite side, so
+// coasts run on across the seam, and the whole is clipped to one copy of the map, which the
+// renderer repeats.
 
-/** Sea margin around the map, in tiles. */
+/**
+ * Margin around the map, in tiles: filled with the wrapped-round terrain so fields and coasts
+ * are right up to the edge, then clipped away.
+ */
 export const SEA_MARGIN_TILES = 3;
 /** Field samples per tile. */
 const K = 8;
@@ -112,9 +118,13 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   const gw = (width + SEA_MARGIN_TILES * 2) * K;
   const gh = (height + SEA_MARGIN_TILES * 2) * K;
   const typeAt = (tx: number, ty: number): TileType =>
-    tx < 0 || ty < 0 || tx >= width || ty >= height
+    tiles[wrapCoord(ty, height) * width + wrapCoord(tx, width)] ?? TileType.Water;
+  // The outermost tile of the margin stays water, so every coast outline closes inside the grid.
+  const edge = SEA_MARGIN_TILES - 1;
+  const fieldTypeAt = (tx: number, ty: number): TileType =>
+    tx < -edge || ty < -edge || tx >= width + edge || ty >= height + edge
       ? TileType.Water
-      : (tiles[ty * width + tx] ?? TileType.Water);
+      : typeAt(tx, ty);
 
   // Indicator fields per terrain type, sampled from the tile grid.
   const land = createField(gw, gh);
@@ -123,12 +133,14 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   for (let j = 0; j < gh; j++) {
     const ty = Math.floor(j / K) - SEA_MARGIN_TILES;
     for (let i = 0; i < gw; i++) {
-      const type = typeAt(Math.floor(i / K) - SEA_MARGIN_TILES, ty);
+      const type = fieldTypeAt(Math.floor(i / K) - SEA_MARGIN_TILES, ty);
       const k = j * gw + i;
       // Castles stand on open ground and spots on land, even at the water's edge.
       const u = (i + 0.5) / K - SEA_MARGIN_TILES;
       const v = (j + 0.5) / K - SEA_MARGIN_TILES;
-      const here = clearings.filter((c) => Math.hypot(u - c.x, v - c.y) < c.radius);
+      const here = clearings.filter(
+        (c) => Math.hypot(wrapDelta(u - c.x, width), wrapDelta(v - c.y, height)) < c.radius,
+      );
       const open = here.some((c) => c.open);
       land.data[k] = here.length > 0 || type !== TileType.Water ? 1 : 0;
       forest.data[k] = !open && type === TileType.Forest ? 1 : 0;
@@ -223,66 +235,70 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
     return count;
   };
 
-  for (let ty = 0; ty < height; ty++) {
-    for (let tx = 0; tx < width; tx++) {
+  // One tile past every edge too: what leans over the seam is the twin of the opposite edge's
+  // detail (same hashes), so it continues in the next copy.
+  for (let ty = -1; ty <= height; ty++) {
+    for (let tx = -1; tx <= width; tx++) {
       const type = typeAt(tx, ty);
+      const wx = wrapCoord(tx, width);
+      const wy = wrapCoord(ty, height);
       if (type === TileType.Forest) {
-        const pines = fbm(tx / 5, ty / 5, 21) > 0.58;
+        const pines = fbm(wx / 5, wy / 5, 21) > 0.58;
         for (let n = 0; n < 4; n++) {
-          const x = (tx + 0.5 + (hash2(tx, ty, 10 + n) - 0.5) * 0.7) * T;
-          const y = (ty + 0.55 + (hash2(tx, ty, 20 + n) - 0.5) * 0.7) * T;
+          const x = (tx + 0.5 + (hash2(wx, wy, 10 + n) - 0.5) * 0.7) * T;
+          const y = (ty + 0.55 + (hash2(wx, wy, 20 + n) - 0.5) * 0.7) * T;
           if (distanceAt(x, y) > -0.3 || sample(forestField, x, y, 0) < 0.5) continue;
-          const r = hash2(tx, ty, 30 + n);
-          const size = T * (0.8 + hash2(tx, ty, 40 + n) * 0.25);
+          const r = hash2(wx, wy, 30 + n);
+          const size = T * (0.8 + hash2(wx, wy, 40 + n) * 0.25);
           if (pines) place(pick(art.conifers, r), x, y, size * 0.85);
           else if (r > 0.9) place(pick(art.autumn, r * 7), x, y, size, r > 0.95);
-          else place(pick(art.broadleaves, r * 3), x, y, size, hash2(tx, ty, 50 + n) > 0.5);
+          else place(pick(art.broadleaves, r * 3), x, y, size, hash2(wx, wy, 50 + n) > 0.5);
         }
       } else if (type === TileType.Mountain) {
         // Big crags stand in the heart of a rock area, loose boulders along its rim; positions,
         // sizes and the odd gap vary, so the rocks never line up tile by tile.
         const depth = mountainsAround(tx, ty);
-        const r = hash2(tx, ty, 63);
+        const r = hash2(wx, wy, 63);
         if (r < 0.1) continue;
         // Crags get likelier and bigger towards the interior; the rim keeps smaller ones.
         const inner = Math.min(1, depth / 7);
-        const crag = hash2(tx, ty, 64) < 0.25 + inner * 0.6;
+        const crag = hash2(wx, wy, 64) < 0.25 + inner * 0.6;
         if (crag) {
-          const x = (tx + 0.5 + (hash2(tx, ty, 60) - 0.5) * 0.6) * T;
-          const y = (ty + 0.75 + (hash2(tx, ty, 61) - 0.5) * 0.45) * T;
+          const x = (tx + 0.5 + (hash2(wx, wy, 60) - 0.5) * 0.6) * T;
+          const y = (ty + 0.75 + (hash2(wx, wy, 61) - 0.5) * 0.45) * T;
           if (distanceAt(x, y) > -0.3 || sample(rockField, x, y - T * 0.3, 0) < 0.5) continue;
-          const size = T * (0.75 + inner * 0.55 + hash2(tx, ty, 65) * 0.4);
-          place(pick(art.rocks, hash2(tx, ty, 66)), x, y, size, hash2(tx, ty, 67) > 0.5);
+          const size = T * (0.75 + inner * 0.55 + hash2(wx, wy, 65) * 0.4);
+          place(pick(art.rocks, hash2(wx, wy, 66)), x, y, size, hash2(wx, wy, 67) > 0.5);
         } else {
           for (let n = 0; n < (r > 0.45 ? 2 : 1); n++) {
-            const x = (tx + 0.5 + (hash2(tx, ty, 160 + n) - 0.5) * 0.8) * T;
-            const y = (ty + 0.6 + (hash2(tx, ty, 170 + n) - 0.5) * 0.7) * T;
+            const x = (tx + 0.5 + (hash2(wx, wy, 160 + n) - 0.5) * 0.8) * T;
+            const y = (ty + 0.6 + (hash2(wx, wy, 170 + n) - 0.5) * 0.7) * T;
             if (distanceAt(x, y) > -0.25 || sample(rockField, x, y - T * 0.15, 0) < 0.45) continue;
-            const size = T * (0.5 + hash2(tx, ty, 180 + n) * 0.4);
+            const size = T * (0.5 + hash2(wx, wy, 180 + n) * 0.4);
             place(
-              pick(art.boulders, hash2(tx, ty, 190 + n)),
+              pick(art.boulders, hash2(wx, wy, 190 + n)),
               x,
               y,
               size,
-              hash2(tx, ty, 195 + n) > 0.5,
+              hash2(wx, wy, 195 + n) > 0.5,
             );
           }
         }
       } else if (type === TileType.Grass) {
         // A stray boulder now and then on the meadow next to a rock area.
-        if (mountainsAround(tx, ty) > 0 && hash2(tx, ty, 200) < 0.3) {
-          const x = (tx + 0.5 + (hash2(tx, ty, 201) - 0.5) * 0.7) * T;
-          const y = (ty + 0.5 + (hash2(tx, ty, 202) - 0.5) * 0.7) * T;
+        if (mountainsAround(tx, ty) > 0 && hash2(wx, wy, 200) < 0.3) {
+          const x = (tx + 0.5 + (hash2(wx, wy, 201) - 0.5) * 0.7) * T;
+          const y = (ty + 0.5 + (hash2(wx, wy, 202) - 0.5) * 0.7) * T;
           if (distanceAt(x, y) < -0.3) {
-            const size = T * (0.38 + hash2(tx, ty, 203) * 0.25);
-            place(pick(art.boulders, hash2(tx, ty, 204)), x, y, size, hash2(tx, ty, 205) > 0.5);
+            const size = T * (0.38 + hash2(wx, wy, 203) * 0.25);
+            place(pick(art.boulders, hash2(wx, wy, 204)), x, y, size, hash2(wx, wy, 205) > 0.5);
           }
         }
         for (let n = 0; n < 2; n++) {
-          const x = (tx + 0.5 + (hash2(tx, ty, 70 + n) - 0.5) * 0.9) * T;
-          const y = (ty + 0.5 + (hash2(tx, ty, 80 + n) - 0.5) * 0.9) * T;
+          const x = (tx + 0.5 + (hash2(wx, wy, 70 + n) - 0.5) * 0.9) * T;
+          const y = (ty + 0.5 + (hash2(wx, wy, 80 + n) - 0.5) * 0.9) * T;
           if (distanceAt(x, y) > -0.25) continue;
-          const r = hash2(tx, ty, 90 + n);
+          const r = hash2(wx, wy, 90 + n);
           if (r > 0.88) place(art.tuft, x, y, T * 0.55, r > 0.94);
           else if (r < 0.03) place(pick(art.broadleaves, r * 33), x, y, T * 1.05);
         }
@@ -305,7 +321,7 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
       const y = (ty + 0.5 + (hash2(tx, ty, 101) - 0.5) * 0.5) * T;
       const d = distanceAt(x, y);
       const inland = tx >= 0 && ty >= 0 && tx < width && ty < height;
-      const kind = d > 2.4 ? 'cog' : d > 0.95 && inland ? 'boat' : null;
+      const kind = !inland ? null : d > 2.4 ? 'cog' : d > 0.95 ? 'boat' : null;
       if (!kind) continue;
       candidates.push({ x, y, kind, rank: hash2(tx, ty, 102), flip: hash2(tx, ty, 103) > 0.5 });
     }
@@ -325,16 +341,28 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   const detailLayer = new Container();
   for (const { sprite } of details) detailLayer.addChild(sprite);
   root.addChild(detailLayer);
+  // Clip to one copy of the map; the renderer draws the copies side by side.
+  const clip = new Graphics().rect(0, 0, width * T, height * T).fill(0xffffff);
+  root.addChild(clip);
+  root.mask = clip;
+  const span = { x: width * T, y: height * T };
 
   return {
     root,
     isWater: (x, y) => sample(landField, x, y, 0) < 0.5,
     clearAround(points) {
       for (const d of details) {
-        d.sprite.visible = !points.some((p) => {
+        d.sprite.visible = !points.some((raw) => {
+          // The copy of the point nearest the detail (it may stand past an edge).
+          const cx = (d.left + d.right) / 2;
+          const cy = (d.top + d.bottom) / 2;
+          const p = {
+            x: cx + wrapDelta(raw.x - cx, span.x),
+            y: cy + wrapDelta(raw.y - cy, span.y),
+          };
           const dx = Math.max(d.left - p.x, 0, p.x - d.right);
           const dy = Math.max(d.top - p.y, 0, p.y - d.bottom);
-          return dx * dx + dy * dy < p.radius * p.radius;
+          return dx * dx + dy * dy < raw.radius * raw.radius;
         });
       }
     },

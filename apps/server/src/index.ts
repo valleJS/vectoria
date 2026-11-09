@@ -16,6 +16,14 @@ async function main(): Promise<void> {
   const services = await connectServices(config);
   const persistence = new Persistence(config.dataFile);
   const state = new GameState({ seed: config.mapSeed, ...config.game }, await persistence.load());
+  if (config.testPlayers > 0) {
+    const added = state.addTestPlayers(config.testPlayers);
+    log.info(
+      state.phase === 'registration'
+        ? `Test players: ${added} added (test1…test${config.testPlayers}@vectoria.test)`
+        : `TEST_PLAYERS ignored: the game is ${state.phase} (admin reset to add them)`,
+    );
+  }
   const auth = new EmailAuth(state, createMailer(config), config.publicUrl);
 
   const http = createServer((req, res) => {

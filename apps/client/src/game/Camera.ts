@@ -2,6 +2,8 @@ import type { Container, PointData } from 'pixi.js';
 
 const DRAG_THRESHOLD_PX = 5;
 const WHEEL_ZOOM_SPEED = 0.0015;
+/** On a wrapped world, zooming out stops once the view spans this many copies of it. */
+const MAX_VIEW_COPIES = 2;
 
 export interface CameraOptions {
   minZoom?: number;
@@ -14,6 +16,8 @@ export interface CameraOptions {
 /**
  * Pan/zoom controller for a world container: drag to pan, wheel or pinch to zoom around the
  * cursor. Listens to DOM events on the canvas so Pixi's own event system stays free for entities.
+ * On a wrapped world (`setWrap`) panning never ends: the view centre is folded back into the
+ * first copy of the world, which the renderer repeats around it.
  */
 export class Camera {
   private readonly canvas: HTMLCanvasElement;
@@ -27,6 +31,8 @@ export class Camera {
   private downAt: PointData = { x: 0, y: 0 };
   /** True once the current gesture has moved or used multiple pointers, so it can't be a click. */
   private gestureMoved = false;
+  /** Size of one copy of a wrapped world (world px), or null for a bounded one. */
+  private wrap: { width: number; height: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement, world: Container, options: CameraOptions = {}) {
     this.canvas = canvas;
@@ -55,9 +61,28 @@ export class Camera {
     };
   }
 
+  /** Makes the world wrap with this period (world px); null for a bounded world. */
+  setWrap(wrap: { width: number; height: number } | null): void {
+    this.wrap = wrap;
+    this.fold();
+  }
+
   panBy(dx: number, dy: number): void {
     this.world.x += dx;
     this.world.y += dy;
+    this.fold();
+  }
+
+  /** On a wrapped world, shifts by whole copies so the view centre lies in the first one. */
+  private fold(): void {
+    if (!this.wrap) return;
+    const zoom = this.zoom;
+    const centre = this.screenToWorld({
+      x: this.canvas.clientWidth / 2,
+      y: this.canvas.clientHeight / 2,
+    });
+    this.world.x += Math.floor(centre.x / this.wrap.width) * this.wrap.width * zoom;
+    this.world.y += Math.floor(centre.y / this.wrap.height) * this.wrap.height * zoom;
   }
 
   /** Multiplies zoom by `factor`, keeping the world point under `screen` fixed. */
@@ -67,6 +92,7 @@ export class Camera {
     const anchor = this.screenToWorld(screen);
     this.world.scale.set(next);
     this.world.position.set(screen.x - anchor.x * next, screen.y - anchor.y * next);
+    this.fold();
     this.onZoomChange?.(next);
   }
 
@@ -93,8 +119,9 @@ export class Camera {
     );
     const zoom = this.clampZoom(fitZoom * (focus?.zoomIn ?? 1));
     // Centre on the focus, but keep the view's edges within the rectangle (plus padding); an axis
-    // the view covers whole stays centred.
+    // the view covers whole stays centred. A wrapped world has no edges: just centre on it.
     const centre = (point: number, size: number, area: number) => {
+      if (this.wrap) return point;
       const half = area / zoom / 2 - padding / zoom;
       return half * 2 >= size ? size / 2 : Math.min(size - half, Math.max(half, point));
     };
@@ -105,6 +132,7 @@ export class Camera {
       insets.left + areaWidth / 2 - cx * zoom,
       insets.top + areaHeight / 2 - cy * zoom,
     );
+    this.fold();
     this.onZoomChange?.(zoom);
   }
 
@@ -117,7 +145,16 @@ export class Camera {
   }
 
   private clampZoom(zoom: number): number {
-    return Math.min(this.maxZoom, Math.max(this.minZoom, zoom));
+    let min = this.minZoom;
+    if (this.wrap) {
+      // Further out would only show the same map many times over.
+      min = Math.max(
+        min,
+        this.canvas.clientWidth / (MAX_VIEW_COPIES * this.wrap.width),
+        this.canvas.clientHeight / (MAX_VIEW_COPIES * this.wrap.height),
+      );
+    }
+    return Math.min(this.maxZoom, Math.max(Math.min(min, this.maxZoom), zoom));
   }
 
   private toLocal(event: MouseEvent): PointData {

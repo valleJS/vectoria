@@ -29,6 +29,8 @@ import {
   HOUR_MS,
   isBribable,
   isRaidable,
+  mapDistance,
+  nearestImage,
   OUTPOST_PLUNDER_SHARE,
   outpostName,
   pathLength,
@@ -43,6 +45,7 @@ import {
   STARTING_RESOURCES,
   STARTING_TROOPS,
   TROOP_BATCH_COST,
+  wrapPoint,
   TROOP_BATCH_SIZE,
   travelMs,
   victoryPointsCost,
@@ -288,7 +291,6 @@ interface Destination {
   ownBase: boolean;
 }
 
-const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 const last = <T>(items: readonly T[]): T => items[items.length - 1]!;
 
 /** Identifies an army's current leg: it changes whenever the army sets out anew or stops. */
@@ -380,6 +382,26 @@ export class GameState {
     this.data.players.push(player);
     this.dirty = true;
     return { token: player.token, playerId: player.id };
+  }
+
+  /**
+   * Dev: fills registration with `count` test players (`Test 1`…, `test1@vectoria.test`…), so a
+   * crowded map can be tried alone. They log in like anyone (code in the log without SMTP) and
+   * do nothing on their own. Returns how many were added; none once the game has started.
+   */
+  addTestPlayers(count: number): number {
+    if (this.data.phase !== 'registration') return 0;
+    let added = 0;
+    for (let i = 1; i <= count; i++) {
+      const email = `test${i}@vectoria.test`;
+      const name = `Test ${i}`;
+      const taken = this.data.players.some((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (taken || this.playerIdForEmail(email)) continue;
+      this.data.players.push(this.newPlayer(name, email));
+      added++;
+    }
+    if (added > 0) this.dirty = true;
+    return added;
   }
 
   playerIdForToken(token: string): string | null {
@@ -809,7 +831,7 @@ export class GameState {
     const reach = bribeRangeTiles(this.map!.width);
     return this.data.armies
       .filter((a) => a.ownerId === player.id && !a.pactId && !a.joins)
-      .map((a) => ({ a, d: distance(this.armyPosition(a), where) }))
+      .map((a) => ({ a, d: mapDistance(this.map!, this.armyPosition(a), where) }))
       .filter(({ d }) => d <= reach)
       .sort((x, y) => x.d - y.d)[0]?.a;
   }
@@ -939,7 +961,7 @@ export class GameState {
       host &&
       host.ownerId === army.ownerId &&
       !host.pactId &&
-      distance(this.armyPosition(host), here) <= RAID_REACH_TILES
+      mapDistance(this.map!, this.armyPosition(host), here) <= RAID_REACH_TILES
     ) {
       host.troops += army.troops;
       this.data.armies = this.data.armies.filter((a) => a !== army);
@@ -2100,7 +2122,7 @@ export class GameState {
       !convoy ||
       !victim ||
       !isRaidable(convoy, victim.routed ?? false) ||
-      distance(this.armyPosition(convoy), last(army.path)) > RAID_REACH_TILES
+      mapDistance(this.map!, this.armyPosition(convoy), last(army.path)) > RAID_REACH_TILES
     ) {
       this.addLog(
         raider,
@@ -2338,7 +2360,7 @@ export class GameState {
     if (!this.map) throw new RuleError('Noch keine Karte.');
     this.data.chests.push({
       id: this.nextId('chest'),
-      position: farthestFrom(mainlandTiles(this.map), this.takenPositions(), Math.random),
+      position: farthestFrom(this.map, mainlandTiles(this.map), this.takenPositions(), Math.random),
       troopsNeeded: rollChestTroops(),
     });
     this.dirty = true;
@@ -2355,27 +2377,33 @@ export class GameState {
     const b = this.player(otherId);
     if (!a || !b || a === b) throw new RuleError('Unbekannter Spieler.');
     if (!a.castle || !b.castle) throw new RuleError('Beide brauchen eine Burg.');
+    const map = this.map!;
+    // The short way round the wrapped map, so a shifted leg stays as long as it was.
+    const shiftTo = (from: Vec2, to: Vec2) => {
+      const there = nearestImage(map, from, to);
+      return { x: there.x - from.x, y: there.y - from.y };
+    };
     const moved = new Map([
-      [a.id, { x: b.castle.x - a.castle.x, y: b.castle.y - a.castle.y }],
-      [b.id, { x: a.castle.x - b.castle.x, y: a.castle.y - b.castle.y }],
+      [a.id, shiftTo(a.castle, b.castle)],
+      [b.id, shiftTo(b.castle, a.castle)],
     ]);
     [a.castle, b.castle] = [b.castle, a.castle];
     // Armies on their way home keep their distance and arrival time: the whole leg moves along
-    // with the castle (clamped to the map), clocks stay as they are.
-    const map = this.map!;
-    const clamp = (v: number, max: number) => Math.min(Math.max(v, 0.5), max - 0.5);
+    // with the castle, clocks stay as they are.
     for (const army of this.data.armies) {
       const shift =
         army.status === 'returning' && army.target.kind === 'castle'
           ? moved.get(army.target.id)
           : undefined;
       if (!shift) continue;
-      army.path = army.path.map((p) => ({
-        x: clamp(p.x + shift.x, map.width),
-        y: clamp(p.y + shift.y, map.height),
-      }));
+      army.path = army.path.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y }));
+      army.path[0] = wrapPoint(map, army.path[0]!);
+      for (let i = 1; i < army.path.length; i++) {
+        army.path[i] = nearestImage(map, army.path[i - 1]!, army.path[i]!);
+      }
       const owner = this.player(army.ownerId);
-      if (owner?.castle) army.path[army.path.length - 1] = { ...owner.castle };
+      if (owner?.castle)
+        army.path[army.path.length - 1] = nearestImage(map, last(army.path), owner.castle);
     }
     // Armies that set out from either castle keep their target and their share of the way done,
     // but now start from the castle's new place (attacks on the other swapped castle included).
@@ -2410,7 +2438,9 @@ export class GameState {
   private reroute(army: ArmyRecord, from: Vec2, to: Vec2, progress = 0): void {
     const map = this.map!;
     // A Seeweg march keeps sailing straight; only a redirect ends it (`endRouteCards`).
-    army.path = army.sea ? [from, to] : (findPath(map, from, to) ?? [from, to]);
+    army.path = army.sea
+      ? this.straight(from, to)
+      : (findPath(map, from, to) ?? this.straight(from, to));
     const owner = this.player(army.ownerId);
     const speed =
       (hasResources(army.cargo) ? LOADED_SPEED : 1) * (owner ? this.marchSpeed(owner) : 1);
@@ -2704,6 +2734,7 @@ export class GameState {
       const land = mainlandTiles(this.map);
       const castles = data.players.flatMap((p) => (p.castle ? [p.castle] : []));
       data.outposts = placeOutposts(
+        this.map,
         land,
         castles,
         this.takenPositions(data),
@@ -2879,7 +2910,7 @@ export class GameState {
       }
     }
     if (!to) throw new RuleError('Ziel existiert nicht.');
-    const path = straight ? [from, to] : findPath(map, from, to);
+    const path = straight ? this.straight(from, to) : findPath(map, from, to);
     if (!path) throw new RuleError('Dorthin führt kein Landweg.');
     return {
       path,
@@ -2903,8 +2934,15 @@ export class GameState {
     return Math.min(1, Math.max(0, (this.data.clock - army.departClock) / span));
   }
 
+  /** Where the army stands now, moved into the map (its route may run past an edge). */
   private armyPosition(army: ArmyRecord): Vec2 {
-    return pointAlong(army.path, this.legFraction(army));
+    return wrapPoint(this.map!, pointAlong(army.path, this.legFraction(army)));
+  }
+
+  /** A straight leg (Seeweg, or no land route) the short way round the wrapped map. */
+  private straight(from: Vec2, to: Vec2): Vec2[] {
+    const start = wrapPoint(this.map!, from);
+    return [start, nearestImage(this.map!, start, to)];
   }
 
   /** Heads home to the army's base (or the castle, if that outpost is lost) over land. */
@@ -2919,8 +2957,8 @@ export class GameState {
     army.status = 'returning';
     // Seeweg holds for the way home too, until the army is redirected (`endRouteCards`).
     army.path = army.sea
-      ? [from, base.position]
-      : (findPath(this.map!, from, base.position) ?? [from, base.position]);
+      ? this.straight(from, base.position)
+      : (findPath(this.map!, from, base.position) ?? this.straight(from, base.position));
     army.target = base.id ? { kind: 'outpost', id: base.id } : { kind: 'castle', id: owner.id };
     army.departClock = this.data.clock;
     // Resource cargo slows the march home; chests and empty hands do not.

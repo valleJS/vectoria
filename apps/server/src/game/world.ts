@@ -1,5 +1,6 @@
 import {
   emptyResources,
+  mapDistance,
   mapSizeForPlayers,
   MIN_OUTPOSTS,
   OUTPOSTS_PER_PLAYER,
@@ -28,7 +29,6 @@ export interface World {
 }
 
 const centre = (x: number, y: number): Vec2 => ({ x: x + 0.5, y: y + 0.5 });
-const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
 export function outpostCount(players: number): number {
   return Math.max(MIN_OUTPOSTS, Math.round(players * OUTPOSTS_PER_PLAYER));
@@ -56,11 +56,11 @@ export function createWorld(players: number, seed: number): World {
       const next =
         castles.length === 0
           ? land[Math.floor(random() * land.length)]!
-          : farthestFrom(land, castles, random);
+          : farthestFrom(map, land, castles, random);
       castles.push(next);
       taken.push(next);
     }
-    const outposts = placeOutposts(land, castles, taken, outpostCount(players), random);
+    const outposts = placeOutposts(map, land, castles, taken, outpostCount(players), random);
     const anchors = [...castles, ...outposts.map((o) => o.position)];
     // The last try searches even a cramped placement, so a world always comes out.
     const force = attempt === PLACEMENT_TRIES - 1 && !best;
@@ -79,12 +79,12 @@ export function createWorld(players: number, seed: number): World {
   return { map, castles, outposts, spots };
 }
 
-/** Mainland tiles off the map's outer ring: where castles, outposts and spots may stand. */
+/**
+ * Mainland tiles: where castles, outposts and spots may stand. The map wraps, so there is no
+ * outer ring to keep clear.
+ */
 export function innerLand(map: MapData): Vec2[] {
-  const { width, height } = map;
-  return mainlandTiles(map).filter(
-    (p) => p.x > 1 && p.y > 1 && p.x < width - 1 && p.y < height - 1,
-  );
+  return mainlandTiles(map);
 }
 
 /**
@@ -92,6 +92,7 @@ export function innerLand(map: MapData): Vec2[] {
  * the second nearest, and away from other `taken` sites (which this extends).
  */
 export function placeOutposts(
+  map: MapData,
   land: Vec2[],
   castles: Vec2[],
   taken: Vec2[],
@@ -104,8 +105,10 @@ export function placeOutposts(
     let bestScore = -Infinity;
     for (let k = 0; k < 300; k++) {
       const candidate = land[Math.floor(random() * land.length)]!;
-      const [d1 = 0, d2 = d1] = castles.map((c) => distance(c, candidate)).sort((a, b) => a - b);
-      const spread = Math.min(...taken.map((t) => distance(t, candidate)), Infinity);
+      const [d1 = 0, d2 = d1] = castles
+        .map((c) => mapDistance(map, c, candidate))
+        .sort((a, b) => a - b);
+      const spread = Math.min(...taken.map((t) => mapDistance(map, t, candidate)), Infinity);
       const score = Math.min(spread, d1) - Math.abs(d2 - d1);
       if (score > bestScore) {
         position = candidate;
@@ -125,13 +128,18 @@ export function placeOutposts(
 }
 
 /** A random tile among the best few candidates by distance to the nearest `taken` point. */
-export function farthestFrom(candidates: Vec2[], taken: Vec2[], random: () => number): Vec2 {
+export function farthestFrom(
+  map: MapData,
+  candidates: Vec2[],
+  taken: Vec2[],
+  random: () => number,
+): Vec2 {
   // Sample instead of scanning everything; plenty for maps under 100×100.
   let best = candidates[0]!;
   let bestScore = -1;
   for (let i = 0; i < 200; i++) {
     const candidate = candidates[Math.floor(random() * candidates.length)]!;
-    const score = Math.min(...taken.map((t) => distance(t, candidate)), Infinity);
+    const score = Math.min(...taken.map((t) => mapDistance(map, t, candidate)), Infinity);
     if (score > bestScore) {
       best = candidate;
       bestScore = score;
@@ -161,9 +169,8 @@ export function mainlandTiles(map: MapData): Vec2[] {
         [0, 1],
         [0, -1],
       ] as const) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const nx = (x + dx + width) % width;
+        const ny = (y + dy + height) % height;
         const n = ny * width + nx;
         if (tiles[n] === TileType.Water || component[n] !== -1) continue;
         component[n] = startIndex;

@@ -42,6 +42,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const adminToken = optional('ADMIN_TOKEN') ?? (isProduction ? undefined : 'admin');
 if (!adminToken) throw new Error('ADMIN_TOKEN must be set in production');
 
+const testPlayers = optional('TEST_PLAYERS') === undefined ? 0 : positiveInt('TEST_PLAYERS', 0);
+if (isProduction && testPlayers > 0) throw new Error('TEST_PLAYERS is for development only');
+
 const smtpHost = optional('SMTP_HOST');
 if (isProduction && !smtpHost) throw new Error('SMTP_HOST must be set in production (email login)');
 
@@ -52,6 +55,8 @@ export const config = {
   tickRate: positiveInt('TICK_RATE', 5),
   mapSeed: positiveInt('MAP_SEED', Math.floor(Math.random() * 2 ** 31) + 1),
   adminToken,
+  /** Dev: test players added to registration at startup (`GameState.addTestPlayers`). */
+  testPlayers,
   game: {
     /** `weekdays`: clock runs Mon–Fri 10–18 in GAME_TIMEZONE. `always`: clock always runs (dev). */
     hours: oneOf('GAME_HOURS', ['weekdays', 'always'] as const, 'weekdays'),

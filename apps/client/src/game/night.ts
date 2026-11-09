@@ -93,9 +93,8 @@ export class NightScene {
 
   constructor(art: MapArt) {
     this.art = art;
-    // Far beyond any map, so the canvas edge never shows through.
-    // Drawn white and tinted towards NIGHT_SKY, multiplied over everything below.
-    this.darkness.rect(-50_000, -50_000, 100_000, 100_000).fill(0xffffff);
+    // Drawn white and tinted towards NIGHT_SKY, multiplied over everything below. It covers
+    // exactly one copy of the wrapped map (`setMap`): copies side by side must not darken twice.
     this.darkness.blendMode = 'multiply';
     this.darkness.visible = false;
     for (const layer of [this.glowUnder, this.glowOver, this.fireflies, this.stars]) {
@@ -124,12 +123,13 @@ export class NightScene {
     }
     this.drifters = [];
     this.twinkles = [];
+    this.darkness.clear();
     if (!map) return;
     const { width, height, tileSize: T, tiles } = map;
-    const typeAt = (x: number, y: number) =>
-      x < 0 || y < 0 || x >= width || y >= height ? TileType.Water : tiles[y * width + x];
-    for (let ty = -3; ty < height + 3; ty++) {
-      for (let tx = -3; tx < width + 3; tx++) {
+    this.darkness.rect(0, 0, width * T, height * T).fill(0xffffff);
+    const typeAt = (x: number, y: number) => tiles[y * width + x];
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
         const type = typeAt(tx, ty);
         const r = hash2(tx, ty, 300);
         if (type === TileType.Forest && r < 0.22) {

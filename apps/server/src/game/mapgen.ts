@@ -1,10 +1,14 @@
-import { TileType, type MapData } from '@vectoria/shared';
+import { TileType, wrapDelta, type MapData } from '@vectoria/shared';
 import { createRandom } from './random';
 
 const TILE_SIZE = 32;
 const SMOOTHING_PASSES = 4;
 
-/** Smoothed value noise → terrain bands, joined into one landmass. Placeholder until real world generation exists. */
+/**
+ * Smoothed value noise → terrain bands, joined into one landmass. The map wraps at its edges, so
+ * smoothing, islands and bridges run round them too and the terrain continues seamlessly.
+ * Placeholder until real world generation exists.
+ */
 export function generateMap(width: number, height: number, seed: number): MapData {
   const random = createRandom(seed);
   let field = Float32Array.from({ length: width * height }, random);
@@ -17,9 +21,8 @@ export function generateMap(width: number, height: number, seed: number): MapDat
         let count = 0;
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const nx = (x + dx + width) % width;
+            const ny = (y + dy + height) % height;
             sum += field[ny * width + nx]!;
             count++;
           }
@@ -76,7 +79,9 @@ function joinLand(tiles: TileType[], width: number, height: number): void {
       const fx = from % width;
       const fy = Math.floor(from / width);
       for (const to of mainland) {
-        const d = Math.abs((to % width) - fx) + Math.abs(Math.floor(to / width) - fy);
+        const d =
+          Math.abs(wrapDelta((to % width) - fx, width)) +
+          Math.abs(wrapDelta(Math.floor(to / width) - fy, height));
         if (d < best.d) best = { from, to, d };
       }
     }
@@ -88,18 +93,22 @@ function joinLand(tiles: TileType[], width: number, height: number): void {
   }
 }
 
-/** Tiles of a straight-ish 4-connected path from `from` to `to`, `BRIDGE_WIDTH` tiles wide. */
+/**
+ * Tiles of a straight-ish 4-connected path from `from` to `to` (the short way round the wrapped
+ * map), `BRIDGE_WIDTH` tiles wide.
+ */
 function bridge(from: number, to: number, width: number, height: number): number[] {
   let x = from % width;
   let y = Math.floor(from / width);
-  const tx = to % width;
-  const ty = Math.floor(to / width);
+  // Walk in unwrapped coordinates towards the nearest copy of the target; fold when adding.
+  const tx = x + wrapDelta((to % width) - x, width);
+  const ty = y + wrapDelta(Math.floor(to / width) - y, height);
   const path: number[] = [];
   const add = (px: number, py: number) => {
     for (let o = 0; o < BRIDGE_WIDTH; o++) {
-      // Widen sideways: below for horizontal runs, right of vertical runs (clamped to the map).
-      const wx = Math.min(width - 1, px + (py === ty ? 0 : o));
-      const wy = Math.min(height - 1, py + (py === ty ? o : 0));
+      // Widen sideways: below for horizontal runs, right of vertical runs.
+      const wx = (((px + (py === ty ? 0 : o)) % width) + width) % width;
+      const wy = (((py + (py === ty ? o : 0)) % height) + height) % height;
       path.push(wy * width + wx);
     }
   };
@@ -130,12 +139,12 @@ function landComponents(tiles: TileType[], width: number, height: number): numbe
       const x = i % width;
       const y = Math.floor(i / width);
       for (const n of [
-        x > 0 ? i - 1 : -1,
-        x < width - 1 ? i + 1 : -1,
-        y > 0 ? i - width : -1,
-        y < height - 1 ? i + width : -1,
+        y * width + ((x + width - 1) % width),
+        y * width + ((x + 1) % width),
+        ((y + height - 1) % height) * width + x,
+        ((y + 1) % height) * width + x,
       ]) {
-        if (n < 0 || seen[n] || tiles[n] === TileType.Water) continue;
+        if (seen[n] || tiles[n] === TileType.Water) continue;
         seen[n] = 1;
         stack.push(n);
       }

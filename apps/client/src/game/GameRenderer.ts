@@ -7,6 +7,8 @@ import {
   pointAlong,
   RESOURCES,
   TileType,
+  wrapCoord,
+  wrapDelta,
   type ArmyView,
   type GameView,
   type Resources,
@@ -17,8 +19,10 @@ import {
   Application,
   Container,
   Graphics,
+  Matrix,
   Sprite,
   Text,
+  UPDATE_PRIORITY,
   type PointData,
   type Ticker,
 } from 'pixi.js';
@@ -61,6 +65,8 @@ import { buildTerrain, type Clearing, type Terrain } from './terrain';
 const UNIT_SMOOTHING_MS = 150;
 /** Clicks within this many tiles of a site or army select it. */
 const PICK_RADIUS_TILES = 0.9;
+/** Copies of the wrapped map drawn per axis at most (the camera keeps the view within ~2). */
+const MAX_COPIES = 4;
 /** A click this close to the previous one (tiles) cycles to the next thing stacked there. */
 const REPICK_RADIUS_TILES = 0.5;
 /** Focus ring: studs orbit at this many radians per second; the ring locks on over LOCK_MS. */
@@ -270,7 +276,15 @@ export class GameRenderer {
   private readonly app: Application;
   private readonly art: MapArt;
   private readonly camera: Camera;
+  /** Holds the camera transform only; the layer groups below are drawn with it (`renderCopies`). */
   private readonly world = new Container();
+  /**
+   * The map wraps, so the world is drawn once per copy that reaches into the view. Each group is
+   * drawn in every copy before the next group starts, so a piece near a seam never ends up under
+   * the neighbouring copy's ground.
+   */
+  private readonly groups: Container[];
+  private readonly copyTransform = new Matrix();
   private readonly terrain = new Container();
   /** Marching route dashes (redrawn every frame) and their static target marks. */
   private readonly routes = new Graphics();
@@ -375,26 +389,27 @@ export class GameRenderer {
     this.night = new NightScene(art);
     // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
     // sites and their lamp light, deposits, armies, the focus ring, labels, alarms, fireflies.
-    this.world.addChild(
-      this.terrain,
-      this.night.darkness,
-      this.night.stars,
-      this.alertUnderLayer,
-      this.routes,
-      this.wakes,
-      this.focusGround,
-      this.night.glowUnder,
-      this.siteLayer,
-      this.night.glowOver,
-      this.spotLayer,
-      this.bribeMarks,
-      this.armyLayer,
-      this.focusTop,
-      this.labelLayer,
-      this.alertLayer,
-      this.night.fireflies,
-    );
-    app.stage.addChild(this.world);
+    const group = (...layers: Container[]) => {
+      const container = new Container();
+      container.addChild(...layers);
+      return container;
+    };
+    this.groups = [
+      // The map itself: exactly one copy's area (terrain and night are clipped to it).
+      group(this.terrain, this.night.darkness, this.night.stars),
+      group(this.alertUnderLayer, this.routes, this.wakes, this.focusGround),
+      group(
+        this.night.glowUnder,
+        this.siteLayer,
+        this.night.glowOver,
+        this.spotLayer,
+        this.bribeMarks,
+        this.armyLayer,
+        this.focusTop,
+      ),
+      group(this.labelLayer, this.alertLayer, this.night.fireflies),
+    ];
+    // The stage stays empty (Pixi still clears the canvas); `renderCopies` draws the world after.
 
     this.camera = new Camera(app.canvas, this.world, {
       onClick: (point) => {
@@ -408,6 +423,7 @@ export class GameRenderer {
     });
 
     app.ticker.add(this.animate);
+    app.ticker.add(this.renderCopies, undefined, UPDATE_PRIORITY.UTILITY);
     // Pieces in a colour seen for the first time are rasterised on demand; redraw once ready.
     art.pieces.onReady = () => {
       this.sitesKey = '';
@@ -428,8 +444,75 @@ export class GameRenderer {
     this.art.pieces.onReady = null;
     this.unsubscribe();
     this.camera.destroy();
+    this.app.ticker.remove(this.renderCopies);
+    for (const g of this.groups) g.destroy({ children: true });
     this.app.destroy({ removeView: true }, { children: true });
   }
+
+  /** Size of one copy of the map in world px (the wrap period). */
+  private get worldSize(): { width: number; height: number } | null {
+    if (!this.map) return null;
+    return {
+      width: this.map.width * this.map.tileSize,
+      height: this.map.height * this.map.tileSize,
+    };
+  }
+
+  /** A world px point moved into the first copy of the map. */
+  private fold(point: PointData): PointData {
+    const size = this.worldSize;
+    if (!size) return point;
+    return { x: wrapCoord(point.x, size.width), y: wrapCoord(point.y, size.height) };
+  }
+
+  /**
+   * Draws every layer group once for each copy of the wrapped map that reaches into the view,
+   * group by group (see `groups`). Runs after Pixi's own render of the empty stage.
+   */
+  private readonly renderCopies = (): void => {
+    const renderer = this.app.renderer;
+    this.world.updateLocalTransform();
+    const base = this.world.localTransform;
+    const size = this.worldSize;
+    if (!size) {
+      for (const g of this.groups) renderer.render({ container: g, transform: base, clear: false });
+      return;
+    }
+    const zoom = this.world.scale.x;
+    const { width: screenWidth, height: screenHeight } = this.app.screen;
+    const view = {
+      minX: -this.world.x / zoom,
+      minY: -this.world.y / zoom,
+      maxX: (screenWidth - this.world.x) / zoom,
+      maxY: (screenHeight - this.world.y) / zoom,
+    };
+    // Copies whose content (`bounds`, shifted by whole periods) overlaps the view, at most a few
+    // per axis however far out the camera zooms.
+    const copies = (min: number, max: number, from: number, to: number, period: number) => {
+      const first = Math.floor((from - max) / period) + 1;
+      const last = Math.min(first + MAX_COPIES - 1, Math.ceil((to - min) / period) - 1);
+      const out: number[] = [];
+      for (let i = first; i <= last; i++) out.push(i);
+      return out;
+    };
+    this.groups.forEach((g, index) => {
+      const b =
+        index === 0
+          ? { minX: 0, minY: 0, maxX: size.width, maxY: size.height }
+          : g.getLocalBounds();
+      if (!(b.maxX > b.minX) || !(b.maxY > b.minY)) return;
+      const columns = copies(b.minX, b.maxX, view.minX, view.maxX, size.width);
+      const rows = copies(b.minY, b.maxY, view.minY, view.maxY, size.height);
+      for (const j of rows) {
+        for (const i of columns) {
+          const m = this.copyTransform.copyFrom(base);
+          m.tx += i * size.width * base.a;
+          m.ty += j * size.height * base.d;
+          renderer.render({ container: g, transform: m, clear: false });
+        }
+      }
+    });
+  };
 
   private px(position: Vec2): PointData {
     const size = this.map?.tileSize ?? 32;
@@ -445,7 +528,11 @@ export class GameRenderer {
   private pick(point: PointData, current: Selection | null): Selection | null {
     if (!this.map || !this.view) return null;
     const size = this.map.tileSize;
-    const tile = { x: point.x / size, y: point.y / size };
+    const { width, height } = this.map;
+    // The click may land on any copy of the map; compare the short way round.
+    const tile = { x: wrapCoord(point.x / size, width), y: wrapCoord(point.y / size, height) };
+    const apart = (a: Vec2, b: Vec2) =>
+      Math.hypot(wrapDelta(a.x - b.x, width), wrapDelta(a.y - b.y, height));
     const candidates: { selection: Selection; position: Vec2 }[] = [
       ...this.view.armies.map((a) => ({
         selection: { kind: 'army' as const, id: a.id },
@@ -477,7 +564,7 @@ export class GameRenderer {
     const hits = candidates
       .map(({ selection, position }) => ({
         selection,
-        d: Math.hypot(position.x - tile.x, position.y - tile.y),
+        d: apart(position, tile),
       }))
       .filter((hit) => hit.d < PICK_RADIUS_TILES)
       .sort((a, b) => a.d - b.d)
@@ -485,7 +572,7 @@ export class GameRenderer {
     // Clicking the same spot again steps through everything stacked there (nearest first).
     const last = this.lastPick;
     this.lastPick = tile;
-    const again = last && Math.hypot(last.x - tile.x, last.y - tile.y) < REPICK_RADIUS_TILES;
+    const again = last && apart(last, tile) < REPICK_RADIUS_TILES;
     const index = again
       ? hits.findIndex((h) => h.kind === current?.kind && h.id === current.id)
       : -1;
@@ -531,7 +618,8 @@ export class GameRenderer {
   }
 
   /** Whether a world point lies on water as drawn (off the map counts as sea). */
-  private isWater(point: PointData): boolean {
+  private isWater(raw: PointData): boolean {
+    const point = this.fold(raw);
     if (this.built) return this.built.isWater(point.x, point.y);
     if (!this.map) return false;
     const size = this.map.tileSize;
@@ -547,6 +635,7 @@ export class GameRenderer {
     this.built = null;
     this.clearingsKey = '';
     this.night.setMap(map);
+    this.camera.setWrap(this.worldSize);
     if (!map) return;
     this.buildGround(this.view);
     this.frame(null);
@@ -683,9 +772,9 @@ export class GameRenderer {
       const p = Math.min(1, Math.max(0, (now - wagon.departedAt) / span));
       const at = pointAlong(wagon.route, p);
       const ahead = pointAlong(wagon.route, Math.min(1, p + 0.01));
-      wagon.container.position.copyFrom(at);
+      wagon.container.position.copyFrom(this.fold(at));
       wagon.container.scale.set(k);
-      wagon.container.zIndex = at.y;
+      wagon.container.zIndex = wagon.container.y;
       // The art faces right; it turns where the road heads left. Near-vertical legs keep it.
       if (Math.abs(ahead.x - at.x) > 0.25 * Math.abs(ahead.y - at.y)) {
         wagon.figure.scale.x = ahead.x < at.x ? -1 : 1;
@@ -1168,6 +1257,8 @@ export class GameRenderer {
    */
   private armyOffsets(armies: readonly ArmyView[], u: number): Map<string, PointData> {
     const offsets = new Map<string, PointData>();
+    // Only called with a map (`drawArmies`); stacks form the short way round its edges too.
+    const { width, height } = this.map!;
     const gatherSlots = new Map<string, number>();
     const loose: ArmyView[] = [];
     for (const army of [...armies].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -1199,8 +1290,10 @@ export class GameRenderer {
       const group = loose.filter(
         (other) =>
           !clustered.has(other.id) &&
-          Math.hypot(other.position.x - army.position.x, other.position.y - army.position.y) <
-            STACK_RADIUS_TILES,
+          Math.hypot(
+            wrapDelta(other.position.x - army.position.x, width),
+            wrapDelta(other.position.y - army.position.y, height),
+          ) < STACK_RADIUS_TILES,
       );
       for (const member of group) clustered.add(member.id);
       const perRow = group.length > 4 ? Math.ceil(group.length / 2) : group.length;
@@ -1720,8 +1813,22 @@ export class GameRenderer {
       const target = motion
         ? pointAlong(motion.route, (clock - motion.from) / (motion.to - motion.from))
         : sprite.target;
-      container.x += (target.x - container.x) * t;
-      container.y += (target.y - container.y) * t;
+      // Ease the short way round the wrapped map, and keep the piece inside the first copy (the
+      // route may run past an edge; every copy draws it anyway).
+      const size = this.worldSize;
+      if (size) {
+        container.x = wrapCoord(
+          container.x + wrapDelta(target.x - container.x, size.width) * t,
+          size.width,
+        );
+        container.y = wrapCoord(
+          container.y + wrapDelta(target.y - container.y, size.height) * t,
+          size.height,
+        );
+      } else {
+        container.x += (target.x - container.x) * t;
+        container.y += (target.y - container.y) * t;
+      }
       if (motion) {
         // Bow toward where the route goes, not where the easing nudges: a server correction that
         // pulls the army back a little must not turn the ship around. Near-vertical legs keep it.
@@ -1844,7 +1951,7 @@ export class GameRenderer {
         .stroke({ width: 1.2 * s, color: CARGO_GOLD, alpha: 0.55 });
     }
     const pulse = 0.5 + 0.5 * Math.sin(seconds * 4);
-    for (const army of bribableArmies(view, map.width)) {
+    for (const army of bribableArmies(view, map)) {
       const { x, y, radius } = at(army);
       const r = radius * (1.25 + 0.2 * pulse);
       g.circle(x, y, r)

@@ -225,7 +225,7 @@ function SendForm({
   const withCard = useCard && cardUsable;
   const forced = withCard && activeCard === 'forcedMarch';
   const sea = withCard && activeCard === 'sea' && target.kind !== 'army';
-  const base = bases.find((b) => b.id === fromId) ?? nearestBase(bases, position);
+  const base = bases.find((b) => b.id === fromId) ?? nearestBase(bases, position, map);
   const travel = useMemo(
     () => (map && base ? eta(map, view, base.position, target, position, forced, sea) : null),
     // Raids move with the convoy; recompute on every state update for those.
@@ -541,7 +541,7 @@ function BribeOption({ view, army }: { view: GameView; army: ArmyView }) {
   const map = useGameStore((s) => s.map);
   const setBribing = useGameStore((s) => s.setBribing);
   if (!map || !view.self.cards.includes('bribe')) return null;
-  const host = bribeHostFor(view, map.width, army);
+  const host = bribeHostFor(view, map, army);
   if (!host) return null;
   return (
     <Locked className="mt-2 border-t border-ink/30 pt-2">

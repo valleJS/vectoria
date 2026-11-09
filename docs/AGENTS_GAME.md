@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-08
+last_verified: 2026-11-09
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 9936727203584d87e8351f64f469c0da64fb2c1c
@@ -26,7 +26,9 @@ to ruins keeping their stock) and `swapCastles` (two home castles trade places, 
 stays with each player; armies returning home move along with their castle and keep their arrival time;
 armies that set out from either castle keep target and progress (as a share of the way) but
 start from its new place; other attackers re-route from where they stand). The
-map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
+map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square), and **wraps at every
+edge** (a torus, `shared/map.ts`: `wrapPoint`, `nearestImage`, `mapDistance`): walking off one side
+enters the opposite one, every distance takes the short way round. Admin "reset"
 returns to registration, keeping registrations.
 
 ## Map scaling
@@ -94,7 +96,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 
 ## Armies
 
-- Movement follows land: A* over the tile grid (8 directions, no corner cutting past water),
+- Movement follows land: A* over the wrapped tile grid (8 directions, no corner cutting past water; a
+  route crossing an edge keeps going past it so its waypoints stay continuous, positions in game
+  state are folded back into the map),
   then straightened where a direct line keeps clearance from water (`shared/pathfinding.ts`).
   Travel time is path length; crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under

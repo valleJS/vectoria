@@ -1,10 +1,12 @@
 import type { Vec2 } from './entities';
-import { TileType, type MapData } from './map';
+import { mapDistance, nearestImage, TileType, wrapCoord, wrapDelta, type MapData } from './map';
 import { travelMs } from './rules';
 
 // Movement over land. Armies walk tile to tile (8 directions, no corner cutting past water);
 // the tile path is then straightened wherever a direct line stays on land. Shared so the
 // client can preview routes, travel times and raids exactly as the server computes them.
+// The map wraps at its edges (`map.ts`): neighbours run round them, and a route that crosses an
+// edge keeps going past it (waypoints stay continuous), so its length is the real walk.
 
 /** How far (tiles) a straightened segment must stay from water on either side. */
 const CLEARANCE = 0.25;
@@ -25,8 +27,8 @@ const NEIGHBOURS: readonly [number, number, number][] = [
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
 function tileOf(map: MapData, p: Vec2): number {
-  const x = Math.min(map.width - 1, Math.max(0, Math.floor(p.x)));
-  const y = Math.min(map.height - 1, Math.max(0, Math.floor(p.y)));
+  const x = Math.min(map.width - 1, Math.floor(wrapCoord(p.x, map.width)));
+  const y = Math.min(map.height - 1, Math.floor(wrapCoord(p.y, map.height)));
   return y * map.width + x;
 }
 
@@ -35,7 +37,6 @@ function centreOf(map: MapData, index: number): Vec2 {
 }
 
 export function isLandAt(map: MapData, p: Vec2): boolean {
-  if (p.x < 0 || p.y < 0 || p.x >= map.width || p.y >= map.height) return false;
   return map.tiles[tileOf(map, p)] !== TileType.Water;
 }
 
@@ -101,9 +102,8 @@ function forEachNeighbour(
   const x = index % map.width;
   const y = Math.floor(index / map.width);
   for (const [dx, dy, cost] of NEIGHBOURS) {
-    const nx = x + dx;
-    const ny = y + dy;
-    if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+    const nx = (x + dx + map.width) % map.width;
+    const ny = (y + dy + map.height) % map.height;
     const next = ny * map.width + nx;
     if (!walkable(next)) continue;
     if (dx !== 0 && dy !== 0 && !(walkable(y * map.width + nx) && walkable(ny * map.width + x))) {
@@ -137,13 +137,15 @@ function lineOnLand(map: MapData, a: Vec2, b: Vec2, allowed: number[]): boolean 
 }
 
 /**
- * Shortest land route from `from` to `to` as waypoints (first = `from`, last = `to`), or null if
- * no land connection exists.
+ * Shortest land route from `from` to `to` as waypoints, or null if no land connection exists.
+ * The first waypoint is `from` moved into the map, the last the copy of `to` the route reaches
+ * (past an edge if it crosses one).
  */
-export function findPath(map: MapData, from: Vec2, to: Vec2): Vec2[] | null {
+export function findPath(map: MapData, rawFrom: Vec2, to: Vec2): Vec2[] | null {
+  const from = { x: wrapCoord(rawFrom.x, map.width), y: wrapCoord(rawFrom.y, map.height) };
   const start = tileOf(map, from);
   const goal = tileOf(map, to);
-  if (start === goal) return [from, to];
+  if (start === goal) return [from, nearestImage(map, from, to)];
   const walkable = landTest(map, start, goal);
   const cost = new Float64Array(map.tiles.length).fill(Infinity);
   const came = new Int32Array(map.tiles.length).fill(-1);
@@ -151,8 +153,8 @@ export function findPath(map: MapData, from: Vec2, to: Vec2): Vec2[] | null {
   const gx = goal % map.width;
   const gy = Math.floor(goal / map.width);
   const heuristic = (i: number) => {
-    const dx = Math.abs((i % map.width) - gx);
-    const dy = Math.abs(Math.floor(i / map.width) - gy);
+    const dx = Math.abs(wrapDelta((i % map.width) - gx, map.width));
+    const dy = Math.abs(wrapDelta(Math.floor(i / map.width) - gy, map.height));
     return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
   };
   const open = new Heap();
@@ -176,9 +178,12 @@ export function findPath(map: MapData, from: Vec2, to: Vec2): Vec2[] | null {
   const tiles: number[] = [];
   for (let i = goal; i !== -1; i = came[i]!) tiles.push(i);
   tiles.reverse();
-  const raw = tiles.map((i) => centreOf(map, i));
-  raw[0] = from;
-  raw[raw.length - 1] = to;
+  // Unwrap: each tile centre is taken next to the one before, so the line never jumps an edge.
+  const raw: Vec2[] = [from];
+  for (let k = 1; k < tiles.length; k++) {
+    raw.push(nearestImage(map, raw[k - 1]!, centreOf(map, tiles[k]!)));
+  }
+  raw[raw.length - 1] = nearestImage(map, raw[raw.length - 1]!, to);
   return straighten(map, raw, [start, goal]);
 }
 
@@ -244,7 +249,7 @@ export function distanceField(map: MapData, from: Vec2, limit = Infinity): Float
   const cost = new Float64Array(map.tiles.length).fill(Infinity);
   const closed = new Uint8Array(map.tiles.length);
   const open = new Heap();
-  cost[start] = distance(from, centreOf(map, start));
+  cost[start] = mapDistance(map, from, centreOf(map, start));
   open.push(start, cost[start]);
   while (open.size > 0) {
     const current = open.pop();
@@ -292,7 +297,7 @@ export function planIntercept(
     if (track.arriveClock - clock < span * 0.02) break;
     const position = pointAlong(track.path, fraction);
     const tile = tileOf(map, position);
-    const reach = field[tile]! + distance(position, centreOf(map, tile));
+    const reach = field[tile]! + mapDistance(map, position, centreOf(map, tile));
     if (!Number.isFinite(reach)) continue;
     if (now + travelMs(reach, map.width, forcedMarch, speed) <= clock) return { position, clock };
   }

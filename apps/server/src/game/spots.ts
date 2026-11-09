@@ -2,6 +2,7 @@ import {
   CROSS_MAP_HOURS,
   distanceField,
   findPath,
+  mapDistance,
   pathLength,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
@@ -12,6 +13,8 @@ import {
   SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
   SPOT_SAME_GAP_HOURS,
+  wrapCoord,
+  wrapDelta,
   type MapData,
   type SpotKind,
   type Vec2,
@@ -70,7 +73,6 @@ const centre = (map: MapData, i: number): Vec2 => ({
   x: (i % map.width) + 0.5,
   y: Math.floor(i / map.width) + 0.5,
 });
-const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 const tileOf = (map: MapData, p: Vec2) => Math.floor(p.y) * map.width + Math.floor(p.x);
 
 /** Tiles walked in `hours` of game time on this map. */
@@ -142,8 +144,8 @@ export function crampedCastles(ctx: Context): number[] {
     const roomy = ring.some((a) =>
       ring.some(
         (b) =>
-          distance(a, b) >= ctx.gap &&
-          ring.some((c) => distance(a, c) >= ctx.gap && distance(b, c) >= ctx.gap),
+          mapDistance(map, a, b) >= ctx.gap &&
+          ring.some((c) => mapDistance(map, a, c) >= ctx.gap && mapDistance(map, b, c) >= ctx.gap),
       ),
     );
     if (!roomy || ctx.farRing[p]!.length === 0) cramped.push(p);
@@ -210,7 +212,7 @@ function context(
     max: realBounds.max,
   };
   const candidates = land
-    .filter((p) => taken.every((t) => distance(t, p) >= MIN_GAP))
+    .filter((p) => taken.every((t) => mapDistance(map, t, p) >= MIN_GAP))
     .map((p) => tileOf(map, p))
     .filter((tile) => grid.every((f) => f[tile]! >= gridBounds.min));
   if (candidates.length < SPOT_KINDS.length) throw new Error('Too little free land for spots');
@@ -355,7 +357,7 @@ const nearest = new Float64Array(KINDS.length);
 function evaluate(ctx: Context, layout: Layout, dist: Distances, bounds: Bounds): Evaluation {
   const { spots } = layout;
   const n = spots.length;
-  const width = ctx.map.width;
+  const { width, height } = ctx.map;
   const tiles = new Int32Array(n);
   const kinds = new Int8Array(n);
   const xs = new Float64Array(n);
@@ -416,8 +418,8 @@ function evaluate(ctx: Context, layout: Layout, dist: Distances, bounds: Bounds)
   const reach = Math.max(gap, sameGap);
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const dx = xs[i]! - xs[j]!;
-      const dy = ys[i]! - ys[j]!;
+      const dx = wrapDelta(xs[i]! - xs[j]!, width);
+      const dy = wrapDelta(ys[i]! - ys[j]!, height);
       const squared = dx * dx + dy * dy;
       if (squared >= reach * reach) continue;
       const d = Math.sqrt(squared);
@@ -458,7 +460,7 @@ function seed(ctx: Context, random: () => number): Layout {
     const at = centre(map, tile);
     let room = Infinity;
     for (const s of layout.spots) {
-      const d = distance(at, centre(map, s.tile));
+      const d = mapDistance(map, at, centre(map, s.tile));
       room = Math.min(room, s.kind === kind ? d - ctx.sameGap : d - ctx.gap);
     }
     return room;
@@ -491,7 +493,9 @@ function seed(ctx: Context, random: () => number): Layout {
   // Fill holes: a spot close to a random uncovered tile, of the kind that fits best there.
   for (let guard = 0; guard < 200 && layout.holes > 0; guard++) {
     const hole = centre(map, pick(layout.holeTiles()));
-    const pool = ctx.candidates.filter((t) => distance(centre(map, t), hole) <= ctx.holeLimit);
+    const pool = ctx.candidates.filter(
+      (t) => mapDistance(map, centre(map, t), hole) <= ctx.holeLimit,
+    );
     if (pool.length === 0) break;
     const kinds = shuffle([...SPOT_KINDS], random);
     let bestTile = pool[0]!;
@@ -503,7 +507,7 @@ function seed(ctx: Context, random: () => number): Layout {
         const score =
           Math.min(spacing(tile, kind), ctx.gap) -
           100 * conflicts(tile, kind) -
-          0.1 * distance(centre(map, tile), hole);
+          0.1 * mapDistance(map, centre(map, tile), hole);
         if (score > bestScore) {
           bestScore = score;
           bestTile = tile;
@@ -666,9 +670,11 @@ function polish(ctx: Context, layout: Layout, random: () => number): Evaluation 
 }
 
 function nearbyTile(map: MapData, tile: number, radius: number, random: () => number): number {
-  const x = (tile % map.width) + Math.round((random() * 2 - 1) * radius);
-  const y = Math.floor(tile / map.width) + Math.round((random() * 2 - 1) * radius);
-  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return tile;
+  const x = wrapCoord((tile % map.width) + Math.round((random() * 2 - 1) * radius), map.width);
+  const y = wrapCoord(
+    Math.floor(tile / map.width) + Math.round((random() * 2 - 1) * radius),
+    map.height,
+  );
   return y * map.width + x;
 }
 
