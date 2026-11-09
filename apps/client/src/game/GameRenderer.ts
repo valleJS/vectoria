@@ -289,10 +289,10 @@ export class GameRenderer {
   private readonly siteLayer = new Container({ sortableChildren: true });
   /**
    * Resource deposits, above castles, outposts and chests so no site hides one (a deposit next to
-   * a castle stays in view), but under the labels and the armies that walk to and work at them.
+   * a castle stays in view), but under the armies that walk to and work at them and the labels.
    */
   private readonly spotLayer = new Container({ sortableChildren: true });
-  /** Site nameplates, above every site so no piece hides a label; armies walk in front. */
+  /** Site nameplates, above every site and army so no piece ever hides a name. */
   private readonly labelLayer = new Container({ sortableChildren: true });
   private readonly alertLayer = new Container();
   private alerts: SiteAlert[] = [];
@@ -315,9 +315,9 @@ export class GameRenderer {
   /** Scale of sites and armies at the current zoom (see PIECE_ZOOM). */
   private pieceScale = 1;
   /**
-   * Focus ring around the selection: a soft disc on the ground under the piece, and over
-   * everything else on the map the parchment band with orbiting studs and four arrowheads that
-   * point at it, so no site, label or army ever hides it.
+   * Focus ring around the selection: a soft disc on the ground under the piece, and over every
+   * site, deposit and army the parchment band with orbiting studs and four arrowheads that point
+   * at it, so no piece hides it; labels and alarms stay in front, so it never covers a name.
    */
   private readonly focusGround = new Graphics();
   private readonly focusTop = new Graphics();
@@ -374,7 +374,7 @@ export class GameRenderer {
     this.art = art;
     this.night = new NightScene(art);
     // Bottom to top: ground (terrain, night, marks on the ground, routes, wakes, focus disc),
-    // sites and their lamp light, deposits, labels, alarms, armies, fireflies, the focus ring.
+    // sites and their lamp light, deposits, armies, the focus ring, labels, alarms, fireflies.
     this.world.addChild(
       this.terrain,
       this.night.darkness,
@@ -387,12 +387,12 @@ export class GameRenderer {
       this.siteLayer,
       this.night.glowOver,
       this.spotLayer,
-      this.labelLayer,
-      this.alertLayer,
       this.bribeMarks,
       this.armyLayer,
-      this.night.fireflies,
       this.focusTop,
+      this.labelLayer,
+      this.alertLayer,
+      this.night.fireflies,
     );
     app.stage.addChild(this.world);
 
@@ -1579,9 +1579,9 @@ export class GameRenderer {
   }
 
   /**
-   * Focus ring, redrawn every frame: on the ground a soft disc; on top of the map a parchment
-   * band edged in ink with a thread and four orbiting studs in the accent colour, and four
-   * arrowheads on the diagonals that breathe toward the piece. A new selection locks on: the ring
+   * Focus ring, redrawn every frame: on the ground a soft disc; above sites and armies, under
+   * the labels, a parchment band edged in ink with a thread and four orbiting studs in the accent
+   * colour, and four arrowheads on the diagonals that breathe toward the piece. A new selection locks on: the ring
    * shrinks onto it from a little wider while fading in.
    */
   private drawFocus(seconds: number, now: number, tint: number): void {
