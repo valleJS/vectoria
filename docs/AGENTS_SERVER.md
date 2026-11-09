@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-09
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 9936727203584d87e8351f64f469c0da64fb2c1c
+sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
 ---
 
 # Server codemap (`apps/server`)
@@ -23,7 +23,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/services.ts` | Optional Postgres + Redis connect/close |
 | `src/game/GameState.ts` | Authoritative game: phases, commands, bases, clock advance, arrivals, combat, raids, feed, views, save migration |
 | `src/game/GameState.ts` § Stats | Per-player `PlayerStats` (`packages/shared/src/stats.ts`) in the save, reset with the round: online time added each tick for connected players (`trackOnline`, per calendar day, gameday-hours share), sessions on first connection, `noteCommand` per client command (from `GameServer`); attacks counted *started* when ordered (`markAttack` on send/redirect, kind kept on the army as `attack`) and *executed*/*won* where the battle resolves (`assaultCastle`, `assaultOutpost`, `raid`, `duoAssault`); defenses, troop losses, gathering, plunder, chests, trades, cards alongside. `adminState` sends them with `today` and `serverTime` |
-| `src/game/calendar.ts` | Mon–Fri 10–18 schedule in a time zone, minus admin break days (`Schedule.breakDays`); downtime catch-up |
+| `packages/shared/src/calendar.ts` | Mon–Fri 10–18 schedule in a time zone, minus admin break days (`Schedule.breakDays`); downtime catch-up. Shared so the client can predict arrival times (`realTimeAfter`) |
 | `src/game/world.ts` | Map sizing; castles, outposts, spots on the largest landmass |
 | `src/game/spots.ts` | Spot layout over wood, stone, gold and trader: hard distance rules per castle (one far wood/gold 2–4 h, rest < 2 h, none < 1 h), minimum gaps, no holes; soft balance (see AGENTS_GAME „Spot layout“); `GameState.relayoutSpots` re-lays running games once (`spotLayout` < `SPOT_LAYOUT`) |
 | `src/game/persistence.ts` | JSON save file (`DATA_FILE`), atomic writes every 5 s; v1 saves are upgraded on load |

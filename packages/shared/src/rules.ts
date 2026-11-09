@@ -112,6 +112,20 @@ export const CASTLE_PLUNDER_SHARE = 0.5;
 /** Outposts and raided convoys lose everything they hold. */
 export const OUTPOST_PLUNDER_SHARE = 1;
 export const CONVOY_PLUNDER_SHARE = 1;
+/**
+ * The same load can change hands this often by raids: stolen once, stolen back once. After that
+ * the convoy carrying it can no longer be raided.
+ */
+export const MAX_CARGO_RAIDS = 2;
+
+/** Armies a player may have on the map at once (marching, gathering, waiting). */
+export const MAX_ARMIES = 10;
+
+/**
+ * Once a foreign assault on a base is at most this far from arriving (or waits at its gates), no
+ * troops may leave that base: defenders cannot slip away just before the attack.
+ */
+export const ASSAULT_LOCK_MS = 20 * 60 * 1000;
 
 /** Chests spawning at each gameday start, up to `maxChestsOnMap` lying on the map. */
 export const CHESTS_PER_GAMEDAY = 3;

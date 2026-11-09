@@ -5,3 +5,4 @@ export * from './pathfinding';
 export * from './rules';
 export * from './duo';
 export * from './stats';
+export * from './calendar';

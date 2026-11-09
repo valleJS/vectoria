@@ -1,9 +1,12 @@
 import {
+  ASSAULT_LOCK_MS,
   BAREFOOT_SPEED,
   BRIBE_RANGE_HOURS,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
   LOADED_SPEED,
+  MAX_ARMIES,
+  MAX_CARGO_RAIDS,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
   SPOT_MAX_HOURS,
@@ -39,6 +42,21 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'raid-limit-army-cap-assault-lock',
+    date: '2026-11-09',
+    title: 'Beute-Grenze, höchstens 10 Züge, Abzugssperre',
+    body: (
+      <>
+        <b>Überfälle</b>: Dieselbe Beute lässt sich höchstens {MAX_CARGO_RAIDS}-mal rauben — einmal
+        geraubt, einmal zurückgeraubt, danach ist sie sicher. <b>Züge</b>: Jede*r kann höchstens{' '}
+        {MAX_ARMIES} Züge gleichzeitig unterwegs haben. <b>Abzugssperre</b>: Ist ein sichtbarer
+        Angriff auf eine Burg oder einen Stützpunkt nur noch {formatGameDuration(ASSAULT_LOCK_MS)}{' '}
+        entfernt, kann dort niemand mehr abziehen. Und wie bisher: Wer einen Kampf gewinnt, verliert
+        nie mehr Truppen, als die Gegenseite hatte.
+      </>
+    ),
+  },
   {
     id: 'cards-pickpocket-bribe',
     date: '2026-11-08',

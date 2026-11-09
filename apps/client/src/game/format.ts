@@ -1,5 +1,9 @@
 import {
+  dayKey,
+  GAMEDAY_MS,
   outpostName,
+  realTimeAfter,
+  WEEKDAY_SCHEDULE,
   RESOURCE_NAMES,
   SPOT_NAMES,
   RESOURCES,
@@ -7,6 +11,7 @@ import {
   type CaravanTrip,
   type CaravanWagon,
   type CardType,
+  type ClockState,
   type GameView,
   type Outpost,
   type Resources,
@@ -20,6 +25,69 @@ export function formatGameDuration(ms: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return h > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${m}m`;
+}
+
+const timeFormats = new Map<string, Intl.DateTimeFormat>();
+const weekdayFormats = new Map<string, Intl.DateTimeFormat>();
+
+function cachedFormat(
+  cache: Map<string, Intl.DateTimeFormat>,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  let format = cache.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('de-DE', { ...options, timeZone });
+    cache.set(timeZone, format);
+  }
+  return format;
+}
+
+/** Where a prediction lands: the real instant (null while paused) and whether a gameday lies between. */
+export interface Arrival {
+  at: number | null;
+  nextGameday: boolean;
+}
+
+/**
+ * When `ms` more game-clock milliseconds will have passed, in real time: the clock only runs in
+ * the gameday hours (minus break days), so nights, weekends and break days are skipped.
+ */
+export function arrivalOf(clock: ClockState, ms: number, now = Date.now()): Arrival {
+  if (clock.mode === 'always') {
+    const at = clock.paused ? null : now + Math.max(0, ms) / clock.timeScale;
+    const day = (t: number) => Math.floor(t / GAMEDAY_MS);
+    return { at, nextGameday: day(clock.clock + Math.max(0, ms)) > day(clock.clock) };
+  }
+  const schedule = { ...WEEKDAY_SCHEDULE, timezone: clock.timezone, breakDays: clock.breakDays };
+  const at = realTimeAfter(schedule, now, ms, clock.timeScale);
+  if (at === null) return { at: null, nextGameday: true };
+  return {
+    at: clock.paused ? null : at,
+    nextGameday: dayKey(schedule, new Date(at)) !== dayKey(schedule, new Date(now)),
+  };
+}
+
+/**
+ * A predicted time as the arrival with the span behind it: "10:55 (55m)"; another day gets its
+ * weekday ("Di 10:55 (9h 10m)") and a warning that it lands in a later gameday. While the game is
+ * paused only the span can be told.
+ */
+export function formatEta(clock: ClockState, ms: number, now = Date.now()): string {
+  const span = formatGameDuration(ms);
+  const { at, nextGameday } = arrivalOf(clock, ms, now);
+  const warning = nextGameday ? ' · ⚠ erst am nächsten Spieltag' : '';
+  if (at === null) return `in ${span}${warning}`;
+  const zone = clock.timezone;
+  const time = cachedFormat(timeFormats, zone, { hour: '2-digit', minute: '2-digit' }).format(at);
+  const sameDay =
+    clock.mode === 'always' ||
+    cachedFormat(weekdayFormats, zone, { weekday: 'short' }).format(at) ===
+      cachedFormat(weekdayFormats, zone, { weekday: 'short' }).format(now);
+  const weekday = sameDay
+    ? ''
+    : `${cachedFormat(weekdayFormats, zone, { weekday: 'short' }).format(at).replace('.', '')} `;
+  return `${weekday}${time} (${span})${warning}`;
 }
 
 /**

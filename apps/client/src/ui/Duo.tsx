@@ -14,7 +14,7 @@ import { ArrowRightIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import {
   cssColor,
   describeTarget,
-  formatGameDuration,
+  formatEta,
   ownBases,
   playerColor,
   playerHeraldry,
@@ -226,15 +226,15 @@ function Chip({ children }: { children: ReactNode }) {
 }
 
 /** Planned timing as chips, or why there is no plan. */
-function TimeChips({ times }: { times: DuoTimes }) {
+function TimeChips({ view, times }: { view: GameView; times: DuoTimes }) {
   if (times === null) return null;
   if (times === 'no-route') {
     return <div className="text-xs text-seal italic">Kein Landweg für dieses Duo.</div>;
   }
   return (
     <div className="flex flex-wrap gap-1">
-      <Chip>Treffpunkt in {formatGameDuration(times.meetMs)}</Chip>
-      <Chip>Angriff in {formatGameDuration(times.totalMs)}</Chip>
+      <Chip>Treffpunkt {formatEta(view.clock, times.meetMs)}</Chip>
+      <Chip>Angriff {formatEta(view.clock, times.totalMs)}</Chip>
     </div>
   );
 }
@@ -392,7 +392,7 @@ export function DuoForm({ view, target }: { view: GameView; target: ArmyTarget }
           { playerId: partnerId, troops: partnerId ? partnerTroops : 0 },
         ]}
       />
-      <TimeChips times={times} />
+      <TimeChips view={view} times={times} />
       <div className="flex justify-between gap-2">
         <Button onClick={() => setOpen(false)}>Abbrechen</Button>
         <Button
@@ -474,7 +474,7 @@ function PactItem({ view, pact }: { view: GameView; pact: PactView }) {
       />
       {pact.status === 'offered' ? (
         <>
-          <TimeChips times={times} />
+          <TimeChips view={view} times={times} />
           {answer ? (
             <>
               <div className="text-xs text-ink-soft">
@@ -526,14 +526,14 @@ function PactItem({ view, pact }: { view: GameView; pact: PactView }) {
         <>
           <div className="flex flex-wrap gap-1">
             {pact.status === 'marching' && pact.meetClock !== null ? (
-              <Chip>Treffpunkt in {formatGameDuration(Math.max(0, pact.meetClock - now))}</Chip>
+              <Chip>Treffpunkt {formatEta(view.clock, pact.meetClock - now)}</Chip>
             ) : (
               <Chip>Vereint · Ziel sichtbar</Chip>
             )}
             {pact.attackClock !== null && (
               <Chip>
-                Angriff in {pact.status === 'marching' ? 'ca. ' : ''}
-                {formatGameDuration(Math.max(0, pact.attackClock - now))}
+                Angriff {pact.status === 'marching' ? 'ca. ' : ''}
+                {formatEta(view.clock, pact.attackClock - now)}
               </Chip>
             )}
           </div>

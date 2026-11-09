@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  assaultImminent,
   BAREFOOT_DURATION_MS,
   BAREFOOT_SPEED,
   battleLosses,
@@ -29,6 +30,8 @@ import {
   HOUR_MS,
   isBribable,
   isRaidable,
+  MAX_ARMIES,
+  MAX_CARGO_RAIDS,
   OUTPOST_PLUNDER_SHARE,
   outpostName,
   pathLength,
@@ -78,15 +81,13 @@ import {
   type AttackKind,
   type DefenseKind,
   type PlayerStats,
-} from '@vectoria/shared';
-import {
   dayKey,
   gameTimeBetween,
   isGameTime,
   nextGameTime,
   WEEKDAY_SCHEDULE,
   type Schedule,
-} from './calendar';
+} from '@vectoria/shared';
 import { generateMap } from './mapgen';
 import { createRandom } from './random';
 import { placeBalancedSpots } from './spots';
@@ -188,6 +189,8 @@ interface ArmyRecord {
   trade?: { gold: number; wood: number };
   /** Carrying an opened chest home (cannot be raided); absent in older saves. */
   chest?: boolean;
+  /** Times the cargo was stolen in raids (`MAX_CARGO_RAIDS`); absent while never stolen. */
+  cargoRaids?: number;
   /** Part of a duo attack (`PactRecord`): a group on its way to the meeting point, or the united army. */
   pactId?: string;
   /** Bestechung: a bribed army on its way to join `hostId`; see `planJoin`. */
@@ -490,6 +493,8 @@ export class GameState {
     const base = this.base(player, from);
     if (!base) throw new RuleError('Dieser Stützpunkt gehört dir nicht.');
     if (troops > base.troops) throw new RuleError('So viele Truppen stehen dort nicht.');
+    this.checkArmyLimit(player, 1);
+    this.checkAssaultLock(player, base);
     const card = useActiveCard ? (player.activeCard ?? null) : null;
     if (useActiveCard && !card) throw new RuleError('Du hast keine Karte aktiviert.');
     const cards = card ? [card] : [];
@@ -642,6 +647,8 @@ export class GameState {
     );
     this.checkChestTroops(target, army.troops);
     this.endRouteCards(army);
+    // Empty-handed: whatever it carries next is fresh loot.
+    delete army.cargoRaids;
     army.status = 'outbound';
     army.path = destination.path;
     army.target = target;
@@ -774,6 +781,7 @@ export class GameState {
         const army = this.data.armies.find((a) => a.id === target);
         const victim = army && this.player(army.ownerId);
         if (!army || !victim || victim === player) throw new RuleError('Wähle einen fremden Zug.');
+        this.checkArmyLimit(player, 1);
         if (!isBribable(army, army.pactId !== undefined, victim.routed ?? false)) {
           throw new RuleError(
             'Bestechen lassen sich nur marschierende Züge ohne Ladung und Truhe.',
@@ -1234,6 +1242,8 @@ export class GameState {
       return { base, troops, player };
     });
     if (groups.length === 0) throw new RuleError('Ohne Truppen kein Duo-Angriff.');
+    for (const g of groups) this.checkAssaultLock(player, g.base, who);
+    this.checkArmyLimit(player, groups.length, who);
     return groups;
   }
 
@@ -1819,6 +1829,7 @@ export class GameState {
       if (army.ownerId !== player.id || army.pactId) continue;
       army.baseId = null;
       army.cargo = emptyResources();
+      delete army.cargoRaids;
       this.startReturn(army, this.armyPosition(army));
     }
     let abandoned = 0;
@@ -2130,6 +2141,9 @@ export class GameState {
       const plunder = takeShare(convoy.cargo, CONVOY_PLUNDER_SHARE);
       army.troops -= fallen;
       addResources(army.cargo, plunder);
+      // The loot changes hands; once stolen back, nobody can take it again.
+      army.cargoRaids = (convoy.cargoRaids ?? 0) + 1;
+      delete convoy.cargoRaids;
       addResources(this.stats(raider).plunder, plunder);
       this.awardTrophy(raider);
       this.addLog(
@@ -2612,6 +2626,7 @@ export class GameState {
       timeScale: this.options.timeScale,
       gameday: this.data.gameday,
       mode: this.options.hours,
+      timezone: this.options.timezone,
       breakDays: this.data.breakDays ?? [],
       breakToday:
         this.options.hours === 'weekdays' &&
@@ -2649,6 +2664,7 @@ export class GameState {
       forcedMarch: army.forcedMarch,
       sea: army.sea ?? false,
       chest: army.chest ?? false,
+      cargoRaids: army.cargoRaids ?? 0,
       duoWith: pact && (member || pact.status === 'united') ? other : null,
       joining: visible ? (army.joins?.hostId ?? null) : null,
     };
@@ -2791,6 +2807,37 @@ export class GameState {
     return player;
   }
 
+  /** Refuses `adding` more armies once the player would have more than `MAX_ARMIES` on the map. */
+  private checkArmyLimit(player: PlayerRecord, adding: number, who = 'Du hast'): void {
+    const count = this.data.armies.filter((a) => a.ownerId === player.id).length;
+    if (count + adding > MAX_ARMIES) {
+      throw new RuleError(
+        `${who} schon ${count} Züge unterwegs — mehr als ${MAX_ARMIES} gleichzeitig gehen nicht.`,
+      );
+    }
+  }
+
+  /**
+   * Refuses troops leaving `base` while a foreign assault on it is at most `ASSAULT_LOCK_MS`
+   * away. Tarnung attacks do not count (the refusal would give them away), nor do duo groups
+   * still heading for their meeting point.
+   */
+  private checkAssaultLock(player: PlayerRecord, base: Base, who = 'Du hast'): void {
+    const attackers = this.data.armies.filter((a) => {
+      if (a.stealth) return false;
+      if (!a.pactId) return true;
+      return this.pact(a.pactId)?.status === 'united';
+    });
+    if (assaultImminent(attackers, player.id, base.id, this.data.clock)) {
+      const where = base.id === null ? 'die Burg' : 'den Stützpunkt';
+      throw new RuleError(
+        who === 'Du hast'
+          ? `Ein Angriff auf ${where} steht kurz bevor — jetzt zieht niemand mehr ab.`
+          : `Ein Angriff steht kurz bevor — aus ${where} zieht niemand mehr ab.`,
+      );
+    }
+  }
+
   /** The player's home castle (`id` null) or one of their outposts; null if not theirs. */
   private base(player: PlayerRecord, id: string | null): Base | null {
     if (id === null) {
@@ -2865,6 +2912,11 @@ export class GameState {
         // Tarnung keeps a convoy safe as long as it stays on its route.
         if (convoy.stealth) {
           throw new RuleError('Ein getarnter Zug lässt sich nicht abfangen.');
+        }
+        if ((convoy.cargoRaids ?? 0) >= MAX_CARGO_RAIDS && hasResources(convoy.cargo)) {
+          throw new RuleError(
+            'Diese Beute wurde schon geraubt und zurückgeraubt — sie lässt sich nicht mehr überfallen.',
+          );
         }
         if (!isRaidable(convoy, false)) {
           throw new RuleError('Überfallen lassen sich nur Züge, die Ressourcen tragen.');
