@@ -57,6 +57,7 @@ import {
   type ArmyView,
   type CardType,
   type CaravanTrip,
+  type CastleDecoration,
   type Chest,
   type FeedEntry,
   type GamePhase,
@@ -75,6 +76,11 @@ import {
   type DuoPlan,
   type DuoSourcePick,
   type PactView,
+  emptyPlayerStats,
+  ONLINE_DAYS_KEPT,
+  type AttackKind,
+  type DefenseKind,
+  type PlayerStats,
   dayKey,
   gameTimeBetween,
   isGameTime,
@@ -114,6 +120,8 @@ const SPOT_LAYOUT = 6;
  * one); moved ones carry the load to the home castle.
  */
 const GATHERER_FIX = 1;
+/** Longest gap between two ticks counted as online time (a stalled loop adds no more). */
+const ONLINE_TICK_CAP_MS = 10_000;
 
 interface PlayerRecord {
   id: string;
@@ -150,6 +158,10 @@ interface PlayerRecord {
   caravan?: Resources;
   /** Where the caravan's wagons set out and when it arrives (real time); absent when none travels. */
   caravanTrip?: CaravanTrip;
+  /** Admin's decoration over the castle; absent when none (and in older saves). */
+  castleDecoration?: CastleDecoration;
+  /** Online time and action counts for this round; absent in older saves. */
+  stats?: PlayerStats;
   log: LogEntry[];
 }
 
@@ -183,6 +195,8 @@ interface ArmyRecord {
   pactId?: string;
   /** Bestechung: a bribed army on its way to join `hostId`; see `planJoin`. */
   joins?: JoinPlan;
+  /** On its way to an attack: what kind, as counted in the stats when it was ordered. */
+  attack?: AttackKind;
 }
 
 /** A bribed army's march to the own army it joins (the host). */
@@ -304,6 +318,8 @@ export class GameState {
   private data: SavedGame;
   private running = false;
   private readonly online = new Map<string, number>();
+  /** Real time up to which online time is counted (`trackOnline`). */
+  private onlineTrackedAt = Date.now();
 
   constructor(options: GameOptions, saved?: AnySavedGame) {
     this.options = options;
@@ -383,8 +399,25 @@ export class GameState {
 
   setOnline(playerId: string, online: boolean): void {
     const count = (this.online.get(playerId) ?? 0) + (online ? 1 : -1);
+    const player = this.player(playerId);
+    if (online && count === 1 && player) {
+      const stats = this.stats(player);
+      stats.sessions++;
+      stats.lastSeenAt = Date.now();
+      this.dirty = true;
+    }
     if (count > 0) this.online.set(playerId, count);
     else this.online.delete(playerId);
+  }
+
+  /** Counts a command the player sent (for the stats), whether or not it was allowed. */
+  noteCommand(playerId: string): void {
+    const player = this.player(playerId);
+    if (!player) return;
+    const stats = this.stats(player);
+    stats.commands++;
+    stats.lastActionAt = Date.now();
+    this.dirty = true;
   }
 
   lobby(): LobbyInfo {
@@ -433,8 +466,10 @@ export class GameState {
     for (const r of RESOURCES) player.resources[r] -= cost[r] * times;
     if (item === 'troops') {
       player.homeTroops += count * TROOP_BATCH_SIZE;
+      this.stats(player).troopsBought += count * TROOP_BATCH_SIZE;
     } else {
       player.victoryPoints += count;
+      this.stats(player).victoryPointsBought += count;
       player.victoryPointsBought = {
         gameday: this.data.gameday,
         count: this.victoryPointsToday(player) + count,
@@ -505,6 +540,9 @@ export class GameState {
       ...(trade ? { trade: { ...trade } } : {}),
     };
     this.data.armies.push(army);
+    if (card) this.countCard(player, card);
+    if (target.kind === 'spot' && !this.isTrader(target)) this.stats(player).gathers.started++;
+    this.markAttack(player, army);
     // A stealth march sets out unannounced: the ticker would give away that something is afoot.
     if (!army.stealth) {
       this.addFeed(
@@ -560,6 +598,7 @@ export class GameState {
     const stone = army.cargo[TRADE_INPUT];
     const plan = army.trade ?? { gold: stone, wood: 0 };
     if (stone > 0) {
+      this.stats(owner).trades++;
       const gold = Math.min(plan.gold, stone);
       army.cargo = { ...emptyResources(), gold, wood: stone - gold };
       const got = formatResources(army.cargo);
@@ -615,6 +654,7 @@ export class GameState {
     army.target = target;
     army.departClock = this.data.clock;
     army.arriveClock = destination.arriveClock;
+    this.markAttack(player, army);
     if (!army.stealth) {
       this.addFeed(
         target.kind === 'army' ? 'battle' : 'march',
@@ -683,6 +723,7 @@ export class GameState {
     player.cards.splice(index, 1);
     if (player.activeCard && !player.cards.includes(player.activeCard)) player.activeCard = null;
     apply();
+    this.countCard(player, card);
     this.revision++;
     this.dirty = true;
   }
@@ -794,6 +835,7 @@ export class GameState {
     army.baseId = null;
     army.forcedMarch = false;
     delete army.trade;
+    delete army.attack;
     this.endRouteCards(army);
     army.joins = { hostId: host.id, hostLeg: '', hold: false };
     this.planJoin(army, host);
@@ -1001,6 +1043,7 @@ export class GameState {
     const player = this.requirePlaying(playerId);
     if (!player.chests) throw new RuleError('Du hast keine ungeöffnete Truhe.');
     player.chests--;
+    this.stats(player).chests.opened++;
     const card = drawCard();
     player.cards.push(card);
     this.addLog(player, `Truhe geöffnet: Karte „${CARDS[card].name}“ erhalten.`);
@@ -1048,6 +1091,8 @@ export class GameState {
       throw new RuleError('Kein Landweg für diesen Duo-Angriff.');
     }
     (this.data.pacts ??= []).push(pact);
+    this.stats(player).duoOffers.sent++;
+    this.stats(partner).duoOffers.received++;
     const plan = `${this.targetName(target)} mit ${pact.initiatorTroops} + ${partnerTroops} Truppen`;
     this.addLog(player, `Duo-Angriff angeboten an ${partner.name}: ${plan}.`);
     this.addLog(partner, `${player.name} bietet dir einen Duo-Angriff an: ${plan} (Posteingang).`);
@@ -1117,6 +1162,8 @@ export class GameState {
       });
     });
     pact.status = 'marching';
+    this.stats(initiator).attacks.duo.started++;
+    this.stats(partner).attacks.duo.started++;
     pact.meet = plan.meet;
     pact.meetClock = this.data.clock + plan.meetMs;
     pact.attackClock = this.data.clock + plan.totalMs;
@@ -1377,6 +1424,22 @@ export class GameState {
     const losses = battleLosses(army.troops, defending, attackerWins);
     const lost = splitByShare(losses.attacker, shares);
     const survivors = shares.map((s, i) => (attackerWins ? Math.max(1, s - lost[i]!) : 0));
+    const fallen = shares.map((s, i) => s - survivors[i]!);
+    const defeated = splitByShare(losses.defender, shares);
+    const defenderPlayer =
+      castleOwner ?? (outpost!.ownerId ? this.player(outpost!.ownerId) : undefined);
+    sides.forEach((p, i) => {
+      this.recordAttack(p, 'duo', attackerWins);
+      this.recordLosses(p, fallen[i]!, defeated[i]!);
+    });
+    if (defenderPlayer) {
+      this.recordDefense(defenderPlayer, castleOwner ? 'castle' : 'outpost', !attackerWins);
+      this.recordLosses(
+        defenderPlayer,
+        losses.defender,
+        fallen.reduce((sum, n) => sum + n, 0),
+      );
+    }
     const label = castleOwner
       ? `die Burg von ${castleOwner.name}`
       : `den ${this.outpostName(outpost!.id)}`;
@@ -1436,6 +1499,7 @@ export class GameState {
         this.addLog(p, 'Der Duo-Sieg bringt dir eine Trophäe.');
       }
     }
+    sides.forEach((p, i) => addResources(this.stats(p).plunder, parts[i]!));
     sides.forEach((p, i) => {
       if (!castleOwner && i === keeper) {
         outpost!.ownerId = p.id;
@@ -1477,10 +1541,12 @@ export class GameState {
     this.tick++;
     if (this.data.phase !== 'running') {
       this.running = false;
+      this.trackOnline(now);
       return;
     }
     const inHours = this.options.hours === 'always' || isGameTime(this.schedule, new Date(now));
     this.running = inHours && !this.data.paused;
+    this.trackOnline(now);
     if (this.running) this.advance(realDtMs * this.options.timeScale);
     // 18:00: the gameday is over, the night caravans set out.
     if (!inHours && !this.data.paused) this.sendCaravans(now);
@@ -1588,6 +1654,7 @@ export class GameState {
         } else {
           this.data.chests.splice(index, 1);
           army.chest = true;
+          this.stats(owner).chests.recovered++;
           this.addLog(owner, 'Truhe geborgen — deine Truppen bringen sie heim.');
           this.addFeed('chest', `${this.armyLabel(army)} birgt eine Truhe.`, army.id);
         }
@@ -1624,6 +1691,9 @@ export class GameState {
     if (spot && spot.resource !== 'trader') {
       const amount = gatherYield(army.troops);
       army.cargo[spot.resource] += amount;
+      const stats = this.stats(owner);
+      stats.gathers.completed++;
+      stats.gathered[spot.resource] += amount;
       this.addLog(
         owner,
         `Deine ${army.troops} Truppen haben ${amount} ${RESOURCE_NAMES[spot.resource]} geladen und ziehen heim.`,
@@ -1673,11 +1743,19 @@ export class GameState {
     const attackerWins = army.troops > defender.homeTroops * multiplier;
     const losses = battleLosses(army.troops, defender.homeTroops, attackerWins);
     defender.homeTroops -= losses.defender;
+    const fallen = attackerWins
+      ? army.troops - Math.max(1, army.troops - losses.attacker)
+      : army.troops;
+    this.recordAttack(attacker, army.attack ?? 'castle', attackerWins);
+    this.recordDefense(defender, 'castle', !attackerWins);
+    this.recordLosses(attacker, fallen, losses.defender);
+    this.recordLosses(defender, losses.defender, fallen);
 
     if (attackerWins) {
       const plunder = takeShare(defender.resources, CASTLE_PLUNDER_SHARE);
-      army.troops = Math.max(1, army.troops - losses.attacker);
+      army.troops -= fallen;
       addResources(army.cargo, plunder);
+      addResources(this.stats(attacker).plunder, plunder);
       // A chest out of nowhere, on top of the plunder; the defender's own chests stay put.
       army.chest = true;
       this.awardTrophy(attacker);
@@ -1941,6 +2019,15 @@ export class GameState {
     const attackerWins = army.troops > outpost.troops;
     const losses = battleLosses(army.troops, outpost.troops, attackerWins);
     outpost.troops -= losses.defender;
+    const fallen = attackerWins
+      ? army.troops - Math.max(1, army.troops - losses.attacker)
+      : army.troops;
+    this.recordAttack(attacker, army.attack ?? (defender ? 'outpost' : 'ruin'), attackerWins);
+    this.recordLosses(attacker, fallen, losses.defender);
+    if (defender) {
+      this.recordDefense(defender, 'outpost', !attackerWins);
+      this.recordLosses(defender, losses.defender, fallen);
+    }
 
     if (!attackerWins) {
       this.addLog(attacker, `Angriff auf ${name} gescheitert: ${army.troops} Truppen verloren.`);
@@ -1956,6 +2043,8 @@ export class GameState {
     }
 
     const plunder = takeShare(outpost.resources, 1 - OUTPOST_PLUNDER_SHARE);
+    // What stays in the outpost after the garrison fled is the attacker's now.
+    if (defender) addResources(this.stats(attacker).plunder, outpost.resources);
     // Whatever the defender keeps (nothing by default) leaves with the fleeing garrison.
     if (defender?.castle && outpost.troops > 0) {
       this.data.armies.push(this.fleeingArmy(defender, outpost.position, outpost.troops, plunder));
@@ -2041,13 +2130,21 @@ export class GameState {
       ? Math.min(losses.defender, convoy.troops - 1)
       : losses.defender;
     convoy.troops -= convoyLoss;
+    const fallen = attackerWins
+      ? army.troops - Math.max(1, army.troops - losses.attacker)
+      : army.troops;
+    this.recordAttack(raider, 'raid', attackerWins);
+    this.recordDefense(victim, 'convoy', !attackerWins);
+    this.recordLosses(raider, fallen, convoyLoss);
+    this.recordLosses(victim, convoyLoss, fallen);
     if (attackerWins) {
       const plunder = takeShare(convoy.cargo, CONVOY_PLUNDER_SHARE);
-      army.troops = Math.max(1, army.troops - losses.attacker);
+      army.troops -= fallen;
       addResources(army.cargo, plunder);
       // The loot changes hands; once stolen back, nobody can take it again.
       army.cargoRaids = (convoy.cargoRaids ?? 0) + 1;
       delete convoy.cargoRaids;
+      addResources(this.stats(raider).plunder, plunder);
       this.awardTrophy(raider);
       this.addLog(
         raider,
@@ -2386,6 +2483,16 @@ export class GameState {
     this.dirty = true;
   }
 
+  /** Admin: puts a decoration over the player's castle for everyone, or removes it. */
+  setCastleDecoration(playerId: string, decoration: CastleDecoration | null): void {
+    const player = this.player(playerId);
+    if (!player) throw new RuleError('Unbekannter Spieler.');
+    if (decoration) player.castleDecoration = decoration;
+    else delete player.castleDecoration;
+    this.revision++;
+    this.dirty = true;
+  }
+
   grantTrophies(playerId: string, amount: number): void {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
@@ -2437,6 +2544,7 @@ export class GameState {
         attackedAt: p.attackedAt ?? null,
         online: this.online.has(p.id),
         caravanTrip: hasResources(p.caravan ?? emptyResources()) ? (p.caravanTrip ?? null) : null,
+        castleDecoration: p.castleDecoration ?? null,
       })),
       spots: this.data.spots,
       outposts: this.data.outposts.map((o): OutpostView =>
@@ -2499,7 +2607,11 @@ export class GameState {
         resources: p.resources,
         cards: p.cards,
         pendingActivity: p.pendingActivity,
+        castleDecoration: p.castleDecoration ?? null,
+        stats: structuredClone(this.stats(p)),
       })),
+      today: dayKey(this.schedule, new Date()),
+      serverTime: Date.now(),
       armies: this.data.armies.length,
       chests: this.data.chests.length,
       outposts: this.data.outposts.length,
@@ -2628,6 +2740,8 @@ export class GameState {
       if (player.routed && !data.armies.some((a) => a.ownerId === player.id)) {
         player.routed = false;
       }
+      // Fields added to the stats later start at zero.
+      player.stats = { ...emptyPlayerStats(), ...player.stats };
     }
     data.pacts ??= [];
     data.chests = data.chests.map((c) => ({
@@ -2663,6 +2777,7 @@ export class GameState {
       activeCard: null,
       chests: 0,
       fortifiedUntil: null,
+      stats: emptyPlayerStats(),
       log: [],
     };
   }
@@ -2865,6 +2980,7 @@ export class GameState {
     army.arriveClock =
       this.data.clock + travelMs(pathLength(army.path), this.map!.width, false, speed);
     delete army.trade;
+    delete army.attack;
     // Nebel, Tarnung and Seeweg hold on the way home too; Eilmarsch is for the way out only.
     army.forcedMarch = false;
   }
@@ -2881,6 +2997,90 @@ export class GameState {
 
   private awardTrophy(player: PlayerRecord): void {
     player.trophies = (player.trophies ?? 0) + 1;
+  }
+
+  // ---- Stats ----
+
+  private stats(player: PlayerRecord): PlayerStats {
+    return (player.stats ??= emptyPlayerStats());
+  }
+
+  /**
+   * Adds the real time since the last tick to every connected player's online time (and to the
+   * gameday-hours part while the clock runs), per calendar day in the game time zone.
+   */
+  private trackOnline(now: number): void {
+    const dt = Math.min(Math.max(0, now - this.onlineTrackedAt), ONLINE_TICK_CAP_MS);
+    this.onlineTrackedAt = now;
+    if (dt === 0 || this.online.size === 0) return;
+    const day = dayKey(this.schedule, new Date(now));
+    for (const id of this.online.keys()) {
+      const player = this.player(id);
+      if (!player) continue;
+      const stats = this.stats(player);
+      stats.onlineMs += dt;
+      if (this.running) stats.onlineInHoursMs += dt;
+      if (!(day in stats.onlineByDay)) {
+        const days = Object.keys(stats.onlineByDay).sort();
+        for (const old of days.slice(0, Math.max(0, days.length - ONLINE_DAYS_KEPT + 1))) {
+          delete stats.onlineByDay[old];
+        }
+      }
+      stats.onlineByDay[day] = (stats.onlineByDay[day] ?? 0) + dt;
+      stats.lastSeenAt = now;
+    }
+    this.dirty = true;
+  }
+
+  /** What kind of attack a march on `target` is; null for anything else (own base, spot, chest). */
+  private attackKind(player: PlayerRecord, target: ArmyTarget): AttackKind | null {
+    switch (target.kind) {
+      case 'army':
+        return 'raid';
+      case 'castle':
+        return target.id === player.id ? null : 'castle';
+      case 'outpost': {
+        const outpost = this.data.outposts.find((o) => o.id === target.id);
+        if (!outpost || outpost.ownerId === player.id) return null;
+        return outpost.ownerId ? 'outpost' : 'ruin';
+      }
+      default:
+        return null;
+    }
+  }
+
+  /** An army was sent or redirected: counts it as a started attack if its target is one. */
+  private markAttack(player: PlayerRecord, army: ArmyRecord): void {
+    const kind = this.attackKind(player, army.target);
+    if (kind) {
+      army.attack = kind;
+      this.stats(player).attacks[kind].started++;
+    } else {
+      delete army.attack;
+    }
+  }
+
+  private recordAttack(player: PlayerRecord, kind: AttackKind, won: boolean): void {
+    const counts = this.stats(player).attacks[kind];
+    counts.executed++;
+    if (won) counts.won++;
+  }
+
+  private recordDefense(player: PlayerRecord, kind: DefenseKind, held: boolean): void {
+    const counts = this.stats(player).defenses[kind];
+    counts.attacked++;
+    if (held) counts.held++;
+  }
+
+  private recordLosses(player: PlayerRecord, lost: number, killed: number): void {
+    const stats = this.stats(player);
+    stats.troopsLost += lost;
+    stats.troopsKilled += killed;
+  }
+
+  private countCard(player: PlayerRecord, card: CardType): void {
+    const played = this.stats(player).cardsPlayed;
+    played[card] = (played[card] ?? 0) + 1;
   }
 
   /** Victory points the player bought in the current gameday. */

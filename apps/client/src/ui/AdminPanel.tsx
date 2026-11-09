@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
+import { AdminStats } from './AdminStats';
 import { OnlineDot, ResourceIcon, SoldiersIcon, TrophyIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
 import { Input } from '@/components/ui/input';
@@ -177,7 +178,23 @@ function PlayerCard({
       <div className="text-xs text-ink-soft">
         Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-between gap-2">
+        <Tip label="Für alle sichtbar über der Burg, bis du ihn wieder abnimmst">
+          <Button
+            size="sm"
+            className="h-9 sm:h-7"
+            aria-pressed={p.castleDecoration === 'penis'}
+            onClick={() =>
+              run({
+                action: 'setCastleDecoration',
+                playerId: p.id,
+                decoration: p.castleDecoration === 'penis' ? null : 'penis',
+              })
+            }
+          >
+            {p.castleDecoration === 'penis' ? 'Penis abnehmen' : 'Penis über die Burg'}
+          </Button>
+        </Tip>
         <Button
           size="sm"
           variant="danger"
@@ -542,6 +559,8 @@ export function AdminPanel() {
               </div>
             )}
           </Panel>
+
+          <AdminStats state={state} />
         </>
       )}
     </div>

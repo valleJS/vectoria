@@ -10,7 +10,7 @@ import {
   type Vec2,
 } from '@vectoria/shared';
 import { useMemo, useState, type ReactNode } from 'react';
-import { ArrowRightIcon } from 'lucide-react';
+import { ArrowRightIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import {
   cssColor,
   describeTarget,
@@ -563,35 +563,60 @@ function PactItem({ view, pact }: { view: GameView; pact: PactView }) {
   );
 }
 
-/** Duo attack offers and running pacts. Under the live ticker; on phones inside its sheet. */
-export function Inbox({ view }: { view: GameView }) {
+/**
+ * Duo attack offers and running pacts. Under the live ticker; on phones inside its sheet.
+ * Folds like the other boxes; a new offer to answer unfolds it again.
+ */
+export function Inbox({ view, defaultOpen = true }: { view: GameView; defaultOpen?: boolean }) {
   const pacts = [...view.self.pacts].sort(
     (a, b) => Number(b.partnerId === view.self.id) - Number(a.partnerId === view.self.id),
   );
   const waiting = pactsToAnswer(view);
+  const [open, setOpen] = useState(defaultOpen || waiting > 0);
+  const [seenWaiting, setSeenWaiting] = useState(waiting);
+  if (waiting !== seenWaiting) {
+    setSeenWaiting(waiting);
+    if (waiting > seenWaiting) setOpen(true);
+  }
   return (
     <Card className="pointer-events-auto min-h-0">
-      <CardHeader className="border-b border-ink/40 bg-muted py-1.5">
-        <b className="flex-1 italic">Posteingang</b>
-        {waiting > 0 && (
-          <span className="rounded-full bg-seal px-1.5 text-xs font-bold text-parchment">
-            {waiting}
-          </span>
-        )}
+      <CardHeader className="border-b border-ink/40 bg-muted p-0">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left outline-none hover:text-seal focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+        >
+          <b className="flex-1 italic">Posteingang</b>
+          {waiting > 0 && (
+            <span className="rounded-full bg-seal px-1.5 text-xs font-bold text-parchment">
+              {waiting}
+            </span>
+          )}
+          {!open && pacts.length > 0 && waiting === 0 && (
+            <span className="text-xs text-ink-soft">{pacts.length}</span>
+          )}
+          {open ? (
+            <ChevronDownIcon className="size-4 text-ink-soft" />
+          ) : (
+            <ChevronRightIcon className="size-4 text-ink-soft" />
+          )}
+        </button>
       </CardHeader>
-      {pacts.length === 0 ? (
-        <p className="px-3 py-1.5 text-xs text-ink-soft italic">
-          Keine Duo-Angebote. Wähle eine fremde Burg oder einen Stützpunkt für „Duo-Angreifen“.
-        </p>
-      ) : (
-        <Locked className="min-h-0 overflow-y-auto px-3">
-          <ul className="divide-y divide-ink/15">
-            {pacts.map((p) => (
-              <PactItem key={p.id} view={view} pact={p} />
-            ))}
-          </ul>
-        </Locked>
-      )}
+      {open &&
+        (pacts.length === 0 ? (
+          <p className="px-3 py-1.5 text-xs text-ink-soft italic">
+            Keine Duo-Angebote. Wähle eine fremde Burg oder einen Stützpunkt für „Duo-Angreifen“.
+          </p>
+        ) : (
+          <Locked className="min-h-0 overflow-y-auto overscroll-contain px-3">
+            <ul className="divide-y divide-ink/15">
+              {pacts.map((p) => (
+                <PactItem key={p.id} view={view} pact={p} />
+              ))}
+            </ul>
+          </Locked>
+        ))}
     </Card>
   );
 }

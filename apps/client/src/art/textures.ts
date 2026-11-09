@@ -20,6 +20,7 @@ import {
   grassTuft,
   outpost,
   cargoPiece,
+  penis,
   rocks,
   ruin,
   ship,
@@ -97,6 +98,8 @@ export interface MapArt {
   ruin: ArtTexture;
   /** Stones and logs of a night campfire (the flame is `flame`). */
   campfire: ArtTexture;
+  /** Admin's decoration over a castle (`CastleDecoration` 'penis'). */
+  penis: ArtTexture;
   /** Soft round light, white in the middle and fading out; tinted and added at night. */
   glow: Texture;
   pieces: PieceCache;
@@ -281,7 +284,18 @@ export function loadMapArt(): Promise<MapArt> {
       deposits,
       icons,
       smoke,
-      [tuft, shipArt, boatArt, chestArt, sparkleArt, alarmArt, flameArt, ruinArt, campfireArt],
+      [
+        tuft,
+        shipArt,
+        boatArt,
+        chestArt,
+        sparkleArt,
+        alarmArt,
+        flameArt,
+        ruinArt,
+        campfireArt,
+        penisArt,
+      ],
     ] = await Promise.all([
       all(
         FOLIAGE.slice(0, 3).map((f, i) => broadleaf(f, i * 0.7)),
@@ -307,6 +321,7 @@ export function loadMapArt(): Promise<MapArt> {
         rasterise(flame()),
         rasterise(ruin(), { outline: true }),
         rasterise(campfire(), { outline: true }),
+        rasterise(penis(), { outline: true }),
       ]),
       preload(pieces),
     ]);
@@ -331,6 +346,7 @@ export function loadMapArt(): Promise<MapArt> {
       flame: flameArt,
       ruin: ruinArt,
       campfire: campfireArt,
+      penis: penisArt,
       glow: glowTexture(),
       deposits: Object.fromEntries(SPOT_KINDS.map((k, i) => [k, deposits[i]!])) as Record<
         SpotKind,

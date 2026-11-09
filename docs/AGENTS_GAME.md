@@ -20,7 +20,8 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 `VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
 registration (closed system). Admin tools: rename (`rename`, same name rules as registration) and
 `setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
-Game clock); while running also kick (armies vanish, outposts turn
+Game clock), a purely cosmetic castle decoration seen by everyone (`setCastleDecoration`,
+`PlayerPublic.castleDecoration`, currently only `'penis'`; until the admin removes it); while running also kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
 stays with each player; armies returning home move along with their castle and keep their arrival time;
 armies that set out from either castle keep target and progress (as a share of the way) but

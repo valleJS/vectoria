@@ -912,12 +912,13 @@ function SheetContent({ view, tab }: { view: GameView; tab: SheetTab }) {
   );
   switch (tab) {
     case 'ticker':
-      // Phones: the inbox sits on top of the ticker sheet (the tab bar has no room for it).
+      // Phones: the inbox sits on top of the ticker sheet (the tab bar has no room for it),
+      // folded unless an offer waits. Capped in dvh: a % of the content-sized sheet never applies.
       return (
         <div className="flex min-h-0 flex-col gap-1.5">
           {view.self.pacts.length > 0 && (
-            <div className="flex max-h-[50%] min-h-0 flex-col">
-              <Inbox view={view} />
+            <div className="flex max-h-[32dvh] min-h-0 shrink-0 flex-col">
+              <Inbox view={view} defaultOpen={false} />
             </div>
           )}
           <Ticker view={view} collapsible={false} />
