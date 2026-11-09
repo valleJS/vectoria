@@ -3,11 +3,24 @@ import { createRandom } from './random';
 
 const TILE_SIZE = 32;
 const SMOOTHING_PASSES = 4;
+/** Share of the map that is sea or lake (the lowest tiles), before rivers. */
+const WATER_SHARE = 0.25;
+/** One river per this many tiles of map area (at least `MIN_RIVERS`). */
+const TILES_PER_RIVER = 600;
+const MIN_RIVERS = 2;
+/** Rivers start on ground at least this high and run at most this share of the map width. */
+const SPRING_LEVEL = 0.6;
+const RIVER_MAX_LENGTH = 1.2;
+/** A river runs on through lakes it meets until it is at least this share of the width long. */
+const RIVER_MIN_LENGTH = 0.6;
+/** A ford (land left across the river) after every this many river tiles. */
+const FORD_EVERY = 9;
+const FORD_LENGTH = 2;
 
 /**
- * Smoothed value noise → terrain bands, joined into one landmass. The map wraps at its edges, so
- * smoothing, islands and bridges run round them too and the terrain continues seamlessly.
- * Placeholder until real world generation exists.
+ * Smoothed value noise → terrain bands, rivers from the high ground down to the sea, joined into
+ * one landmass. The map wraps at its edges, so smoothing, rivers, islands and bridges run round
+ * them too and the terrain continues seamlessly. Placeholder until real world generation exists.
  */
 export function generateMap(width: number, height: number, seed: number): MapData {
   const random = createRandom(seed);
@@ -41,16 +54,76 @@ export function generateMap(width: number, height: number, seed: number): MapDat
   }
   const range = max - min || 1;
 
-  const tiles = Array.from(field, (value): TileType => {
-    const h = (value - min) / range;
-    if (h < 0.35) return TileType.Water;
+  const heights = Array.from(field, (value) => (value - min) / range);
+  // A share of the map rather than a fixed height, so every seed gets about as much water.
+  const waterLevel = [...heights].sort((a, b) => a - b)[Math.floor(heights.length * WATER_SHARE)]!;
+  const tiles = heights.map((h): TileType => {
+    if (h < waterLevel) return TileType.Water;
     if (h < 0.62) return TileType.Grass;
     if (h < 0.8) return TileType.Forest;
     return TileType.Mountain;
   });
 
+  carveRivers(tiles, heights, width, height, createRandom(seed ^ 0x51ae5));
   joinLand(tiles, width, height);
   return { width, height, tileSize: TILE_SIZE, tiles };
+}
+
+/**
+ * Rivers: each springs on high ground and winds downhill (the height gradient, some momentum and
+ * a random wobble) until it reaches the sea or a lake, or runs out of length. The bed is
+ * 4-connected water one tile wide, so it really splits the land, with a ford of land left every
+ * `FORD_EVERY` tiles so walking does not need long detours (`joinLand` bridges the rest).
+ */
+function carveRivers(
+  tiles: TileType[],
+  heights: number[],
+  width: number,
+  height: number,
+  random: () => number,
+): void {
+  const count = Math.max(MIN_RIVERS, Math.round((width * height) / TILES_PER_RIVER));
+  const wrap = (v: number, size: number) => ((Math.floor(v) % size) + size) % size;
+  const heightAt = (x: number, y: number) => heights[wrap(y, height) * width + wrap(x, width)]!;
+  const springs = heights.flatMap((h, i) => (h >= SPRING_LEVEL ? [i] : []));
+  for (let r = 0; r < count && springs.length > 0; r++) {
+    const spring = springs[Math.floor(random() * springs.length)]!;
+    let x = (spring % width) + 0.5;
+    let y = Math.floor(spring / width) + 0.5;
+    let angle = random() * Math.PI * 2;
+    let previous = -1;
+    let carved = 0;
+    const maxSteps = Math.round(width * RIVER_MAX_LENGTH * 2);
+    const minTiles = Math.round(width * RIVER_MIN_LENGTH);
+    const carve = (tx: number, ty: number) => {
+      const i = wrap(ty, height) * width + wrap(tx, width);
+      if (i === previous) return false;
+      previous = i;
+      const reachedWater = tiles[i] === TileType.Water;
+      carved++;
+      if (carved % FORD_EVERY >= FORD_LENGTH || carved < FORD_EVERY) tiles[i] = TileType.Water;
+      return reachedWater && carved >= minTiles;
+    };
+    for (let step = 0; step < maxSteps; step++) {
+      // Downhill: the height gradient pulls the heading round, momentum and wobble keep it winding.
+      const gx = heightAt(x + 1, y) - heightAt(x - 1, y);
+      const gy = heightAt(x, y + 1) - heightAt(x, y - 1);
+      if (gx !== 0 || gy !== 0) {
+        const downhill = Math.atan2(-gy, -gx);
+        angle += wrapDelta(downhill - angle, Math.PI * 2) * 0.12;
+      }
+      angle += (random() - 0.5) * 0.5;
+      const nx = x + Math.cos(angle) * 0.5;
+      const ny = y + Math.sin(angle) * 0.5;
+      // A diagonal step also takes the tile beside it, so the bed stays 4-connected.
+      if (Math.floor(nx) !== Math.floor(x) && Math.floor(ny) !== Math.floor(y)) {
+        if (carve(Math.floor(nx), Math.floor(y))) break;
+      }
+      x = nx;
+      y = ny;
+      if (carve(Math.floor(x), Math.floor(y))) break;
+    }
+  }
 }
 
 /** Land areas smaller than this many tiles sink; larger ones get a land bridge. */

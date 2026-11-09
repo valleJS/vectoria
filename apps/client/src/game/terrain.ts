@@ -121,10 +121,8 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
     tiles[wrapCoord(ty, height) * width + wrapCoord(tx, width)] ?? TileType.Water;
   // The outermost tile of the margin stays water, so every coast outline closes inside the grid.
   const edge = SEA_MARGIN_TILES - 1;
-  const fieldTypeAt = (tx: number, ty: number): TileType =>
-    tx < -edge || ty < -edge || tx >= width + edge || ty >= height + edge
-      ? TileType.Water
-      : typeAt(tx, ty);
+  const inRing = (tx: number, ty: number) =>
+    tx < -edge || ty < -edge || tx >= width + edge || ty >= height + edge;
 
   // Indicator fields per terrain type, sampled from the tile grid.
   const land = createField(gw, gh);
@@ -133,8 +131,12 @@ export function buildTerrain(map: MapData, art: MapArt, clearings: Clearing[] = 
   for (let j = 0; j < gh; j++) {
     const ty = Math.floor(j / K) - SEA_MARGIN_TILES;
     for (let i = 0; i < gw; i++) {
-      const type = fieldTypeAt(Math.floor(i / K) - SEA_MARGIN_TILES, ty);
+      const tx = Math.floor(i / K) - SEA_MARGIN_TILES;
       const k = j * gw + i;
+      // Nothing, not even a clearing, may turn the outer ring to land: an outline touching the
+      // grid edge stays open and is dropped, and land and sea would swap colours.
+      if (inRing(tx, ty)) continue;
+      const type = typeAt(tx, ty);
       // Castles stand on open ground and spots on land, even at the water's edge.
       const u = (i + 0.5) / K - SEA_MARGIN_TILES;
       const v = (j + 0.5) / K - SEA_MARGIN_TILES;

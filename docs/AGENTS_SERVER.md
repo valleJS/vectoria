@@ -30,7 +30,7 @@ Node 22+, ESM, TypeScript. Dev runs `tsx watch`; production builds a single bund
 | `src/net/auth.ts` | Email login: 6-digit codes (15 min, 5 tries, 1/min resend) in memory, register on verify |
 | `src/mail.ts` | nodemailer SMTP transport (465 = implicit TLS, otherwise STARTTLS required); logs mails instead when `SMTP_HOST` is unset |
 | `src/game/GameLoop.ts` | Fixed-rate, drift-correcting tick scheduler |
-| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation on a wrapped map (smoothing, islands and bridges run round the edges); `joinLand` sinks islets and bridges larger islands so all land is one mass |
+| `src/game/mapgen.ts`, `random.ts` | Seeded terrain generation on a wrapped map (smoothing, rivers, islands and bridges run round the edges): the lowest `WATER_SHARE` (25 %) of tiles are sea/lakes, `carveRivers` winds 1-tile rivers downhill from high ground with a ford every `FORD_EVERY` tiles; `joinLand` sinks islets and bridges larger islands so all land is one mass |
 | `src/net/GameServer.ts` | `ws` on `/ws` (permessage-deflate): token auth, message dispatch, rate limit, heartbeat, per-player `state` (1/s + on commands and events) |
 | `src/net/http.ts` | `/healthz`, `/source` (302 → `SOURCE_URL`), `/api/auth/*`, `/api/lobby`, `/api/admin/*`; other GETs → client when `CLIENT_DIR` is set |
 | `src/net/static.ts` | Serves the built client (SPA fallback, immutable `/assets/*`, brotli/gzip for text files, compressed once in memory) for the production container |

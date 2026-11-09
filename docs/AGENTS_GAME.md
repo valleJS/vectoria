@@ -101,7 +101,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   state are folded back into the map),
   then straightened where a direct line keeps clearance from water (`shared/pathfinding.ts`).
   Travel time is path length; crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
-  Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
+  Map generation adds rivers (1 tile wide, fords every few tiles) and leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
 - Recall anytime unless already returning: heads home from the current position.
 - Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. A loaded army (cargo or chest) may only switch to another own base (`redirectHome`: new `baseId`, then `startReturn`, so it stays loaded-slow and raidable); stock that reached a base stays there (castle until spent, outpost until the night caravan).
