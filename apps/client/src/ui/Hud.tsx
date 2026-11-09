@@ -20,7 +20,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react
 import {
   cssColor,
   describeTarget,
-  formatGameDuration,
+  formatEta,
   formatResources,
   ownBases,
   playerColor,
@@ -569,19 +569,20 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
 }
 
 function armyStatusText(view: GameView, army: ArmyView): string {
-  const left = formatGameDuration(army.arriveClock - view.clock.clock);
+  const left = formatEta(view.clock, army.arriveClock - view.clock.clock);
   switch (army.status) {
     case 'gathering':
-      return `sammelt noch ${left}`;
+      return `sammelt bis ${left}`;
     case 'returning':
       return (
-        `Heimweg, ${left}` + (hasResources(army.cargo) ? ` · ${formatResources(army.cargo)}` : '')
+        `Heimweg, zurück ${left}` +
+        (hasResources(army.cargo) ? ` · ${formatResources(army.cargo)}` : '')
       );
     case 'outbound':
-      if (army.joining) return `stößt zu deinem Zug in ${left}`;
-      return `${army.target?.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${left}`;
+      if (army.joining) return `stößt zu deinem Zug: ${left}`;
+      return `${army.target?.kind === 'army' ? 'Überfall' : 'Ankunft'} ${left}`;
     case 'waiting':
-      if (army.duoWith) return `wartet am Duo-Treffpunkt, noch ${left}`;
+      if (army.duoWith) return `wartet am Duo-Treffpunkt bis ${left}`;
       return army.joining ? 'wartet auf deinen Zug' : 'wartet auf übergelaufene Truppen';
   }
 }

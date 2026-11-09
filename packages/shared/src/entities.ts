@@ -1,5 +1,7 @@
 import {
+  ASSAULT_LOCK_MS,
   hasResources,
+  MAX_CARGO_RAIDS,
   type CardType,
   type Resources,
   type ResourceType,
@@ -137,6 +139,8 @@ export interface ArmyView {
   cargo: Resources;
   /** Carrying a chest home. The chest cannot be stolen; resource cargo beside it can. */
   chest: boolean;
+  /** How often the cargo has already been stolen in raids (see `MAX_CARGO_RAIDS`). */
+  cargoRaids: number;
   fog: boolean;
   stealth: boolean;
   forcedMarch: boolean;
@@ -155,14 +159,43 @@ export interface ArmyView {
 }
 
 /**
- * An army that can be ambushed: carrying resources on the march — home, or between own bases.
- * While its owner is routed (home castle fell), every army of theirs is immune.
+ * An army that can be ambushed: carrying resources on the march — home, or between own bases —
+ * that have not yet been stolen `MAX_CARGO_RAIDS` times. While its owner is routed (home castle
+ * fell), every army of theirs is immune.
  */
 export function isRaidable(
-  army: Pick<ArmyView, 'status' | 'cargo'>,
+  army: Pick<ArmyView, 'status' | 'cargo'> & { cargoRaids?: number },
   ownerRouted: boolean,
 ): boolean {
-  return !ownerRouted && army.status !== 'gathering' && hasResources(army.cargo);
+  return (
+    !ownerRouted &&
+    army.status !== 'gathering' &&
+    hasResources(army.cargo) &&
+    (army.cargoRaids ?? 0) < MAX_CARGO_RAIDS
+  );
+}
+
+/**
+ * True while a foreign assault on `ownerId`'s base (`baseId` null = home castle) arrives within
+ * `ASSAULT_LOCK_MS` or already waits at its gates: no troops may leave that base then. Armies
+ * whose target is unknown (null) do not count.
+ */
+export function assaultImminent(
+  armies: readonly Pick<ArmyView, 'ownerId' | 'status' | 'target' | 'arriveClock'>[],
+  ownerId: string,
+  baseId: string | null,
+  clock: number,
+): boolean {
+  return armies.some(
+    (a) =>
+      a.ownerId !== ownerId &&
+      a.target !== null &&
+      (baseId === null
+        ? a.target.kind === 'castle' && a.target.id === ownerId
+        : a.target.kind === 'outpost' && a.target.id === baseId) &&
+      (a.status === 'waiting' ||
+        (a.status === 'outbound' && a.arriveClock - clock <= ASSAULT_LOCK_MS)),
+  );
 }
 
 /**
@@ -293,6 +326,8 @@ export interface ClockState {
   timeScale: number;
   gameday: number;
   mode: 'weekdays' | 'always';
+  /** Time zone of the gameday hours (`GAME_TIMEZONE`). */
+  timezone: string;
   /** Calendar days (YYYY-MM-DD, game time zone) without a gameday: the clock stands still. */
   breakDays: string[];
   /** Today is one of `breakDays`. */

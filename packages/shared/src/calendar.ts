@@ -31,6 +31,8 @@ function partsIn(timezone: string, date: Date) {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
       hourCycle: 'h23',
     });
     formatters.set(timezone, format);
@@ -39,6 +41,8 @@ function partsIn(timezone: string, date: Date) {
   return {
     weekday: WEEKDAYS[parts.weekday ?? ''] ?? 0,
     hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
     dayKey: `${parts.year}-${parts.month}-${parts.day}`,
   };
 }
@@ -82,4 +86,35 @@ export function nextGameTime(schedule: Schedule, fromMs: number, maxDays = 8): n
     if (isGameTime(schedule, new Date(t))) return t;
   }
   return fromMs;
+}
+
+/**
+ * Real instant at which `gameMs` more game-clock milliseconds have passed, starting at `fromMs`:
+ * the clock runs `timeScale` game ms per real ms, and only inside the schedule's hours (break days
+ * skipped). Walks whole windows and hours, not minutes, so it is cheap enough to call per render.
+ * Assumes the time zone's offset is a whole number of hours. Null if it lies beyond `maxDays`.
+ */
+export function realTimeAfter(
+  schedule: Schedule,
+  fromMs: number,
+  gameMs: number,
+  timeScale = 1,
+  maxDays = 21,
+): number | null {
+  let left = Math.max(0, gameMs) / timeScale;
+  let t = fromMs;
+  const limit = fromMs + maxDays * 86_400_000;
+  while (t < limit) {
+    const { hour, minute, second } = partsIn(schedule.timezone, new Date(t));
+    const toHour = (60 - minute) * 60_000 - second * 1000 - (t % 1000);
+    if (isGameTime(schedule, new Date(t))) {
+      const window = (schedule.endHour - hour - 1) * 3_600_000 + toHour;
+      if (left <= window) return t + left;
+      left -= window;
+      t += window;
+    } else {
+      t += toHour;
+    }
+  }
+  return null;
 }

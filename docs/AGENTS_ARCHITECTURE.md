@@ -3,7 +3,7 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-08
+last_verified: 2026-11-09
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
 sources_stamp: 4ed2ddface8330525193ba8450728f0649db0efd
@@ -44,7 +44,7 @@ apps/
   client/          React + Vite + PixiJS + Tailwind + shadcn/ui  → AGENTS_APP.md
   server/          Node + ws + Drizzle + ioredis     → AGENTS_SERVER.md
 packages/
-  shared/src/      map.ts, entities.ts, rules.ts, messages.ts, pathfinding.ts
+  shared/src/      map.ts, entities.ts, rules.ts, messages.ts, pathfinding.ts, duo.ts, calendar.ts
                    (types, balance, JSON codec, land routes + raid planning)
 tsconfig.json      base compiler options; workspaces extend it
 eslint.config.js   flat config for all workspaces
@@ -92,7 +92,8 @@ HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `n
 repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).
 
 `pathfinding.ts` is shared so the client previews routes, travel times and raid meeting points
-with exactly the server's maths.
+with exactly the server's maths; `calendar.ts` (gameday hours, break days) likewise, so the client
+turns game-clock spans into real arrival times (`realTimeAfter`).
 
 Server validates every client message with `parseClientMessage` and admin bodies with
 `parseAdminAction`; add a case there for each new type. Game rules: [AGENTS_GAME.md](./AGENTS_GAME.md).

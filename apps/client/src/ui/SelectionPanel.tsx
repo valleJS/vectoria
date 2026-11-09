@@ -1,10 +1,12 @@
 import {
+  assaultImminent,
   CARDS,
   emptyResources,
   findPath,
   GATHER_DURATION_MS,
   BAREFOOT_SPEED,
   LOADED_SPEED,
+  MAX_ARMIES,
   OUTPOST_DAILY_INCOME,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
@@ -25,6 +27,7 @@ import {
   cssColor,
   describeTarget,
   findCaravanWagon,
+  formatEta,
   formatGameDuration,
   formatPercent,
   formatResources,
@@ -236,7 +239,16 @@ function SendForm({
 
   // Troops shrink as armies leave; never offer more than are there.
   const troops = Math.min(chosen, base.troops);
-  const valid = Number.isInteger(troops) && troops > 0 && troops >= minTroops && travel !== null;
+  // Same limits the server enforces: at most MAX_ARMIES armies, no leaving right before an assault.
+  const full = view.armies.filter((a) => a.ownerId === view.self.id).length >= MAX_ARMIES;
+  const locked = assaultImminent(view.armies, view.self.id, base.id, view.clock.clock);
+  const valid =
+    Number.isInteger(troops) &&
+    troops > 0 &&
+    troops >= minTroops &&
+    travel !== null &&
+    !full &&
+    !locked;
 
   const send = () => {
     gameSocket.send({
@@ -273,6 +285,14 @@ function SendForm({
         <CardToggle card={activeCard} checked={useCard} onChange={setUseCard} />
       )}
       {troops < minTroops && <div className="text-seal">Mindestens {minTroops} Truppen nötig.</div>}
+      {full && (
+        <div className="text-seal">
+          Du hast schon {MAX_ARMIES} Züge unterwegs — warte, bis einer ankommt.
+        </div>
+      )}
+      {locked && (
+        <div className="text-seal">Ein Angriff steht kurz bevor — von hier zieht niemand ab.</div>
+      )}
       {preview && <div className="text-ink-soft">{preview(troops)}</div>}
       <div className="flex items-center justify-between gap-2">
         <span className={travel === null ? 'text-seal' : 'text-ink-soft'}>
@@ -280,7 +300,7 @@ function SendForm({
             ? target.kind === 'army'
               ? 'Zu weit — der Zug ist vorher daheim.'
               : 'Kein Landweg dorthin.'
-            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} in ${formatGameDuration(travel)}${barefoot(view) ? ' · barfuß' : ''}`}
+            : `${target.kind === 'army' ? 'Überfall' : 'Ankunft'} ${formatEta(view.clock, travel)}${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           {verb}
@@ -344,7 +364,7 @@ function FieldRedirect({
                     ? 'Kein Landweg dorthin.'
                     : !enough
                       ? `Zu wenige Truppen (mind. ${minTroops}).`
-                      : `Ankunft in ${formatGameDuration(travelMs(pathLength(path), map.width, army.forcedMarch, speed))}`}
+                      : `Ankunft ${formatEta(view.clock, travelMs(pathLength(path), map.width, army.forcedMarch, speed))}`}
                 </span>
               </span>
               <Button
@@ -406,7 +426,7 @@ function RaidOptions({ view, convoy }: { view: GameView; convoy: ArmyView }) {
                   <span className="block text-xs text-ink-soft">
                     {meeting
                       ? [
-                          `Treffpunkt in ${formatGameDuration(meeting.clock - view.clock.clock)}`,
+                          `Treffpunkt ${formatEta(view.clock, meeting.clock - view.clock.clock)}`,
                           strength(army.troops ?? 0),
                         ]
                           .filter(Boolean)
@@ -476,7 +496,8 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
       </div>
       <div className="text-ink-soft">
         Ziel: {describeTarget(view, army.target)}
-        {army.to !== null && ` · noch ${formatGameDuration(remaining)}`}
+        {army.to !== null &&
+          ` · ${army.status === 'gathering' ? 'fertig' : 'Ankunft'} ${formatEta(view.clock, remaining)}`}
       </div>
       {carrying && (
         <div className="mt-1 flex items-center gap-1 font-bold text-[#8a6410]">

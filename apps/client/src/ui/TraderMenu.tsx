@@ -9,7 +9,7 @@ import {
 import { TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { dataUrl, merchant } from '../art/svg';
-import { formatGameDuration, formatPercent, ownBases } from '../game/format';
+import { formatEta, formatPercent, ownBases } from '../game/format';
 import { barefoot, eta, nearestBase } from '../game/march';
 import { gameSocket } from '../net/socket';
 import { useGameStore } from '../state/store';
@@ -295,7 +295,7 @@ function TradeOffer({
         <span className={travel === null ? 'text-seal' : 'text-ink-soft'}>
           {travel === null
             ? 'Kein Landweg dorthin.'
-            : `Hin und zurück ${formatGameDuration(2 * (arrival ?? travel))} · beladen ${formatPercent(LOADED_SPEED)} Tempo${barefoot(view) ? ' · barfuß' : ''}`}
+            : `Zurück ${formatEta(view.clock, 2 * (arrival ?? travel))} · beladen ${formatPercent(LOADED_SPEED)} Tempo${barefoot(view) ? ' · barfuß' : ''}`}
         </span>
         <Button variant="primary" onClick={send} disabled={!valid}>
           Handeln

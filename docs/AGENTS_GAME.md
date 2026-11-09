@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-08
+last_verified: 2026-11-09
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 4ed2ddface8330525193ba8450728f0649db0efd
@@ -42,10 +42,10 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - `clock` = accumulated gameday milliseconds. It advances only Mon–Fri 10–18 in
   `GAME_TIMEZONE` (`GAME_HOURS=weekdays`) or always (`always`, dev), times `TIME_SCALE`.
 - **Break days** (`SavedGame.breakDays`, admin `setBreakDay`, YYYY-MM-DD in `GAME_TIMEZONE`):
-  `calendar.isGameTime` treats them like a weekend day — no clock, no gameday start; catch-up and
+  `shared/calendar.isGameTime` treats them like a weekend day — no clock, no gameday start; catch-up and
   the caravan's `arrivesAt` skip them too. `ClockState.breakDays` / `breakToday` reach the client.
 - All durations (travel, gathering, card effects) are in clock ms, so they pause overnight.
-- After downtime the server catches the clock up (`calendar.gameTimeBetween`); only one daily
+- After downtime the server catches the clock up (`shared/calendar.gameTimeBetween`); only one daily
   payout is granted for missed days.
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
   (always). Then: the night caravan arrives (see below), pending activity
@@ -59,7 +59,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   adds it to the home castle; it also sends a caravan first if none left yet for the ending day
   (`caravanDay`; `always` mode, or the server was down over the night). `PlayerRecord.caravanTrip`
   (`PlayerPublic.caravanTrip`) keeps one wagon per outpost with stock (`from`, `load`) plus real
-  `departedAt` / `arrivesAt` (`calendar.nextGameTime`). It is public like outpost stock: every
+  `departedAt` / `arrivesAt` (`shared/calendar.nextGameTime`). It is public like outpost stock: every
   player's map shows every caravan rolling home, load included.
 
 ## Economy
@@ -98,6 +98,14 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   Travel time is path length; crossing the map width takes `CROSS_MAP_HOURS` (10) gameday hours.
   Map generation leaves exactly one 4-connected landmass (`mapgen.joinLand`: islands under
   12 tiles sink, larger ones get a 2-tile land bridge), so every site is reachable on foot.
+- **Army cap**: at most `MAX_ARMIES` (10) armies per player on the map at once (any status, duo
+  groups included; `checkArmyLimit` in `sendArmy`, `duoGroups` and Bestechung). Forced armies
+  (fleeing garrisons, a split duo) are not refused.
+- **Assault lock**: no troops leave a base while a foreign assault on it arrives within
+  `ASSAULT_LOCK_MS` (20 min) or waits at its gates (`shared/entities.ts` `assaultImminent`,
+  server `checkAssaultLock` in `sendArmy` and `duoGroups`). Tarnung assaults and duo groups not yet
+  united do not count (the server must not reveal what the client cannot see). The send form greys
+  out with the same check.
 - Recall anytime unless already returning: heads home from the current position.
 - Redirect (`redirectArmy`): any army without resource cargo or a chest can get a new target — outbound, gathering or on its way home. A loaded army (cargo or chest) may only switch to another own base (`redirectHome`: new `baseId`, then `startReturn`, so it stays loaded-slow and raidable); stock that reached a base stays there (castle until spent, outpost until the night caravan).
 - Arriving at a chest: the first army with at least `troopsNeeded` troops takes it and heads
@@ -157,6 +165,10 @@ on to its target at normal speed. Raiders are sent from a base or
 redirected from the field. `planIntercept` finds the earliest point on the convoy's route the
 raider reaches no later than the convoy; if the convoy arrives first, the raid is refused.
 The raider arrives exactly at the meeting time; if the convoy is gone by then, it returns empty.
+The same load changes hands at most `MAX_CARGO_RAIDS` (2) times: the winning raider's army gets
+`ArmyRecord.cargoRaids` = the convoy's + 1 (`ArmyView.cargoRaids`), and `isRaidable` refuses a
+convoy at the limit (stolen, stolen back, then safe). The count is cleared when cargo is lost
+(robbed, rout) or an empty army is redirected.
 A convoy cannot raid in turn: armies with cargo can only be redirected to an own base
 (`redirectArmy`), and `sendArmy` takes no cargo at all. VP are never stolen,
 and neither are chests: a chest bearer with resource cargo can be raided for the cargo only, and

@@ -1,4 +1,5 @@
 import {
+  ASSAULT_LOCK_MS,
   CARD_TYPES,
   CARDS,
   cardChance,
@@ -17,6 +18,8 @@ import {
   GATHER_YIELD_PER_100_TROOPS,
   HOUR_MS,
   LOADED_SPEED,
+  MAX_ARMIES,
+  MAX_CARGO_RAIDS,
   SPOT_BALANCE_TOLERANCE_HOURS,
   SPOT_FAR_HOURS,
   SPOT_GAP_HOURS,
@@ -706,6 +709,15 @@ const CHAPTERS: Chapter[] = [
           Züge laufen nur über Land. Einmal quer über die Karte dauert etwa {CROSS_MAP_HOURS}{' '}
           Spielstunden.
         </P>
+        <Remember>
+          Du kannst höchstens {MAX_ARMIES} Züge gleichzeitig unterwegs haben – sammelnde und
+          wartende mitgezählt. Erst wenn einer ankommt, darf ein neuer los.
+        </Remember>
+        <P>
+          Ist ein Angriff auf eine deiner Burgen oder Stützpunkte nur noch{' '}
+          {formatGameDuration(ASSAULT_LOCK_MS)} oder weniger entfernt (oder wartet er schon vor dem
+          Tor), kann dort <b>niemand mehr abziehen</b>. Die Besatzung muss sich dem Kampf stellen.
+        </P>
         <H>Unterwegs</H>
         <List
           items={[
@@ -732,6 +744,8 @@ const CHAPTERS: Chapter[] = [
             'Truppen in Zügen und Stützpunkten verteidigen die Basis nicht. Die Basis verteidigen nur die Truppen, die gerade daheim stehen.',
             'Die Truppenzahl eines Zuges ändert sich nur durch Kämpfe. Unterwegs kann niemand dazustoßen.',
             'Truhenträger ohne Ladung marschieren normal schnell. Nur Ressourcen bremsen.',
+            'Die Abzugssperre zählt nur Angriffe, die du sehen kannst: Ein getarnter Angriff sperrt nichts. Auch Duo-Gruppen auf dem Weg zum Treffpunkt zählen erst, wenn sie vereint gegen dich ziehen.',
+            'Die Sperre gilt für jeden Abzug aus dieser Burg: Angriffe, Sammelzüge, Überfälle, Duo-Truppen. Züge, die schon unterwegs sind, kannst du weiter umleiten oder heimkehren lassen.',
           ]}
         />
       </>
@@ -890,6 +904,10 @@ const CHAPTERS: Chapter[] = [
           Eine Truhe lässt sich nie rauben. Trägt ihr Zug auch Ressourcen, kann man ihm aber die
           Ressourcen abnehmen. Ein Truhenträger behält immer mindestens eine Truppe – die Truhe
           kommt also sicher heim.
+        </Remember>
+        <Remember>
+          Dieselbe Ladung lässt sich höchstens {MAX_CARGO_RAIDS}-mal rauben: einmal geraubt, einmal
+          zurückgeraubt. Danach ist der Zug mit dieser Beute nicht mehr überfallbar.
         </Remember>
         <P>
           Ein Zug, der selbst Ressourcen trägt, kann niemanden überfallen. Er lässt sich nur zu
