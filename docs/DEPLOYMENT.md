@@ -3,10 +3,10 @@ type: Runbook
 description: Step-by-step deployment of vectoria to the Contabo VPS — Docker container behind the existing Nginx Proxy Manager, GitHub Actions deploys every push to main, rollback, backups, operations.
 audience: human, agent
 category: runbook
-last_verified: 2026-11-07
+last_verified: 2026-11-10
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: ee8f9453a3e33febb43fdfce978dc9533b430bdf
+sources_stamp: f08ea90755f3c96254504d6d73ce9f00832b54f3
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)
