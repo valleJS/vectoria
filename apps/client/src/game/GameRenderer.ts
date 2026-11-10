@@ -826,16 +826,12 @@ export class GameRenderer {
       // The watchtower already says "Stützpunkt": the plate names only the owner (or the ruin).
       const name = outpost.ownerId ? playerName(view, outpost.ownerId) : 'Ruine';
       const labels = [
-        this.nameplate(
-          `${name} · ${outpost.troops ?? '?'}` +
-            (outpost.ownerId ? ` ${'*'.repeat(outpostLevel(outpost.heldGamedays ?? 0))}` : ''),
-          color,
-          u,
-          {
-            top: 17 * u,
-            size: 10 * u,
-          },
-        ),
+        this.nameplate(`${name} · ${outpost.troops ?? '?'}`, color, u, {
+          top: 17 * u,
+          size: 10 * u,
+          // The outpost level, as small gold stars after the troops.
+          stars: outpost.ownerId ? outpostLevel(outpost.heldGamedays ?? 0) : 0,
+        }),
       ];
       if (hasResources(outpost.resources)) {
         labels.push(
@@ -966,11 +962,14 @@ export class GameRenderer {
       size = 13 * u,
       home = false,
       right,
-    }: { top?: number; size?: number; home?: boolean; right?: number } = {},
+      stars = 0,
+    }: { top?: number; size?: number; home?: boolean; right?: number; stars?: number } = {},
   ): Container {
     const label = this.label(text, size, INK, true);
     const star = home ? size * 1.05 : 0;
-    const w = label.width + size * 1.1 + star;
+    const step = size * 0.92;
+    const trail = stars > 0 ? size * 0.2 + stars * step : 0;
+    const w = label.width + size * 1.1 + star + trail;
     const h = size * 1.3;
     const line = Math.max(0.7 * u, size * 0.07);
     const plate = new Graphics();
@@ -1000,21 +999,26 @@ export class GameRenderer {
       .rect(-w / 2, top, w, h)
       .fill(PARCHMENT)
       .stroke({ width: line, color: INK });
-    if (home) {
-      const cx = -w / 2 + size * 0.95;
-      const cy = top + h / 2;
+    // A five-pointed gold star of outer radius r, centred on the plate's middle line (nudged
+    // down a little: a star's top point makes its visual centre sit above its geometric one).
+    const drawStar = (cx: number, r: number): void => {
+      const cy = top + h / 2 + r * 0.1;
       const points: number[] = [];
       for (let i = 0; i < 10; i++) {
         const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        const r = (i % 2 ? 0.2 : 0.47) * size;
-        points.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        const k = i % 2 ? r * 0.43 : r;
+        points.push(cx + Math.cos(a) * k, cy + Math.sin(a) * k);
       }
       plate
         .poly(points)
         .fill(RESOURCE_COLORS.gold)
         .stroke({ width: line, color: INK, join: 'round' });
+    };
+    if (home) drawStar(-w / 2 + size * 0.95, size * 0.47);
+    for (let i = 0; i < stars; i++) {
+      drawStar(w / 2 - size * 0.55 - (stars - 1 - i) * step, size * 0.44);
     }
-    label.position.set(star / 2, top + h / 2);
+    label.position.set((star - trail) / 2, top + h / 2);
     const container = new Container();
     container.addChild(plate, label);
     return container;
