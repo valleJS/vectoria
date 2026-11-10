@@ -3,13 +3,25 @@ import {
   CASTLE_DECORATIONS,
   type ArmyTarget,
   type CastleDecoration,
+  type Chest,
   type DuoSourcePick,
   type GamePhase,
   type GameView,
+  type Outpost,
+  type ResourceSpot,
+  type Vec2,
 } from './entities';
-import type { MapData } from './map';
+import type { MapData, TileCoord } from './map';
 import type { PlayerStats } from './stats';
-import { CARD_TYPES, RESOURCES, type CardType, type Resources, type ResourceType } from './rules';
+import {
+  CARD_TYPES,
+  RESOURCES,
+  SPOT_KINDS,
+  type CardType,
+  type Resources,
+  type ResourceType,
+  type SpotKind,
+} from './rules';
 
 export const PROTOCOL_VERSION = 7;
 
@@ -352,7 +364,22 @@ export interface AdminState {
   armies: number;
   chests: number;
   outposts: number;
+  /** Everything placed on the map, for the admin's map editor; null before the game starts. */
+  world: AdminWorld | null;
 }
+
+/** The map's placed pieces as the admin sees them (all details, nothing hidden). */
+export interface AdminWorld {
+  castles: { playerId: string; name: string; position: Vec2 }[];
+  spots: ResourceSpot[];
+  outposts: Outpost[];
+  chests: Chest[];
+}
+
+/** What the admin can place, move or remove on the map. */
+export type AdminPieceKind = 'chest' | 'outpost' | 'spot';
+
+export const ADMIN_PIECE_KINDS: readonly AdminPieceKind[] = ['chest', 'outpost', 'spot'];
 
 export type AdminAction =
   | { action: 'start' }
@@ -363,6 +390,16 @@ export type AdminAction =
   | { action: 'advanceClock'; hours: number }
   | { action: 'newGameday' }
   | { action: 'spawnChest' }
+  /**
+   * Places a new piece on a free mainland tile: a chest (troops needed rolled as usual), an empty
+   * ruin, or a resource spot / trader of `resource`.
+   */
+  | { action: 'place'; kind: 'chest' | 'outpost'; tile: TileCoord }
+  | { action: 'place'; kind: 'spot'; tile: TileCoord; resource: SpotKind }
+  /** Moves a chest, outpost or spot to a free mainland tile; armies heading there re-route. */
+  | { action: 'move'; kind: AdminPieceKind; id: string; tile: TileCoord }
+  /** Removes a chest, empty ruin or spot; armies heading there turn home on arrival. */
+  | { action: 'remove'; kind: AdminPieceKind; id: string }
   | { action: 'kick'; playerId: string }
   /** Swaps the two players' home castle positions; everything else stays with each player. */
   | { action: 'swapCastles'; playerId: string; otherId: string }
@@ -577,6 +614,18 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     : null;
 }
 
+const isPieceKind = (value: unknown): value is AdminPieceKind =>
+  ADMIN_PIECE_KINDS.includes(value as AdminPieceKind);
+
+/** A whole-numbered tile `{ x, y }` (bounds are the server's to check). */
+function parseTile(value: unknown): TileCoord | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { x, y } = value as Record<string, unknown>;
+  return Number.isInteger(x) && Number.isInteger(y) && (x as number) >= 0 && (y as number) >= 0
+    ? { x: x as number, y: y as number }
+    : null;
+}
+
 /** Validates an admin action body. */
 export function parseAdminAction(value: unknown): AdminAction | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -627,6 +676,26 @@ export function parseAdminAction(value: unknown): AdminAction | null {
             playerId: msg.playerId,
             decoration: msg.decoration as CastleDecoration | null,
           }
+        : null;
+    case 'place': {
+      const tile = parseTile(msg.tile);
+      if (!tile) return null;
+      if (msg.kind === 'chest' || msg.kind === 'outpost') {
+        return { action: 'place', kind: msg.kind, tile };
+      }
+      return msg.kind === 'spot' && SPOT_KINDS.includes(msg.resource as SpotKind)
+        ? { action: 'place', kind: 'spot', tile, resource: msg.resource as SpotKind }
+        : null;
+    }
+    case 'move': {
+      const tile = parseTile(msg.tile);
+      return tile && isPieceKind(msg.kind) && isId(msg.id)
+        ? { action: 'move', kind: msg.kind, id: msg.id, tile }
+        : null;
+    }
+    case 'remove':
+      return isPieceKind(msg.kind) && isId(msg.id)
+        ? { action: 'remove', kind: msg.kind, id: msg.id }
         : null;
     case 'setBreakDay':
       return typeof msg.date === 'string' &&

@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
 import { api } from '../net/api';
+import { AdminMapEditor } from './AdminMapEditor';
 import { AdminStats } from './AdminStats';
 import { OnlineDot, ResourceIcon, SoldiersIcon, TrophyIcon } from './icons';
 import { Button, Panel, Tip } from './Panel';
@@ -451,9 +452,6 @@ export function AdminPanel() {
                   <Button className={tap} onClick={() => run({ action: 'newGameday' })}>
                     Neuer Gameday
                   </Button>
-                  <Button className={tap} onClick={() => run({ action: 'spawnChest' })}>
-                    Truhe spawnen
-                  </Button>
                   <Button
                     variant="danger"
                     className={tap}
@@ -481,6 +479,16 @@ export function AdminPanel() {
               )}
             </div>
           </Panel>
+
+          {running && state.world && (
+            <AdminMapEditor
+              token={token}
+              world={state.world}
+              players={state.players}
+              mapSize={state.mapSize}
+              run={run}
+            />
+          )}
 
           {state.phase !== 'ended' && <BreakDays days={state.clock.breakDays} run={run} />}
 

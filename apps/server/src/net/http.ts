@@ -68,6 +68,16 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.forceGameday();
     case 'spawnChest':
       return state.spawnChest();
+    case 'place':
+      return state.place(
+        action.kind,
+        action.tile,
+        'resource' in action ? action.resource : undefined,
+      );
+    case 'move':
+      return state.move(action.kind, action.id, action.tile);
+    case 'remove':
+      return state.remove(action.kind, action.id);
     case 'kick':
       return state.kick(action.playerId);
     case 'swapCastles':
@@ -120,6 +130,9 @@ export async function handleHttp(
         ctx.onChange();
         return json(res, 200, result);
       }
+      case 'GET /api/admin/map':
+        if (!isAdmin(req, ctx.adminToken)) return json(res, 401, { error: 'Unauthorized' });
+        return json(res, 200, ctx.state.map);
       case 'GET /api/admin/state':
       case 'POST /api/admin/action': {
         if (!isAdmin(req, ctx.adminToken)) return json(res, 401, { error: 'Unauthorized' });

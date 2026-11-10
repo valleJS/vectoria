@@ -7,6 +7,7 @@ import type {
   AuthVerifyRequest,
   AuthVerifyResponse,
   LobbyInfo,
+  MapData,
 } from '@vectoria/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
@@ -29,6 +30,9 @@ export const api = {
     request<AuthVerifyResponse>('/api/auth/verify', { method: 'POST', body: JSON.stringify(body) }),
   adminState: (token: string) =>
     request<AdminState>('/api/admin/state', { headers: { authorization: `Bearer ${token}` } }),
+  /** The map's tiles; null before the game starts. */
+  adminMap: (token: string) =>
+    request<MapData | null>('/api/admin/map', { headers: { authorization: `Bearer ${token}` } }),
   adminAction: (token: string, action: AdminAction) =>
     request<AdminState>('/api/admin/action', {
       method: 'POST',

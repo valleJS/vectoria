@@ -51,6 +51,7 @@ import {
   victoryPointsCost,
   victoryPointsTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
+  type AdminPieceKind,
   type AdminState,
   type ArmyStatus,
   type ArmyTarget,
@@ -58,6 +59,8 @@ import {
   type CardType,
   type CaravanTrip,
   type CastleDecoration,
+  type SpotKind,
+  type TileCoord,
   type Chest,
   type FeedEntry,
   type GamePhase,
@@ -1080,10 +1083,17 @@ export class GameState {
         this.startReturn(army, position);
         continue;
       }
+      const { kind, id } = army.target;
       const to =
-        army.target.kind === 'castle'
-          ? this.player(army.target.id)?.castle
-          : this.data.outposts.find((o) => o.id === army.target.id)?.position;
+        kind === 'castle'
+          ? this.player(id)?.castle
+          : kind === 'outpost'
+            ? this.data.outposts.find((o) => o.id === id)?.position
+            : kind === 'spot'
+              ? this.data.spots.find((s) => s.id === id)?.position
+              : kind === 'chest'
+                ? this.data.chests.find((c) => c.id === id)?.position
+                : undefined;
       if (to) this.reroute(army, position, to);
     }
   }
@@ -2437,6 +2447,119 @@ export class GameState {
   }
 
   /**
+   * Admin map editor: puts a new chest, empty ruin or resource spot / trader on a free mainland
+   * tile.
+   */
+  place(kind: AdminPieceKind, tile: TileCoord, resource?: SpotKind): void {
+    const position = this.freeTile(tile);
+    switch (kind) {
+      case 'chest':
+        this.data.chests.push({
+          id: this.freshId('chest', this.data.chests),
+          position,
+          troopsNeeded: rollChestTroops(),
+        });
+        break;
+      case 'outpost':
+        this.data.outposts.push({
+          id: this.freshId('outpost', this.data.outposts),
+          position,
+          ownerId: null,
+          troops: 0,
+          resources: emptyResources(),
+        });
+        this.addFeed('outpost', 'Eine neue Ruine taucht auf der Karte auf.');
+        break;
+      case 'spot': {
+        if (!resource) throw new RuleError('Welches Vorkommen?');
+        this.data.spots.push({ id: this.freshId('spot', this.data.spots), resource, position });
+        this.addFeed('gather', `Ein neues ${SPOT_NAMES[resource]} ist auf der Karte.`);
+        break;
+      }
+    }
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /**
+   * Admin map editor: moves a chest, outpost (owned or not) or spot to a free mainland tile.
+   * Armies marching there re-route from where they stand, armies heading home to a moved outpost
+   * too; armies loading at a moved spot finish where they stand.
+   */
+  move(kind: AdminPieceKind, id: string, tile: TileCoord): void {
+    const piece = this.piece(kind, id);
+    piece.position = this.freeTile(tile, piece.position);
+    this.rerouteToMoved((army) => army.target.kind === kind && army.target.id === id);
+    if (kind === 'outpost') {
+      this.addFeed('outpost', `${this.outpostName(id)} steht jetzt an einem neuen Ort.`);
+    } else if (kind === 'spot') {
+      const { resource } = piece as ResourceSpot;
+      this.addFeed('gather', `Ein ${SPOT_NAMES[resource]} liegt jetzt an einem neuen Ort.`);
+    }
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /**
+   * Admin map editor: removes a chest, an empty ruin or a spot. Armies marching there turn home
+   * on arrival; armies loading at a removed spot come home empty-handed.
+   */
+  remove(kind: AdminPieceKind, id: string): void {
+    const piece = this.piece(kind, id);
+    if (kind === 'outpost') {
+      if ((piece as Outpost).ownerId !== null) {
+        throw new RuleError('Nur leere Ruinen lassen sich entfernen.');
+      }
+      if ((this.data.pacts ?? []).some((p) => p.target.kind === 'outpost' && p.target.id === id)) {
+        throw new RuleError('Ein Duo-Angriff zielt auf diese Ruine.');
+      }
+      this.data.outposts = this.data.outposts.filter((o) => o.id !== id);
+    } else if (kind === 'spot') {
+      this.data.spots = this.data.spots.filter((s) => s.id !== id);
+    } else {
+      this.data.chests = this.data.chests.filter((c) => c.id !== id);
+    }
+    this.revision++;
+    this.dirty = true;
+  }
+
+  private piece(kind: AdminPieceKind, id: string): Chest | Outpost | ResourceSpot {
+    const list =
+      kind === 'chest'
+        ? this.data.chests
+        : kind === 'outpost'
+          ? this.data.outposts
+          : this.data.spots;
+    const piece = (list as { id: string }[]).find((p) => p.id === id);
+    if (!piece) throw new RuleError('Das gibt es auf der Karte nicht (mehr).');
+    return piece as Chest | Outpost | ResourceSpot;
+  }
+
+  /**
+   * Centre of `tile` if a running game's map has it on the mainland, off the outer ring and
+   * free of castles, outposts, spots and chests (`own` = where the moved piece stands now).
+   */
+  private freeTile(tile: TileCoord, own?: Vec2): Vec2 {
+    if (this.data.phase !== 'running' || !this.map) throw new RuleError('Es läuft kein Spiel.');
+    const position = { x: tile.x + 0.5, y: tile.y + 0.5 };
+    const sameTile = (p: Vec2) => Math.floor(p.x) === tile.x && Math.floor(p.y) === tile.y;
+    if (!innerLand(this.map).some(sameTile)) {
+      throw new RuleError('Dort ist kein erreichbares Land.');
+    }
+    if (this.takenPositions().some((p) => sameTile(p) && !(own && sameTile(own)))) {
+      throw new RuleError('Das Feld ist schon belegt.');
+    }
+    return position;
+  }
+
+  /** `prefix-n` with the next counter value not used by any of `taken`. */
+  private freshId(prefix: string, taken: readonly { id: string }[]): string {
+    let id = this.nextId(prefix);
+    while (taken.some((t) => t.id === id)) id = this.nextId(prefix);
+    return id;
+  }
+
+  /**
    * Admin: swaps two players' home castle positions, nothing else (troops, resources, outposts
    * stay with each player). Armies returning home move along with their castle, keeping distance
    * and arrival time; armies that set out from either castle keep target and progress but start
@@ -2693,6 +2816,17 @@ export class GameState {
       armies: this.data.armies.length,
       chests: this.data.chests.length,
       outposts: this.data.outposts.length,
+      world:
+        this.data.phase === 'registration'
+          ? null
+          : {
+              castles: this.data.players.flatMap((p) =>
+                p.castle ? [{ playerId: p.id, name: p.name, position: p.castle }] : [],
+              ),
+              spots: this.data.spots,
+              outposts: this.data.outposts,
+              chests: this.data.chests,
+            },
     };
   }
 

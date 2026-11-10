@@ -3,7 +3,7 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
 sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
@@ -25,7 +25,11 @@ Game clock), a purely cosmetic castle decoration seen by everyone (`setCastleDec
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
 stays with each player; armies returning home move along with their castle and keep their arrival time;
 armies that set out from either castle keep target and progress (as a share of the way) but
-start from its new place; other attackers re-route from where they stand). The
+start from its new place; other attackers re-route from where they stand), and the map editor:
+`place` / `move` / `remove` chests, empty ruins and resource spots / the trader on free mainland
+tiles off the outer ring (owned outposts can only be moved); armies marching to a moved piece
+re-route from where they stand, gatherers at a moved spot finish in place; armies heading for a
+removed piece turn home on arrival (a removed spot's gatherers come home empty). The
 map is generated at start, sized by `mapSizeForPlayers` (24–96 tiles square). Admin "reset"
 returns to registration, keeping registrations.
 
