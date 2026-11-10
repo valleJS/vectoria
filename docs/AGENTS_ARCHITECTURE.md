@@ -3,7 +3,7 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
 sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
@@ -91,8 +91,10 @@ close code `4001` (client drops its token and shows the join screen).
 
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
 `POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state` (incl.
-per-player `stats`: online time, attacks started/executed/won …),
-`POST /api/admin/action` (bearer `ADMIN_TOKEN`), `GET /healthz`, `GET /source` (redirect to the
+per-player `stats`: online time, attacks started/executed/won …, and `world`: castles, spots,
+outposts, chests for the map editor), `GET /api/admin/map` (the tiles),
+`POST /api/admin/action` (bearer `ADMIN_TOKEN`; incl. `place` / `move` / `remove` of chests,
+outposts and spots on free mainland tiles — armies heading for a moved piece re-route), `GET /healthz`, `GET /source` (redirect to the
 repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).
 
 Web Push (outside the socket): the server posts a `PushNotice` (`topic`, `title`, `body`, `tag`)

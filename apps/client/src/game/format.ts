@@ -130,7 +130,10 @@ export interface Heraldry {
  * `PLAYER_PALETTE.length × CASTLE_STYLES` players never share both colour and style; anyone past
  * that gets a colour hashed from the id.
  */
-export function playerHeraldry(view: Pick<GameView, 'players'>, playerId: string): Heraldry {
+export function playerHeraldry(
+  view: { players: readonly { id: string }[] },
+  playerId: string,
+): Heraldry {
   const n = PLAYER_PALETTE.length;
   const joined = view.players.findIndex((p) => p.id === playerId);
   let hash = 0;
