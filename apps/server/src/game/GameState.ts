@@ -288,6 +288,11 @@ export interface SavedGame {
   spotLayout?: number;
   /** Last applied `GATHERER_FIX`; absent in saves from before it. */
   gathererFix?: number;
+  /**
+   * First gameday that charges troop upkeep. A game already running when upkeep came in gets one
+   * grace gameday (a warning only); new games charge from the start. Absent in older saves.
+   */
+  upkeepFrom?: number;
 }
 
 /** Save format before email login, outposts and land routes. */
@@ -380,6 +385,8 @@ export class GameState {
       this.recallFromLostOutposts();
       if ((this.data.spotLayout ?? 1) < SPOT_LAYOUT) this.relayoutSpots();
       if ((this.data.gathererFix ?? 0) < GATHERER_FIX) this.moveGatherersToNearestSpot();
+      // Upkeep is new to this running game: the next gameday start only warns, the one after pays.
+      this.data.upkeepFrom ??= this.data.gameday + 2;
     }
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
   }
@@ -2447,6 +2454,15 @@ export class GameState {
    */
   private payUpkeep(player: PlayerRecord): void {
     const upkeep = troopUpkeep(this.ownedTroops(player), this.upkeepRelief(player));
+    if (this.data.gameday < (this.data.upkeepFrom ?? 0)) {
+      if (upkeep > 0) {
+        this.addLog(
+          player,
+          `Neu: Truppen wollen Sold. Ab dem nächsten Spieltag kostet deine Armee ${upkeep} ${RESOURCE_NAMES[UPKEEP_RESOURCE]} pro Tag (heute noch nichts). Fehlt Stein, desertieren Truppen aus der Burg.`,
+        );
+      }
+      return;
+    }
     const due = upkeep + (player.upkeepDebt ?? 0);
     if (due === 0) return;
     const paid = Math.min(due, player.resources[UPKEEP_RESOURCE]);
@@ -2558,6 +2574,7 @@ export class GameState {
     this.data.outposts = world.outposts;
     this.data.spotLayout = SPOT_LAYOUT;
     this.data.gathererFix = GATHERER_FIX;
+    this.data.upkeepFrom = 0;
     players.forEach((player, i) => {
       player.castle = world.castles[i]!;
       player.homeTroops = STARTING_TROOPS;
