@@ -59,7 +59,7 @@ themselves in between. Commands mutate state only through
 | `ADMIN_TOKEN` | `admin` (dev) | **required in production** |
 | `GAME_HOURS` / `GAME_TIMEZONE` | `weekdays` / `Europe/Berlin` | `always` for dev |
 | `TIME_SCALE` | `1` | clock multiplier for testing |
-| `VICTORY_POINTS_TO_WIN` | `10` | |
+| `VICTORY_POINTS_TO_WIN` | `12` | |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
 | `CLIENT_DIR` | unset = API only | built client to serve; set in the Docker image |
 | `ALLOWED_ORIGINS` | empty = any | comma list; **set in production** |

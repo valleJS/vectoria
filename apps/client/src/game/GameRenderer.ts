@@ -4,6 +4,7 @@ import {
   getTile,
   hasResources,
   HOUR_MS,
+  outpostLevel,
   pointAlong,
   RESOURCES,
   TileType,
@@ -25,6 +26,7 @@ import {
 import { loadMapArt, type ArtTexture, type MapArt } from '../art/textures';
 import {
   CARAVAN_LANTERN,
+  CASTLE_CROWNS,
   CASTLE_WINDOWS,
   GOLD_MINE_GLINTS,
   OUTPOST_WINDOWS,
@@ -824,10 +826,16 @@ export class GameRenderer {
       // The watchtower already says "Stützpunkt": the plate names only the owner (or the ruin).
       const name = outpost.ownerId ? playerName(view, outpost.ownerId) : 'Ruine';
       const labels = [
-        this.nameplate(`${name} · ${outpost.troops ?? '?'}`, color, u, {
-          top: 17 * u,
-          size: 10 * u,
-        }),
+        this.nameplate(
+          `${name} · ${outpost.troops ?? '?'}` +
+            (outpost.ownerId ? ` ${'*'.repeat(outpostLevel(outpost.heldGamedays ?? 0))}` : ''),
+          color,
+          u,
+          {
+            top: 17 * u,
+            size: 10 * u,
+          },
+        ),
       ];
       if (hasResources(outpost.resources)) {
         labels.push(
@@ -848,7 +856,13 @@ export class GameRenderer {
       const { color, style } = playerHeraldry(view, player.id);
       const home = player.id === view.self.id;
       const castle = place(player.castle, [
-        this.nameplate(`${player.name} · ${player.homeTroops ?? '?'}`, color, u, { home }),
+        this.nameplate(
+          `${player.name} · ${player.homeTroops ?? '?'}` +
+            (player.troopsInProduction ? ` (${player.troopsInProduction})` : ''),
+          color,
+          u,
+          { home },
+        ),
       ]);
       const art = this.art.pieces.castle(color, style);
       const rings = new Graphics();
@@ -892,6 +906,17 @@ export class GameRenderer {
         castle.addChild(sprite);
         this.decorations.push({ sprite, phase: Math.random() * Math.PI * 2 });
       }
+      if (art && player.castleDecoration === 'crown') {
+        // Sits on the middle tower of the castle's style; it does not sway.
+        const spot = CASTLE_CROWNS[style] ?? CASTLE_CROWNS[0]!;
+        const k = (58 * u) / (art.width - art.pad * 2);
+        const sprite = artSprite(this.art.crown, spot.width * k);
+        sprite.position.set(
+          (spot.x + art.pad - art.anchor.x) * k,
+          (spot.y + art.pad - art.centreY) * k,
+        );
+        castle.addChild(sprite);
+      }
       if (!player.online) castle.alpha = 0.85;
     }
 
@@ -901,7 +926,14 @@ export class GameRenderer {
         if (!p.castle) return [];
         const { color, style } = playerHeraldry(view, p.id);
         const art = this.art.pieces.castle(color, style);
-        return windowLights(this.px(p.castle), art, 58 * u, CASTLE_WINDOWS[style] ?? []);
+        const lights = windowLights(this.px(p.castle), art, 58 * u, CASTLE_WINDOWS[style] ?? []);
+        if (p.castleDecoration !== 'crown') return lights;
+        // The crown glows at night: a light on its middle, half its height above the base.
+        const spot = CASTLE_CROWNS[style] ?? CASTLE_CROWNS[0]!;
+        const glow = windowLights(this.px(p.castle), art, 58 * u, [
+          { x: spot.x, y: spot.y - spot.width * 0.35, size: spot.width },
+        ]).map((l) => ({ ...l, kind: 'crown' as const }));
+        return [...lights, ...glow];
       }),
       ...view.outposts.flatMap((o) => {
         if (!o.ownerId) return [];

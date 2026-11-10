@@ -40,10 +40,32 @@ export const GAMEDAY_MS = GAMEDAY_HOURS * HOUR_MS;
 export const DAILY_BASE_INCOME = 1;
 export const DAILY_ACTIVITY_INCOME = 3;
 /**
- * Each owned outpost adds this much of every resource to the home castle at each gameday start
- * (straight into the castle, not the outpost's own stock).
+ * Outposts grow with the time they are held: level 1 when taken, +1 for every
+ * `OUTPOST_LEVEL_GAMEDAYS` gameday starts in the same hand, up to `OUTPOST_MAX_LEVEL`. A conquered
+ * outpost keeps its level minus 1; one that falls back to a ruin starts again at 1. Each gameday
+ * start pays `outpostIncome(level)` straight into the owner's home castle (not the outpost's own
+ * stock) — stone above the rest, since it pays the troops' upkeep — and each level spares
+ * `OUTPOST_UPKEEP_RELIEF_PER_LEVEL` troops from the upkeep (`troopUpkeep`).
  */
-export const OUTPOST_DAILY_INCOME = 1;
+export const OUTPOST_MAX_LEVEL = 4;
+export const OUTPOST_LEVEL_GAMEDAYS = 2;
+export const OUTPOST_STONE_PER_LEVEL = 2;
+export const OUTPOST_UPKEEP_RELIEF_PER_LEVEL = 50;
+
+/** Level of an outpost held for `heldGamedays` gameday starts in a row. */
+export function outpostLevel(heldGamedays: number): number {
+  return Math.min(OUTPOST_MAX_LEVEL, 1 + Math.floor(heldGamedays / OUTPOST_LEVEL_GAMEDAYS));
+}
+
+/** `heldGamedays` that puts a freshly conquered outpost at `level`. */
+export function heldGamedaysForLevel(level: number): number {
+  return (Math.max(1, Math.min(OUTPOST_MAX_LEVEL, level)) - 1) * OUTPOST_LEVEL_GAMEDAYS;
+}
+
+/** What an outpost at `level` pays its owner at each gameday start. */
+export function outpostIncome(level: number): Resources {
+  return { wood: level, stone: level * OUTPOST_STONE_PER_LEVEL, gold: level };
+}
 
 export const STARTING_TROOPS = 50;
 export const STARTING_RESOURCES: Resources = { wood: 2, stone: 2, gold: 2 };
@@ -51,9 +73,16 @@ export const STARTING_RESOURCES: Resources = { wood: 2, stone: 2, gold: 2 };
 /** Troops come in batches; one batch costs this. */
 export const TROOP_BATCH_SIZE = 10;
 export const TROOP_BATCH_COST: Resources = { wood: 1, stone: 0, gold: 1 };
-/** Price of the first victory point; each further one costs 1 more of one resource, in turn. */
-export const VICTORY_POINT_BASE_COST: Resources = { wood: 1, stone: 2, gold: 1 };
-export const VICTORY_POINT_STEP_ORDER: readonly ResourceType[] = ['stone', 'wood', 'gold'];
+/**
+ * Bought troops are ready in the home castle this long (game clock) after the purchase; until then
+ * they neither defend nor march, but they already count as owned (upkeep, victory point price).
+ */
+export const TROOP_PRODUCTION_MS = HOUR_MS;
+/**
+ * Purchases within this long (game clock) of the newest order join it and are ready with it, so
+ * a few clicks in a row make one order, not many (at most this much earlier than on their own).
+ */
+export const TROOP_ORDER_MERGE_MS = 30 * 1000;
 /** At most this many victory points can be bought per gameday (evening and night included). */
 export const VICTORY_POINTS_PER_GAMEDAY = 3;
 /**
@@ -63,6 +92,32 @@ export const VICTORY_POINTS_PER_GAMEDAY = 3;
  * outpost pays a given player only once (`PlayerRecord.outpostTrophies`).
  */
 export const TROPHY_VP_INTERVAL = 4;
+
+/**
+ * Anti-snowball, part 1: the victory point price scales with the army a player keeps —
+ * `(troops / VP_TROOP_REFERENCE) ^ VP_TROOP_EXPONENT`, never below `VP_TROOP_FACTOR_MIN`. "Troops"
+ * is the average of the last `VP_TROOP_SNAPSHOTS` gameday-start counts of everything the player
+ * owns (castle, outposts, every army), so throwing troops away just before buying barely helps,
+ * and the price stays fixed for the whole gameday. Rewards earning a lot with few troops.
+ */
+export const VP_TROOP_EXPONENT = 0.35;
+export const VP_TROOP_REFERENCE = 400;
+export const VP_TROOP_FACTOR_MIN = 0.5;
+export const VP_TROOP_SNAPSHOTS = 3;
+
+/**
+ * Anti-snowball, part 2: at each gameday start (after the income) a player pays upkeep for every
+ * troop owned: `floor(UPKEEP_FACTOR × (troops / 100)²)` of `UPKEEP_RESOURCE` from the home
+ * castle. It grows with the square, so beyond a few hundred troops more gatherers stop paying off.
+ * Stone is the one resource troops do not cost, so it gets a second use. Each stone the castle
+ * lacks makes `UPKEEP_DESERTERS_PER_UNIT` troops desert from the home castle; what that cannot
+ * cover (too few troops at home, e.g. the army is away over night) becomes debt that carries
+ * over. Every purchase (troops or victory points) settles the debt first, so nothing can be
+ * bought while it stands.
+ */
+export const UPKEEP_FACTOR = 1;
+export const UPKEEP_RESOURCE: ResourceType = 'stone';
+export const UPKEEP_DESERTERS_PER_UNIT = 10;
 
 /** Travelling the full map width (along land) takes this many gameday hours. */
 export const CROSS_MAP_HOURS = 10;
@@ -329,26 +384,50 @@ export function gatherYield(troops: number): number {
 }
 
 /**
- * Price of the next victory point for a player who owns `owned`: the base cost plus `owned`
- * single steps spread over `VICTORY_POINT_STEP_ORDER` (2nd VP +1 stone, 3rd +1 wood, 4th +1 gold, …).
+ * Base price of the next victory point for a player who owns `owned`: the n-th costs n of every
+ * resource (1st 1/1/1, 2nd 2/2/2, …), before the troop factor.
  */
 export function victoryPointCost(owned: number): Resources {
-  const cost = { ...VICTORY_POINT_BASE_COST };
-  const steps = VICTORY_POINT_STEP_ORDER.length;
-  VICTORY_POINT_STEP_ORDER.forEach((r, i) => {
-    cost[r] += Math.floor((owned + steps - 1 - i) / steps);
-  });
-  return cost;
+  const n = owned + 1;
+  return { wood: n, stone: n, gold: n };
 }
 
 /** Total price of the next `count` victory points for a player who owns `owned`. */
-export function victoryPointsCost(owned: number, count: number): Resources {
+export function victoryPointsCost(owned: number, count: number, factor = 1): Resources {
   const total: Resources = { wood: 0, stone: 0, gold: 0 };
   for (let i = 0; i < count; i++) {
-    const cost = victoryPointCost(owned + i);
+    const cost = scaledVictoryPointCost(owned + i, factor);
     for (const r of RESOURCES) total[r] += cost[r];
   }
   return total;
+}
+
+/** `victoryPointCost` times the troop factor, each resource rounded and at least 1. */
+export function scaledVictoryPointCost(owned: number, factor: number): Resources {
+  const cost = victoryPointCost(owned);
+  for (const r of RESOURCES) cost[r] = Math.max(1, Math.round(cost[r] * factor));
+  return cost;
+}
+
+/** Average troops over the gameday-start snapshots (null when there are none yet). */
+export function averageTroops(snapshots: readonly number[]): number | null {
+  const recent = snapshots.slice(-VP_TROOP_SNAPSHOTS);
+  if (recent.length === 0) return null;
+  return recent.reduce((sum, t) => sum + t, 0) / recent.length;
+}
+
+/** Victory point price factor for an average army of `troops`; 1 without snapshots. */
+export function victoryPointTroopFactor(troops: number | null): number {
+  if (troops === null) return 1;
+  return Math.max(VP_TROOP_FACTOR_MIN, (troops / VP_TROOP_REFERENCE) ** VP_TROOP_EXPONENT);
+}
+
+/**
+ * `UPKEEP_RESOURCE` due at the next gameday start for `troops` owned in total, of which `spared`
+ * (the outposts' `OUTPOST_UPKEEP_RELIEF_PER_LEVEL` per level) cost nothing.
+ */
+export function troopUpkeep(troops: number, spared = 0): number {
+  return Math.floor(UPKEEP_FACTOR * (Math.max(0, troops - spared) / 100) ** 2);
 }
 
 /**

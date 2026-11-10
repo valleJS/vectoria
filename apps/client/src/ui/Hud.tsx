@@ -7,7 +7,11 @@ import {
   RESOURCES,
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
-  victoryPointCost,
+  scaledVictoryPointCost,
+  troopUpkeep,
+  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
+  outpostLevel,
+  UPKEEP_RESOURCE,
   victoryPointTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
   type ArmyView,
@@ -288,8 +292,31 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     .reduce((sum, a) => sum + (a.troops ?? 0), 0);
   const buy = (item: 'troops' | 'victoryPoint', count: number) =>
     gameSocket.send({ type: 'buy', item, count });
-  const owned = view.players.find((p) => p.id === self.id)?.victoryPoints ?? 0;
-  const vpCost = victoryPointCost(owned);
+  const me = view.players.find((p) => p.id === self.id);
+  const owned = me?.victoryPoints ?? 0;
+  const vpCost = scaledVictoryPointCost(owned, self.victoryPointFactor);
+  const troopsOwned =
+    (me?.homeTroops ?? 0) +
+    (me?.troopsInProduction ?? 0) +
+    field +
+    view.outposts.filter((o) => o.ownerId === self.id).reduce((sum, o) => sum + (o.troops ?? 0), 0);
+  const spared = view.outposts
+    .filter((o) => o.ownerId === self.id)
+    .reduce(
+      (sum, o) => sum + outpostLevel(o.heldGamedays ?? 0) * OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
+      0,
+    );
+  const upkeep = troopUpkeep(troopsOwned, spared);
+  // Any purchase settles the upkeep debt first, so it counts towards every price.
+  const payable = (cost: Resources, times = 1) =>
+    canAfford(
+      {
+        ...self.resources,
+        [UPKEEP_RESOURCE]: self.resources[UPKEEP_RESOURCE] - self.upkeepDebt,
+      },
+      cost,
+      times,
+    );
   const trophies = view.players.find((p) => p.id === self.id)?.trophies ?? 0;
   const vpTrophies = victoryPointTrophiesNeeded(owned);
   const vpLeft = Math.max(0, VICTORY_POINTS_PER_GAMEDAY - self.victoryPointsToday);
@@ -320,7 +347,7 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
                 key={n}
                 className="px-2 py-0.5"
                 onClick={() => buy('troops', n)}
-                disabled={!canAfford(self.resources, TROOP_BATCH_COST, n)}
+                disabled={!payable(TROOP_BATCH_COST, n)}
               >
                 {n}×
               </Button>
@@ -354,11 +381,37 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
             variant="primary"
             className="px-2 py-0.5"
             onClick={() => buy('victoryPoint', 1)}
-            disabled={vpLeft === 0 || !canAfford(self.resources, vpCost) || trophies < vpTrophies}
+            disabled={vpLeft === 0 || !payable(vpCost) || trophies < vpTrophies}
             title={`Noch ${vpLeft} von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten heute`}
           >
             1×
           </Button>
+        </div>
+        <div className="text-xs text-ink-soft">
+          <Tip
+            label={
+              self.troopAverage === null
+                ? 'Ab dem nächsten Spieltag richtet sich der Siegpunkt-Preis nach deiner Armee.'
+                : `Siegpunkt-Preis nach deiner Armee: Ø ${Math.round(self.troopAverage)} Truppen über die letzten Spieltage. Weniger Truppen, billigere Siegpunkte.`
+            }
+          >
+            <span className="tabular-nums">
+              Truppenfaktor ×{self.victoryPointFactor.toFixed(2).replace('.', ',')}
+            </span>
+          </Tip>
+          {' · '}
+          <Tip label="Wird zum Spieltagsbeginn in Stein fällig und wächst mit dem Quadrat der Armee. Fehlt Stein, desertieren Truppen aus der Burg, der Rest wird Schulden. Jede Stufe deiner Stützpunkte versorgt 50 Truppen ohne Sold.">
+            <span className="tabular-nums">
+              Unterhalt {upkeep > 0 ? `${upkeep} ${RESOURCE_NAMES[UPKEEP_RESOURCE]}/Tag` : 'keiner'}
+            </span>
+          </Tip>
+          {self.upkeepDebt > 0 && (
+            <Tip label="Wird beim nächsten Kauf zuerst bezahlt. Bis dahin kannst du weder Truppen noch Siegpunkte kaufen.">
+              <div className="text-seal tabular-nums">
+                Sold-Schulden: {self.upkeepDebt} {RESOURCE_NAMES[UPKEEP_RESOURCE]}
+              </div>
+            </Tip>
+          )}
         </div>
       </div>
     </>

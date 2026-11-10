@@ -45,7 +45,7 @@ export interface NightLight {
   dy?: number;
   /** Radius of the light, world px. */
   radius: number;
-  kind: 'window' | 'chest' | 'lantern';
+  kind: 'window' | 'chest' | 'lantern' | 'crown';
 }
 
 interface Glow {
@@ -180,6 +180,13 @@ export class NightScene {
         const pool = this.glowSprite(light, light.radius * 3.4, FIRELIGHT);
         this.glowUnder.addChild(pool.container);
         this.glows.push({ sprite: pool.sprite, alpha: 0.8, phase: i * 1.7, flicker: 0.15 });
+        continue;
+      }
+      if (light.kind === 'crown') {
+        // The admin's crown shines gold over its tower, shimmering like treasure.
+        const halo = this.glowSprite(light, light.radius * 5, TREASURE_LIGHT);
+        this.glowOver.addChild(halo.container);
+        this.glows.push({ sprite: halo.sprite, alpha: 1, phase: i * 1.7, flicker: 0.35 });
         continue;
       }
       const lamp = this.glowSprite(light, light.radius * 6, FIRELIGHT);

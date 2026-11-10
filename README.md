@@ -261,7 +261,7 @@ Set these as environment variables, or in `apps/server/.env` (template:
 | `GAME_HOURS` | `weekdays` | `weekdays` = Mon–Fri 10–18, `always` = the clock never stops |
 | `GAME_TIMEZONE` | `Europe/Berlin` | Time zone for gameday hours |
 | `TIME_SCALE` | `1` | Game clock speed multiplier, for testing |
-| `VICTORY_POINTS_TO_WIN` | `10` | Win condition, read at server start |
+| `VICTORY_POINTS_TO_WIN` | `12` | Win condition, read at server start |
 | `TICK_RATE` | `5` | Simulation ticks per second |
 | `MAP_SEED` | random | Fixed seed for map generation |
 | `DATA_FILE` | `data/game.json` | Save file, relative to the server's working directory |

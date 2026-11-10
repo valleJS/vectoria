@@ -875,6 +875,17 @@ export const CASTLE_WINDOWS: readonly (readonly LitWindow[])[] = [
   [{ x: 60, y: 57, size: 10 }, slit(12, 16, 44), slit(92, 16, 44)],
 ];
 
+/**
+ * Where the admin's crown (`CastleDecoration` 'crown') sits, per castle style: the bottom centre of
+ * the crown and its width, in castle art px — on the middle tower (the keep's crenellation, or the
+ * tip of the great cone).
+ */
+export const CASTLE_CROWNS: readonly { x: number; y: number; width: number }[] = [
+  { x: 60, y: 27, width: 24 },
+  { x: 60, y: 11, width: 22 },
+  { x: 60, y: 13, width: 24 },
+];
+
 /** Number of castle designs; format.ts assigns one per player. */
 export const CASTLE_STYLE_NAMES = ['Burg', 'Bergfried', 'Zitadelle'] as const;
 
@@ -1214,6 +1225,27 @@ export function penis(): Art {
     <path d="M20 5.5V9" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>
     <path d="M14.5 10Q16 7.5 18.5 7" stroke="${shade(glans, 1.3)}" stroke-width="1.8" stroke-linecap="round" fill="none"/>`;
   return { svg: svg(40, 56, body), width: 40, height: 56, anchor: { x: 20, y: 54 } };
+}
+
+/**
+ * Admin's decoration on a castle (`CastleDecoration` 'crown'), 40×30 standing on its bottom
+ * centre: a gold crown with five points, pearls on the tips and red and blue gems on the band;
+ * lit from the top left.
+ */
+export function crown(): Art {
+  const body = `
+    <path d="M5 27L3 8L12.5 17L20 4L27.5 17L37 8L35 27Z" fill="${GOLD}" ${LINE}/>
+    <path d="M27.5 17L37 8L35 27H26Z" fill="${GOLD_DEEP}"/>
+    <path d="M7.5 22L6.5 13L12 18" stroke="${GOLD_LIGHT}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+    <path d="M5 27L3 8L12.5 17L20 4L27.5 17L37 8L35 27Z" fill="none" ${LINE}/>
+    <rect x="4.5" y="21" width="31" height="6.5" rx="1.2" fill="${GOLD_DEEP}" ${LINE}/>
+    <circle cx="12" cy="24.2" r="2" fill="${SEAL}" stroke="${INK}" stroke-width="1.2"/>
+    <circle cx="20" cy="24.2" r="2.3" fill="${FORTIFY}" stroke="${INK}" stroke-width="1.2"/>
+    <circle cx="28" cy="24.2" r="2" fill="${SEAL}" stroke="${INK}" stroke-width="1.2"/>
+    <g fill="${GOLD_LIGHT}" stroke="${INK}" stroke-width="1.3">
+      <circle cx="3" cy="7.5" r="2.2"/><circle cx="20" cy="3.5" r="2.4"/><circle cx="37" cy="7.5" r="2.2"/>
+    </g>`;
+  return { svg: svg(40, 30, body), width: 40, height: 30, anchor: { x: 20, y: 27.5 } };
 }
 
 /** Billowing smoke puff after an assault, 50×48 around its centre; `seed` varies the outline. */

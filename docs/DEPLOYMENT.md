@@ -308,7 +308,7 @@ nicht lesen. Dann zusätzlich das `…-before-<sha>.json`-Backup dieses Deploys 
 
 ### Neue Runde starten
 
-1. Siegpunkt-Ziel prüfen (Standard 10, wird nur beim Start gelesen):
+1. Siegpunkt-Ziel prüfen (Standard 12, wird nur beim Start gelesen):
    `grep VICTORY vectoria.env`; nach einer Änderung `docker compose up -d --force-recreate`.
 2. Admin-Panel `https://vectoria.DEINEDOMAIN.de/?admin` → **Zurücksetzen**. Der Spielstand wird
    gelöscht, Anmeldungen bleiben. Vorher wird nichts automatisch gesichert; bei Bedarf

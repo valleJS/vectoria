@@ -71,7 +71,7 @@ close code `4001` (client drops its token and shows the join screen).
 | --------- | ---- | ------- |
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
-| C→S | `buy` | Troop batches or victory points (at most `VICTORY_POINTS_PER_GAMEDAY` per gameday) |
+| C→S | `buy` | Troop batches (queued, ready after `TROOP_PRODUCTION_MS`) or victory points (at most `VICTORY_POINTS_PER_GAMEDAY` per gameday); refused while `SelfState.upkeepDebt` cannot be paid on top |
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
