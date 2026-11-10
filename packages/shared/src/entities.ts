@@ -323,6 +323,13 @@ export interface SelfState {
   /** Unpaid troop upkeep in `UPKEEP_RESOURCE`; any purchase settles it first (0 when none). */
   upkeepDebt: number;
   /**
+   * The upkeep due at the next gameday start for the army as it stands now: `due` in
+   * `UPKEEP_RESOURCE` (old debt included), `stone` the castle will expectably hold then (stock,
+   * caravan and outpost stock, the day's income; gatherers still out not counted), and `grace`
+   * when that gameday start only warns (the update's grace day).
+   */
+  upkeepNext: { due: number; stone: number; grace: boolean };
+  /**
    * Langfinger: how many cards each other player holds (not which). Sent only while the player
    * holds a Langfinger card; null otherwise.
    */

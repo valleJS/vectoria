@@ -8,9 +8,7 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   scaledVictoryPointCost,
-  troopUpkeep,
-  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
-  outpostLevel,
+  UPKEEP_DESERTERS_PER_UNIT,
   UPKEEP_RESOURCE,
   victoryPointTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
@@ -295,18 +293,8 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
   const me = view.players.find((p) => p.id === self.id);
   const owned = me?.victoryPoints ?? 0;
   const vpCost = scaledVictoryPointCost(owned, self.victoryPointFactor);
-  const troopsOwned =
-    (me?.homeTroops ?? 0) +
-    (me?.troopsInProduction ?? 0) +
-    field +
-    view.outposts.filter((o) => o.ownerId === self.id).reduce((sum, o) => sum + (o.troops ?? 0), 0);
-  const spared = view.outposts
-    .filter((o) => o.ownerId === self.id)
-    .reduce(
-      (sum, o) => sum + outpostLevel(o.heldGamedays ?? 0) * OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
-      0,
-    );
-  const upkeep = troopUpkeep(troopsOwned, spared);
+  // The server's figure for the next gameday start, old debt left out (shown on its own).
+  const upkeep = self.upkeepNext.due - self.upkeepDebt;
   // Any purchase settles the upkeep debt first, so it counts towards every price.
   const payable = (cost: Resources, times = 1) =>
     canAfford(
@@ -496,6 +484,45 @@ function BaseFold({
  * player and sit on top; troops and resources belong to a base ("Basis", then each outpost),
  * each in its own fold once there is more than one.
  */
+/**
+ * The upkeep due at the next gameday start (`SelfState.upkeepNext`), and what it costs when the
+ * castle will lack the stone: deserters from the castle, then debt.
+ */
+function UpkeepLine({ view }: { view: GameView }) {
+  const { self } = view;
+  const { due, stone, grace } = self.upkeepNext;
+  if (due === 0) return null;
+  const me = view.players.find((p) => p.id === self.id);
+  const name = RESOURCE_NAMES[UPKEEP_RESOURCE];
+  const short = Math.max(0, due - stone);
+  const home = (me?.homeTroops ?? 0) + (me?.troopsInProduction ?? 0);
+  const deserters = Math.min(home, short * UPKEEP_DESERTERS_PER_UNIT);
+  const debt = short - Math.ceil(deserters / UPKEEP_DESERTERS_PER_UNIT);
+  return (
+    <Tip
+      label={`Fällig zum nächsten Spieltagsbeginn, nach dem Einkommen. Voraussichtlich ${stone} ${name} in der Burg (Lager, Karawane, Einkommen; Sammler unterwegs nicht mitgezählt).`}
+    >
+      <div
+        className={`mt-1 flex items-center justify-between gap-2 text-xs tabular-nums ${!grace && short > 0 ? 'text-seal' : 'text-ink-soft'}`}
+      >
+        <span className="flex items-center gap-1">
+          <ResourceIcon resource={UPKEEP_RESOURCE} size={14} />
+          Sold morgen{self.upkeepDebt > 0 ? ' inkl. Schulden' : ''}
+        </span>
+        <b>
+          {grace
+            ? `${due} ${name} · noch Schontag`
+            : short === 0
+              ? `${due} ${name}`
+              : `${due} ${name} · ${short} fehlen` +
+                (deserters > 0 ? ` → ${deserters} desertieren` : '') +
+                (debt > 0 ? ` · ${debt} Schulden` : '')}
+        </b>
+      </div>
+    </Tip>
+  );
+}
+
 function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: boolean }) {
   const setToken = useGameStore((s) => s.setToken);
   const setChestOverlay = useGameStore((s) => s.setChestOverlay);
@@ -536,6 +563,7 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
               aria-label="Fortschritt zum Sieg"
             />
           </div>
+          <UpkeepLine view={view} />
 
           {me?.routed && (
             <div className="mt-2 border border-seal px-2 py-1.5 text-sm text-seal">

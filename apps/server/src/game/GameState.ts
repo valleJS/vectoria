@@ -77,6 +77,7 @@ import {
   type FeedEntry,
   type GamePhase,
   type GameView,
+  type SelfState,
   type LobbyInfo,
   type LogEntry,
   type MapData,
@@ -2484,15 +2485,40 @@ export class GameState {
     );
   }
 
-  /** Troops the player's outposts spare from the upkeep (`OUTPOST_UPKEEP_RELIEF_PER_LEVEL`). */
-  private upkeepRelief(player: PlayerRecord): number {
+  /**
+   * Troops the player's outposts spare from the upkeep (`OUTPOST_UPKEEP_RELIEF_PER_LEVEL`);
+   * `ahead` gamedays added to each outpost's age (1 = as at the next gameday start).
+   */
+  private upkeepRelief(player: PlayerRecord, ahead = 0): number {
     let spared = 0;
     for (const o of this.data.outposts) {
       if (o.ownerId === player.id) {
-        spared += outpostLevel(o.heldGamedays ?? 0) * OUTPOST_UPKEEP_RELIEF_PER_LEVEL;
+        spared += outpostLevel((o.heldGamedays ?? 0) + ahead) * OUTPOST_UPKEEP_RELIEF_PER_LEVEL;
       }
     }
     return spared;
+  }
+
+  /**
+   * What the next gameday start will charge (`SelfState.upkeepNext`), mirroring `startGameday`:
+   * outposts a day older, the caravan and outpost stock home, the day's income paid first.
+   */
+  private upkeepNext(player: PlayerRecord): SelfState['upkeepNext'] {
+    const due =
+      troopUpkeep(this.ownedTroops(player), this.upkeepRelief(player, 1)) +
+      (player.upkeepDebt ?? 0);
+    const activity = player.pendingActivity ?? player.activity;
+    let stone =
+      player.resources[UPKEEP_RESOURCE] +
+      (player.caravan?.[UPKEEP_RESOURCE] ?? 0) +
+      (UPKEEP_RESOURCE === activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) +
+      ((player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0);
+    for (const o of this.data.outposts) {
+      if (o.ownerId !== player.id) continue;
+      stone += o.resources[UPKEEP_RESOURCE];
+      stone += outpostIncome(outpostLevel((o.heldGamedays ?? 0) + 1))[UPKEEP_RESOURCE];
+    }
+    return { due, stone, grace: this.data.gameday + 1 < (this.data.upkeepFrom ?? 0) };
   }
 
   /**
@@ -2962,6 +2988,7 @@ export class GameState {
         victoryPointFactor: this.victoryPointFactor(self),
         troopAverage: averageTroops(self.troopSnapshots ?? []),
         upkeepDebt: self.upkeepDebt ?? 0,
+        upkeepNext: this.upkeepNext(self),
         troopOrders: self.troopOrders ?? [],
         // Langfinger shows who holds how many cards, never which.
         cardCounts: self.cards.includes('pickpocket')
