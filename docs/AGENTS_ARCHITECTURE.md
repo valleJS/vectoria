@@ -92,7 +92,7 @@ close code `4001` (client drops its token and shows the join screen).
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
 `POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state` (incl.
 per-player `stats`: online time, attacks started/executed/won …, and `world`: castles, spots,
-outposts, chests for the map editor), `GET /api/admin/map` (the tiles),
+outposts, chests for the map editor), `GET /api/admin/map` (the tiles), `GET /api/admin/outpost-levels` (levels replayed from the backups, preview for `applyOutpostLevels`),
 `POST /api/admin/action` (bearer `ADMIN_TOKEN`; incl. `place` / `move` / `remove` of chests,
 outposts and spots on free mainland tiles — armies heading for a moved piece re-route), `GET /healthz`, `GET /source` (redirect to the
 repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).

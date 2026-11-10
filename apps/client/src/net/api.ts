@@ -1,6 +1,7 @@
 import type {
   AdminAction,
   AdminState,
+  OutpostLevelPreview,
   ApiError,
   AuthStartRequest,
   AuthStartResponse,
@@ -33,6 +34,11 @@ export const api = {
   /** The map's tiles; null before the game starts. */
   adminMap: (token: string) =>
     request<MapData | null>('/api/admin/map', { headers: { authorization: `Bearer ${token}` } }),
+  /** Outpost levels replayed from the server's save backups (preview; apply via adminAction). */
+  adminOutpostLevels: (token: string) =>
+    request<OutpostLevelPreview>('/api/admin/outpost-levels', {
+      headers: { authorization: `Bearer ${token}` },
+    }),
   adminAction: (token: string, action: AdminAction) =>
     request<AdminState>('/api/admin/action', {
       method: 'POST',

@@ -222,8 +222,8 @@ Once the proxy works, check the setup:
 2. When everyone has joined, open `/?admin` and click **„Anmeldung schließen & starten“**. The
    server generates the map for that number of players.
 3. To start a new round later, go to the admin panel and click **„Zurücksetzen“**. This clears the
-   game but keeps sign-ups. Then start again. `VICTORY_POINTS_TO_WIN` is only read at server
-   start, so restart after you change it.
+   game but keeps sign-ups. Then start again. The win target is set in the admin panel under
+   **„Siegziel“**; `VICTORY_POINTS_TO_WIN` is only the default for a new round.
 
 ### Backups
 
@@ -261,7 +261,7 @@ Set these as environment variables, or in `apps/server/.env` (template:
 | `GAME_HOURS` | `weekdays` | `weekdays` = Mon–Fri 10–18, `always` = the clock never stops |
 | `GAME_TIMEZONE` | `Europe/Berlin` | Time zone for gameday hours |
 | `TIME_SCALE` | `1` | Game clock speed multiplier, for testing |
-| `VICTORY_POINTS_TO_WIN` | `12` | Win condition, read at server start |
+| `VICTORY_POINTS_TO_WIN` | `12` | Default win target; the admin panel can change it per round |
 | `TICK_RATE` | `5` | Simulation ticks per second |
 | `MAP_SEED` | random | Fixed seed for map generation |
 | `DATA_FILE` | `data/game.json` | Save file, relative to the server's working directory |

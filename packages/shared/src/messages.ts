@@ -376,6 +376,31 @@ export interface AdminWorld {
   chests: Chest[];
 }
 
+/**
+ * Outpost levels replayed from the save backups for a game that was running before levels came
+ * in (`GET /api/admin/outpost-levels`); `applyOutpostLevels` stores them.
+ */
+export interface OutpostLevelPreview {
+  /** Backups of this round used, and how many files were skipped (other round, later gameday). */
+  backups: number;
+  skipped: number;
+  fromGameday: number | null;
+  toGameday: number | null;
+  /** One row per owned outpost. */
+  rows: {
+    outpostId: string;
+    ownerName: string;
+    heldGamedays: number;
+    level: number;
+    currentLevel: number;
+    /** Owned already in the oldest backup: the real level may be higher. */
+    sinceOldest: boolean;
+  }[];
+}
+
+/** Win target the admin can set (overrides VICTORY_POINTS_TO_WIN for this round). */
+export const ADMIN_VICTORY_POINTS_MAX = 100;
+
 /** What the admin can place, move or remove on the map. */
 export type AdminPieceKind = 'chest' | 'outpost' | 'spot';
 
@@ -414,7 +439,11 @@ export type AdminAction =
   /** Adds `amount` (may be negative) of one resource to the home castle. */
   | { action: 'grant'; playerId: string; resource: ResourceType; amount: number }
   /** Adds `amount` (may be negative) troops to the home castle. */
-  | { action: 'grantTroops'; playerId: string; amount: number };
+  | { action: 'grantTroops'; playerId: string; amount: number }
+  /** Sets the round's win target; refused when someone already has that many. */
+  | { action: 'setVictoryPointsToWin'; points: number }
+  /** Stores the outpost levels replayed from the save backups (see `OutpostLevelPreview`). */
+  | { action: 'applyOutpostLevels' };
 
 // ---- Codec ----
 
@@ -638,7 +667,14 @@ export function parseAdminAction(value: unknown): AdminAction | null {
     case 'resume':
     case 'newGameday':
     case 'spawnChest':
+    case 'applyOutpostLevels':
       return { action: msg.action };
+    case 'setVictoryPointsToWin':
+      return Number.isInteger(msg.points) &&
+        (msg.points as number) >= 1 &&
+        (msg.points as number) <= ADMIN_VICTORY_POINTS_MAX
+        ? { action: 'setVictoryPointsToWin', points: msg.points as number }
+        : null;
     case 'advanceClock':
       return isFiniteNumber(msg.hours) && msg.hours > 0 && msg.hours <= 1000
         ? { action: 'advanceClock', hours: msg.hours }

@@ -40,6 +40,7 @@ async function main(): Promise<void> {
         newSeed,
         clientDir: config.clientDir,
         sourceUrl: config.sourceUrl,
+        backupDir: config.backupDir,
       },
       req,
       res,

@@ -8,6 +8,8 @@ services:
     env_file: vectoria.env
     volumes:
       - ./data:/data
+      # Read-only for the admin panel's outpost-level replay (BACKUP_DIR).
+      - ./backups:/backups:ro
     # No published ports: Nginx Proxy Manager reaches it as http://vectoria:3001.
     networks:
       - proxy

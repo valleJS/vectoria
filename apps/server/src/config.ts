@@ -1,3 +1,5 @@
+import { dirname, join } from 'node:path';
+
 try {
   process.loadEnvFile();
 } catch {
@@ -70,6 +72,13 @@ export const config = {
     victoryPointsToWin: positiveInt('VICTORY_POINTS_TO_WIN', 12),
   },
   dataFile: optional('DATA_FILE') ?? 'data/game.json',
+  /**
+   * Save backups (`deploy.sh`, daily cron) the admin's outpost-level replay reads; default
+   * `backups/` next to the data directory (`/backups` in the container, mounted read-only).
+   */
+  backupDir:
+    optional('BACKUP_DIR') ??
+    join(dirname(optional('DATA_FILE') ?? 'data/game.json'), '..', 'backups'),
   /** Built client to serve on non-API paths (production container); unset = API only. */
   clientDir: optional('CLIENT_DIR'),
   allowedOrigins: (optional('ALLOWED_ORIGINS') ?? '')

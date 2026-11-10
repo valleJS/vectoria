@@ -17,7 +17,7 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 ## Phases
 
 `registration` → admin "Anmeldung schließen & starten" → `running` → `ended` (a player reaches
-`VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
+`GameState.victoryPointsToWin`: the admin's `setVictoryPointsToWin` kept in the save for the round, else `VICTORY_POINTS_TO_WIN`; refused below a player's VP — or the admin ends it; highest VP wins). Joining is only possible during
 registration (closed system). Admin tools: rename (`rename`, same name rules as registration) and
 `setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
 Game clock), a purely cosmetic castle decoration seen by everyone (`setCastleDecoration`,
@@ -99,8 +99,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   `upkeepRelief`). Every owner change goes through `setOutpostOwner`: conquered from a player →
   level − 1 (`heldGamedaysForLevel`), a ruin taken or an outpost given up (castle fell, kick) →
   level 1. Shown on the nameplate as one `*` per level (`Anna · 40 ***`) and in the outpost panel (income, relief, next level).
-  Games running from before levels: the one-off `apps/server/scripts/migrate-outpost-levels.ts`
-  replays the ownership in the daily save backups with these rules (dry run unless `--write`).
+  Games running from before levels: `src/game/outpostLevels.ts` replays the ownership in the
+  save backups (`BACKUP_DIR`) with these rules — admin panel preview (`GET /api/admin/outpost-levels`)
+  then `applyOutpostLevels`, or the CLI `scripts/migrate-outpost-levels.ts` (dry run unless `--write`).
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving
   at an own outpost deposits troops and cargo; at a foreign one (or a ruin) it is an assault.
 - Moving troops between own bases never carries `cargo`: `sendArmy` refuses any cargo, so stock

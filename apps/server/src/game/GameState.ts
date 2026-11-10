@@ -294,6 +294,8 @@ export interface SavedGame {
    * grace gameday (a warning only); new games charge from the start. Absent in older saves.
    */
   upkeepFrom?: number;
+  /** Win target set in the admin panel for this round; absent = `VICTORY_POINTS_TO_WIN`. */
+  victoryPointsToWin?: number;
 }
 
 /** Save format before email login, outposts and land routes. */
@@ -507,7 +509,7 @@ export class GameState {
     return {
       phase: this.data.phase,
       players: this.data.players.map((p) => p.name),
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
     };
   }
 
@@ -579,7 +581,7 @@ export class GameState {
         count: this.victoryPointsToday(player) + count,
       };
       this.addLog(player, `Du hast ${count} Siegpunkt(e) gekauft.`);
-      if (player.victoryPoints >= this.options.victoryPointsToWin) this.finish(player.id);
+      if (player.victoryPoints >= this.victoryPointsToWin) this.finish(player.id);
     }
     this.dirty = true;
   }
@@ -2894,6 +2896,40 @@ export class GameState {
     this.dirty = true;
   }
 
+  /** The round's win target: the admin's choice, else the configured default. */
+  get victoryPointsToWin(): number {
+    return this.data.victoryPointsToWin ?? this.options.victoryPointsToWin;
+  }
+
+  /** Admin: sets the round's win target (kept in the save; a reset falls back to the default). */
+  setVictoryPointsToWin(points: number): void {
+    const ahead = this.data.players.find((p) => p.victoryPoints >= points);
+    if (this.data.phase === 'running' && ahead) {
+      throw new RuleError(`${ahead.name} hat schon ${ahead.victoryPoints} Siegpunkte.`);
+    }
+    this.data.victoryPointsToWin = points;
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** The running game's state the outpost-level replay starts from (`outpostLevels.ts`). */
+  get outpostLevelSource(): Pick<SavedGame, 'seed' | 'gameday' | 'outposts' | 'players'> {
+    if (this.data.phase !== 'running') throw new RuleError('Es läuft kein Spiel.');
+    return this.data;
+  }
+
+  /** Admin: stores replayed outpost ages (`Outpost.heldGamedays`) for the running game. */
+  applyOutpostLevels(held: Map<string, number>): void {
+    if (this.data.phase !== 'running') throw new RuleError('Es läuft kein Spiel.');
+    for (const outpost of this.data.outposts) {
+      const days = outpost.ownerId ? (held.get(outpost.id) ?? 0) : 0;
+      if (days > 0) outpost.heldGamedays = days;
+      else delete outpost.heldGamedays;
+    }
+    this.revision++;
+    this.dirty = true;
+  }
+
   /** Admin: puts a decoration over the player's castle for everyone, or removes it. */
   setCastleDecoration(playerId: string, decoration: CastleDecoration | null): void {
     const player = this.player(playerId);
@@ -2940,7 +2976,7 @@ export class GameState {
     return {
       phase: this.data.phase,
       clock: this.clockState(),
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
       winnerId: this.data.winnerId,
       players: this.data.players.map((p) => ({
         id: p.id,
@@ -3007,7 +3043,7 @@ export class GameState {
       clock: this.clockState(),
       mapSize: this.data.mapSize,
       winnerId: this.data.winnerId,
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
       players: this.data.players.map((p) => ({
         id: p.id,
         name: p.name,

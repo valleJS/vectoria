@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseAdminAction, type AdminAction, type ApiError } from '@vectoria/shared';
 import { RuleError, type GameState } from '../game/GameState';
 import { log } from '../logger';
+import { loadOutpostBackups, replayOutpostLevels } from '../game/outpostLevels';
 import type { EmailAuth } from './auth';
 import { serveStatic } from './static';
 
@@ -20,6 +21,21 @@ export interface HttpContext {
   clientDir?: string;
   /** Repository of the running code; `GET /source` redirects there (AGPL-3.0 §13). */
   sourceUrl: string;
+  /** Save backups the outpost-level replay reads. */
+  backupDir: string;
+}
+
+/** Outpost levels replayed from the backups for the running game (see `outpostLevels.ts`). */
+async function outpostLevels(ctx: HttpContext) {
+  const source = ctx.state.outpostLevelSource;
+  const backups = await loadOutpostBackups(ctx.backupDir);
+  const preview = replayOutpostLevels(source, backups);
+  if (preview.backups === 0) {
+    throw new RuleError(
+      `Keine Backups dieser Runde in ${ctx.backupDir} gefunden (Ordner eingebunden? Siehe Runbook).`,
+    );
+  }
+  return preview;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -96,6 +112,10 @@ function runAdminAction(ctx: HttpContext, action: AdminAction): void {
       return state.grant(action.playerId, action.resource, action.amount);
     case 'grantTroops':
       return state.grantTroops(action.playerId, action.amount);
+    case 'setVictoryPointsToWin':
+      return state.setVictoryPointsToWin(action.points);
+    case 'applyOutpostLevels':
+      throw new Error('applyOutpostLevels is async; handled in handleHttp');
   }
 }
 
@@ -133,13 +153,22 @@ export async function handleHttp(
       case 'GET /api/admin/map':
         if (!isAdmin(req, ctx.adminToken)) return json(res, 401, { error: 'Unauthorized' });
         return json(res, 200, ctx.state.map);
+      case 'GET /api/admin/outpost-levels': {
+        if (!isAdmin(req, ctx.adminToken)) return json(res, 401, { error: 'Unauthorized' });
+        const { held: _held, ...preview } = await outpostLevels(ctx);
+        return json(res, 200, preview);
+      }
       case 'GET /api/admin/state':
       case 'POST /api/admin/action': {
         if (!isAdmin(req, ctx.adminToken)) return json(res, 401, { error: 'Unauthorized' });
         if (req.method === 'POST') {
           const action = parseAdminAction(await readJson(req));
           if (!action) throw new RuleError('Unknown admin action');
-          runAdminAction(ctx, action);
+          if (action.action === 'applyOutpostLevels') {
+            ctx.state.applyOutpostLevels((await outpostLevels(ctx)).held);
+          } else {
+            runAdminAction(ctx, action);
+          }
           log.info(`Admin action: ${JSON.stringify(action)}`);
           ctx.onChange();
         }
