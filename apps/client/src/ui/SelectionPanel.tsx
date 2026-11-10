@@ -7,7 +7,11 @@ import {
   BAREFOOT_SPEED,
   LOADED_SPEED,
   MAX_ARMIES,
-  OUTPOST_DAILY_INCOME,
+  OUTPOST_LEVEL_GAMEDAYS,
+  OUTPOST_MAX_LEVEL,
+  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
+  outpostIncome,
+  outpostLevel,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
   hasResources,
@@ -622,6 +626,26 @@ function StoreRedirect({ view, army }: { view: GameView; army: ArmyView }) {
   );
 }
 
+/** An owned outpost's level, what it pays each gameday start and when it grows next. */
+function OutpostLevel({ held }: { held: number }) {
+  const level = outpostLevel(held);
+  const next =
+    level < OUTPOST_MAX_LEVEL ? OUTPOST_LEVEL_GAMEDAYS - (held % OUTPOST_LEVEL_GAMEDAYS) : null;
+  return (
+    <div className="text-xs">
+      <div>
+        Stufe {level} von {OUTPOST_MAX_LEVEL} · täglich +{formatResources(outpostIncome(level))} in
+        die Burg
+      </div>
+      <div className="text-ink-soft">
+        Versorgt {level * OUTPOST_UPKEEP_RELIEF_PER_LEVEL} Truppen ohne Sold
+        {next !== null &&
+          ` · Stufe ${level + 1} in ${next} ${next === 1 ? 'Spieltag' : 'Spieltagen'}`}
+      </div>
+    </div>
+  );
+}
+
 function SelectionBody({ view, selection }: { view: GameView; selection: Selection }) {
   const bases = ownBases(view);
   switch (selection.kind) {
@@ -649,6 +673,18 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div>
             {player.homeTroops ?? '?'} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
+          {own
+            ? view.self.troopOrders.map((order, i) => (
+                <div key={i} className="text-xs text-ink-soft tabular-nums">
+                  {order.troops} Truppen in Ausbildung · fertig{' '}
+                  {formatEta(view.clock, order.readyClock - view.clock.clock)}
+                </div>
+              ))
+            : (player.troopsInProduction ?? 0) > 0 && (
+                <div className="text-xs text-ink-soft">
+                  {player.troopsInProduction} Truppen in Ausbildung
+                </div>
+              )}
           {player.fortified && <div className="text-fortify italic">Bollwerk aktiv (+50 %)</div>}
           {player.barefoot && (
             <div className="text-seal italic">
@@ -721,9 +757,10 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
             {outpost.troops ?? '?'} Truppen
           </div>
           <div className="text-ink-soft">Lager: {formatResources(outpost.resources, 'leer')}</div>
+          {outpost.ownerId && <OutpostLevel held={outpost.heldGamedays ?? 0} />}
           <p className="mt-1 text-xs text-ink-soft">
             {own
-              ? `Bringt täglich +${OUTPOST_DAILY_INCOME} jedes Rohstoffs in die Burg. Das Lager zieht um 18 Uhr per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager.`
+              ? 'Das Lager zieht um 18 Uhr per Karawane heim. Wer mit mehr Truppen angreift, übernimmt den Stützpunkt samt Lager und eine Stufe weniger.'
               : outpost.ownerId
                 ? 'Mehr Truppen als die Besatzung schicken, um ihn samt Lager zu übernehmen.'
                 : 'Wer die Ruine einnimmt, baut sie als eigenen Stützpunkt wieder auf.'}

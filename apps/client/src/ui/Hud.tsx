@@ -7,7 +7,9 @@ import {
   RESOURCES,
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
-  victoryPointCost,
+  scaledVictoryPointCost,
+  UPKEEP_DESERTERS_PER_UNIT,
+  UPKEEP_RESOURCE,
   victoryPointTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
   type ArmyView,
@@ -288,8 +290,21 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
     .reduce((sum, a) => sum + (a.troops ?? 0), 0);
   const buy = (item: 'troops' | 'victoryPoint', count: number) =>
     gameSocket.send({ type: 'buy', item, count });
-  const owned = view.players.find((p) => p.id === self.id)?.victoryPoints ?? 0;
-  const vpCost = victoryPointCost(owned);
+  const me = view.players.find((p) => p.id === self.id);
+  const owned = me?.victoryPoints ?? 0;
+  const vpCost = scaledVictoryPointCost(owned, self.victoryPointFactor);
+  // The server's figure for the next gameday start, old debt left out (shown on its own).
+  const upkeep = self.upkeepNext.due - self.upkeepDebt;
+  // Any purchase settles the upkeep debt first, so it counts towards every price.
+  const payable = (cost: Resources, times = 1) =>
+    canAfford(
+      {
+        ...self.resources,
+        [UPKEEP_RESOURCE]: self.resources[UPKEEP_RESOURCE] - self.upkeepDebt,
+      },
+      cost,
+      times,
+    );
   const trophies = view.players.find((p) => p.id === self.id)?.trophies ?? 0;
   const vpTrophies = victoryPointTrophiesNeeded(owned);
   const vpLeft = Math.max(0, VICTORY_POINTS_PER_GAMEDAY - self.victoryPointsToday);
@@ -320,7 +335,7 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
                 key={n}
                 className="px-2 py-0.5"
                 onClick={() => buy('troops', n)}
-                disabled={!canAfford(self.resources, TROOP_BATCH_COST, n)}
+                disabled={!payable(TROOP_BATCH_COST, n)}
               >
                 {n}×
               </Button>
@@ -354,11 +369,37 @@ function HomeBase({ view, base }: { view: GameView; base: BaseInfo }) {
             variant="primary"
             className="px-2 py-0.5"
             onClick={() => buy('victoryPoint', 1)}
-            disabled={vpLeft === 0 || !canAfford(self.resources, vpCost) || trophies < vpTrophies}
+            disabled={vpLeft === 0 || !payable(vpCost) || trophies < vpTrophies}
             title={`Noch ${vpLeft} von ${VICTORY_POINTS_PER_GAMEDAY} Siegpunkten heute`}
           >
             1×
           </Button>
+        </div>
+        <div className="text-xs text-ink-soft">
+          <Tip
+            label={
+              self.troopAverage === null
+                ? 'Ab dem nächsten Spieltag richtet sich der Siegpunkt-Preis nach deiner Armee.'
+                : `Siegpunkt-Preis nach deiner Armee: Ø ${Math.round(self.troopAverage)} Truppen über die letzten Spieltage. Weniger Truppen, billigere Siegpunkte.`
+            }
+          >
+            <span className="tabular-nums">
+              Truppenfaktor ×{self.victoryPointFactor.toFixed(2).replace('.', ',')}
+            </span>
+          </Tip>
+          {' · '}
+          <Tip label="Wird zum Spieltagsbeginn in Stein fällig und wächst mit dem Quadrat der Armee. Fehlt Stein, desertieren Truppen aus der Burg, der Rest wird Schulden. Jede Stufe deiner Stützpunkte versorgt 50 Truppen ohne Sold.">
+            <span className="tabular-nums">
+              Unterhalt {upkeep > 0 ? `${upkeep} ${RESOURCE_NAMES[UPKEEP_RESOURCE]}/Tag` : 'keiner'}
+            </span>
+          </Tip>
+          {self.upkeepDebt > 0 && (
+            <Tip label="Wird beim nächsten Kauf zuerst bezahlt. Bis dahin kannst du weder Truppen noch Siegpunkte kaufen.">
+              <div className="text-seal tabular-nums">
+                Sold-Schulden: {self.upkeepDebt} {RESOURCE_NAMES[UPKEEP_RESOURCE]}
+              </div>
+            </Tip>
+          )}
         </div>
       </div>
     </>
@@ -443,6 +484,45 @@ function BaseFold({
  * player and sit on top; troops and resources belong to a base ("Basis", then each outpost),
  * each in its own fold once there is more than one.
  */
+/**
+ * The upkeep due at the next gameday start (`SelfState.upkeepNext`), and what it costs when the
+ * castle will lack the stone: deserters from the castle, then debt.
+ */
+function UpkeepLine({ view }: { view: GameView }) {
+  const { self } = view;
+  const { due, stone, grace } = self.upkeepNext;
+  if (due === 0) return null;
+  const me = view.players.find((p) => p.id === self.id);
+  const name = RESOURCE_NAMES[UPKEEP_RESOURCE];
+  const short = Math.max(0, due - stone);
+  const home = (me?.homeTroops ?? 0) + (me?.troopsInProduction ?? 0);
+  const deserters = Math.min(home, short * UPKEEP_DESERTERS_PER_UNIT);
+  const debt = short - Math.ceil(deserters / UPKEEP_DESERTERS_PER_UNIT);
+  return (
+    <Tip
+      label={`Fällig zum nächsten Spieltagsbeginn, nach dem Einkommen. Voraussichtlich ${stone} ${name} in der Burg (Lager, Karawane, Einkommen; Sammler unterwegs nicht mitgezählt).`}
+    >
+      <div
+        className={`mt-1 flex items-center justify-between gap-2 text-xs tabular-nums ${!grace && short > 0 ? 'text-seal' : 'text-ink-soft'}`}
+      >
+        <span className="flex items-center gap-1">
+          <ResourceIcon resource={UPKEEP_RESOURCE} size={14} />
+          Sold morgen{self.upkeepDebt > 0 ? ' inkl. Schulden' : ''}
+        </span>
+        <b>
+          {grace
+            ? `${due} ${name} · noch Schontag`
+            : short === 0
+              ? `${due} ${name}`
+              : `${due} ${name} · ${short} fehlen` +
+                (deserters > 0 ? ` → ${deserters} desertieren` : '') +
+                (debt > 0 ? ` · ${debt} Schulden` : '')}
+        </b>
+      </div>
+    </Tip>
+  );
+}
+
 function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: boolean }) {
   const setToken = useGameStore((s) => s.setToken);
   const setChestOverlay = useGameStore((s) => s.setChestOverlay);
@@ -483,6 +563,7 @@ function RealmBox({ view, collapsible = true }: { view: GameView; collapsible?: 
               aria-label="Fortschritt zum Sieg"
             />
           </div>
+          <UpkeepLine view={view} />
 
           {me?.routed && (
             <div className="mt-2 border border-seal px-2 py-1.5 text-sm text-seal">

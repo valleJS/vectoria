@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-10
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
+sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
 ---
 
 # Architecture
@@ -71,7 +71,7 @@ close code `4001` (client drops its token and shows the join screen).
 | --------- | ---- | ------- |
 | C→S | `ping` | RTT probe; echoed as `pong` |
 | C→S | `setActivity` | Base activity for the next gameday |
-| C→S | `buy` | Troop batches or victory points (at most `VICTORY_POINTS_PER_GAMEDAY` per gameday) |
+| C→S | `buy` | Troop batches (queued, ready after `TROOP_PRODUCTION_MS`) or victory points (at most `VICTORY_POINTS_PER_GAMEDAY` per gameday); refused while `SelfState.upkeepDebt` cannot be paid on top |
 | C→S | `sendArmy` | From a base (`from`: outpost id / null = home), troops, target (`castle`/`outpost`/`spot`/`chest`/`army` = raid), `useActiveCard`, `cargo` (stone only, to the trader, with `trade` {gold, wood}; anything else is refused) |
 | C→S | `redirectArmy` | New target for an army in the field |
 | C→S | `recallArmy` | Recall an army |
@@ -92,7 +92,7 @@ close code `4001` (client drops its token and shows the join screen).
 HTTP (same port): `POST /api/auth/start` (email [+ name] → code by mail, or `needsName`),
 `POST /api/auth/verify` (email + code → token), `GET /api/lobby`, `GET /api/admin/state` (incl.
 per-player `stats`: online time, attacks started/executed/won …, and `world`: castles, spots,
-outposts, chests for the map editor), `GET /api/admin/map` (the tiles),
+outposts, chests for the map editor), `GET /api/admin/map` (the tiles), `GET /api/admin/outpost-levels` (levels replayed from the backups, preview for `applyOutpostLevels`),
 `POST /api/admin/action` (bearer `ADMIN_TOKEN`; incl. `place` / `move` / `remove` of chests,
 outposts and spots on free mainland tiles — armies heading for a moved piece re-route), `GET /healthz`, `GET /source` (redirect to the
 repository; the client links it on the join screen and in the handbook to satisfy AGPL-3.0 §13).

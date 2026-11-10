@@ -11,7 +11,10 @@ import {
   CROSS_MAP_HOURS,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
-  OUTPOST_DAILY_INCOME,
+  OUTPOST_LEVEL_GAMEDAYS,
+  OUTPOST_MAX_LEVEL,
+  OUTPOST_STONE_PER_LEVEL,
+  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
   FORTIFY_MULTIPLIER,
   GAMEDAY_HOURS,
   GATHER_DURATION_MS,
@@ -34,7 +37,10 @@ import {
   TROOP_BATCH_COST,
   TROOP_BATCH_SIZE,
   TROPHY_VP_INTERVAL,
-  VICTORY_POINT_BASE_COST,
+  UPKEEP_DESERTERS_PER_UNIT,
+  VP_TROOP_FACTOR_MIN,
+  VP_TROOP_REFERENCE,
+  VP_TROOP_SNAPSHOTS,
   VICTORY_POINTS_PER_GAMEDAY,
   type ResourceType,
   type Resources,
@@ -304,9 +310,18 @@ const CHAPTERS: Chapter[] = [
         </P>
         <H icon={<StarIcon size={18} />}>Siegpunkte kaufen</H>
         <P>
-          Siegpunkte kaufst du in deiner Burg. Der erste kostet{' '}
-          <Cost resources={VICTORY_POINT_BASE_COST} />. Jeder weitere kostet 1 Ressource mehr als
-          der vorige, reihum Stein, Holz, Gold. Den aktuellen Preis siehst du im Laden deiner Burg.
+          Siegpunkte kaufst du in deiner Burg. Der erste kostet je 1 Holz, Stein und Gold, der
+          zweite je 2, der dritte je 3 und so weiter. Den aktuellen Preis siehst du im Laden deiner
+          Burg.
+        </P>
+        <P>
+          Auf diesen Preis kommt dein <b>Truppenfaktor</b>: Je größer deine Armee, desto teurer
+          werden Siegpunkte. Mit {VP_TROOP_REFERENCE} Truppen zahlst du den Grundpreis, mit doppelt
+          so vielen gut ein Viertel mehr, mit wenigen Truppen nur die Hälfte (mindestens{' '}
+          {formatPercent(VP_TROOP_FACTOR_MIN)}). Gezählt werden alle deine Truppen – in der Burg, in
+          Stützpunkten und unterwegs – jeweils zu Spieltagsbeginn, im Schnitt der letzten{' '}
+          {VP_TROOP_SNAPSHOTS} Spieltage. Der Preis steht also den ganzen Tag fest. Wer viel mit
+          wenigen Truppen erwirtschaftet, kommt billiger an Siegpunkte.
         </P>
         <P>
           Pro Spieltag kannst du höchstens <b>{VICTORY_POINTS_PER_GAMEDAY} Siegpunkte</b> kaufen.
@@ -481,8 +496,9 @@ const CHAPTERS: Chapter[] = [
           items={[
             <>
               <b>Einkommen</b>: +{DAILY_BASE_INCOME} von jeder Ressource, +{DAILY_ACTIVITY_INCOME}{' '}
-              statt +{DAILY_BASE_INCOME} von deiner Basisaktivität, dazu +{OUTPOST_DAILY_INCOME} von
-              jeder Ressource für jeden eigenen Stützpunkt. Alles landet direkt in der Basis.
+              statt +{DAILY_BASE_INCOME} von deiner Basisaktivität, dazu das Einkommen deiner
+              Stützpunkte (je nach Stufe). Alles landet direkt in der Basis. Danach ist der{' '}
+              <b>Sold</b> für deine Truppen fällig.
             </>,
             <>
               Die <b>Karawane</b> vom Vorabend kommt an: Was um 18 Uhr aus deinen Stützpunkten
@@ -644,11 +660,24 @@ const CHAPTERS: Chapter[] = [
             'Truppen können dort stehen und von dort losziehen.',
             'Was Sammler dorthin bringen, lagert dort.',
             <>
-              Jeder Stützpunkt bringt dir täglich +{OUTPOST_DAILY_INCOME} von jeder Ressource,
-              direkt in die Basis.
+              Jeder Stützpunkt bringt dir zu Beginn jedes Spieltags Einkommen direkt in die Basis:
+              je Stufe 1 Holz, {OUTPOST_STONE_PER_LEVEL} Stein und 1 Gold.
+            </>,
+            <>
+              Jede Stufe versorgt außerdem {OUTPOST_UPKEEP_RELIEF_PER_LEVEL} deiner Truppen – für
+              sie zahlst du keinen Sold.
             </>,
           ]}
         />
+        <P>
+          Ein Stützpunkt <b>wächst</b>, solange du ihn hältst: Er beginnt auf Stufe 1 und steigt
+          alle {OUTPOST_LEVEL_GAMEDAYS} Spieltage um eine Stufe, bis Stufe {OUTPOST_MAX_LEVEL}. Auf
+          Stufe {OUTPOST_MAX_LEVEL} bringt er {OUTPOST_MAX_LEVEL} Holz,{' '}
+          {OUTPOST_MAX_LEVEL * OUTPOST_STONE_PER_LEVEL} Stein und {OUTPOST_MAX_LEVEL} Gold am Tag
+          und versorgt {OUTPOST_MAX_LEVEL * OUTPOST_UPKEEP_RELIEF_PER_LEVEL} Truppen. Wer ihn
+          erobert, übernimmt ihn <b>eine Stufe niedriger</b>. Fällt er zur Ruine zurück, beginnt er
+          wieder bei Stufe 1.
+        </P>
         <H icon={<CaravanIcon color={YOU} size={34} />}>Die Karawane</H>
         <P>
           Was in einem Stützpunkt liegt, kannst du nicht ausgeben. Von Hand lässt es sich auch nicht
@@ -696,7 +725,19 @@ const CHAPTERS: Chapter[] = [
       <>
         <P>
           Es gibt nur eine Sorte Truppen. {TROOP_BATCH_SIZE} Truppen kosten{' '}
-          <Cost resources={TROOP_BATCH_COST} /> und stehen sofort in deiner Basis.
+          <Cost resources={TROOP_BATCH_COST} />. Die Ausbildung dauert eine Spielstunde, danach
+          stehen sie in deiner Burg. Bis dahin verteidigen sie nicht und können nicht losziehen. Auf
+          dem Namensschild deiner Burg stehen sie in Klammern hinter den Verteidigern, und ein Klick
+          auf die Burg zeigt, wann jede Ausbildung fertig ist.
+        </P>
+        <P>
+          Truppen wollen <b>Sold</b>: Zu jedem Spieltagsbeginn zahlst du Unterhalt in Stein aus
+          deiner Burg, und der wächst schneller als deine Armee – 100 Truppen kosten 1 Stein am Tag,
+          200 schon 4, 300 sogar 9. Fehlt Stein, desertieren je fehlendem Stein{' '}
+          {UPKEEP_DESERTERS_PER_UNIT} Truppen aus deiner Burg. Sind dort zu wenige, bleibt der Rest
+          als <b>Schulden</b> stehen und wird am nächsten Spieltag zusätzlich fällig. Solange du
+          Schulden hast, kannst du weder Truppen noch Siegpunkte kaufen – der nächste Kauf zahlt sie
+          zuerst ab.
         </P>
         <H icon={<SoldiersIcon color={YOU} size={30} />}>Losschicken</H>
         <Steps

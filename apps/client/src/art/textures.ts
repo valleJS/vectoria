@@ -21,6 +21,7 @@ import {
   outpost,
   cargoPiece,
   penis,
+  crown,
   rocks,
   ruin,
   ship,
@@ -100,6 +101,8 @@ export interface MapArt {
   campfire: ArtTexture;
   /** Admin's decoration over a castle (`CastleDecoration` 'penis'). */
   penis: ArtTexture;
+  /** Admin's crown on a castle's middle tower (`CastleDecoration` 'crown'). */
+  crown: ArtTexture;
   /** Soft round light, white in the middle and fading out; tinted and added at night. */
   glow: Texture;
   pieces: PieceCache;
@@ -295,6 +298,7 @@ export function loadMapArt(): Promise<MapArt> {
         ruinArt,
         campfireArt,
         penisArt,
+        crownArt,
       ],
     ] = await Promise.all([
       all(
@@ -322,6 +326,7 @@ export function loadMapArt(): Promise<MapArt> {
         rasterise(ruin(), { outline: true }),
         rasterise(campfire(), { outline: true }),
         rasterise(penis(), { outline: true }),
+        rasterise(crown(), { outline: true }),
       ]),
       preload(pieces),
     ]);
@@ -347,6 +352,7 @@ export function loadMapArt(): Promise<MapArt> {
       ruin: ruinArt,
       campfire: campfireArt,
       penis: penisArt,
+      crown: crownArt,
       glow: glowTexture(),
       deposits: Object.fromEntries(SPOT_KINDS.map((k, i) => [k, deposits[i]!])) as Record<
         SpotKind,

@@ -3,10 +3,10 @@ type: Runbook
 description: Step-by-step deployment of vectoria to the Contabo VPS — Docker container behind the existing Nginx Proxy Manager, GitHub Actions deploys every push to main, rollback, backups, operations.
 audience: human, agent
 category: runbook
-last_verified: 2026-11-07
+last_verified: 2026-11-10
 load-when: Deploying, setting up or changing the production server, CI/CD, Docker image, backups, or production env config.
 sources: [Dockerfile, .dockerignore, deploy/, .github/workflows/, apps/server/src/config.ts, apps/server/src/net/static.ts]
-sources_stamp: ee8f9453a3e33febb43fdfce978dc9533b430bdf
+sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
 ---
 
 # Deployment (Contabo VPS, Docker, GitHub CI/CD)
@@ -29,7 +29,7 @@ Browser ──443──▶ Nginx Proxy Manager (Container proxy-npm-1, Let's Enc
                    └─▶ http://vectoria:3001  (Container vectoria, gleiches Docker-Netz)
                          ├─ /ws, /api/*, /healthz  → Spielserver
                          └─ alles andere           → gebauter Client (CLIENT_DIR)
-Spielstand: /opt/vectoria/data/game.json (Volume) + Backups in /opt/vectoria/backups
+Spielstand: /opt/vectoria/data/game.json (Volume) + Backups in /opt/vectoria/backups (im Container read-only unter /backups, für „Stützpunkt-Stufen nachrechnen“ im Admin-Panel)
 Push-Schlüssel: /opt/vectoria/data/vapid.json (beim ersten Start erzeugt; nicht löschen, sonst
 müssen alle Geräte Benachrichtigungen neu abonnieren — passiert beim nächsten Öffnen von selbst)
 ```
@@ -306,10 +306,21 @@ Für einen Rollback den SHA nehmen, z. B. aus `git log --oneline` oder der Actio
 **Achtung:** Hat die neue Version das Speicherformat migriert, kann die alte den Stand eventuell
 nicht lesen. Dann zusätzlich das `…-before-<sha>.json`-Backup dieses Deploys zurückspielen.
 
+### compose.yml nachziehen
+
+`deploy.sh` tauscht nur das Image; `compose.yml` auf dem Server ändert sich nicht von selbst.
+Hat sich `deploy/compose.yml` geändert (z. B. die Backup-Einbindung `./backups:/backups:ro`),
+einmal vom Rechner aus kopieren und den Container neu erstellen:
+
+```bash
+scp deploy/compose.yml root@SERVER_IP:/opt/vectoria/compose.yml
+ssh root@SERVER_IP 'cd /opt/vectoria && chown deploy:deploy compose.yml && docker compose up -d --force-recreate'
+```
+
 ### Neue Runde starten
 
-1. Siegpunkt-Ziel prüfen (Standard 10, wird nur beim Start gelesen):
-   `grep VICTORY vectoria.env`; nach einer Änderung `docker compose up -d --force-recreate`.
+1. Siegpunkt-Ziel: nach dem Start im Admin-Panel unter **Siegziel** (Standard aus
+   `VICTORY_POINTS_TO_WIN` in `vectoria.env`, 12).
 2. Admin-Panel `https://vectoria.DEINEDOMAIN.de/?admin` → **Zurücksetzen**. Der Spielstand wird
    gelöscht, Anmeldungen bleiben. Vorher wird nichts automatisch gesichert; bei Bedarf
    `cp data/game.json backups/vor-reset-$(date +%F).json`.

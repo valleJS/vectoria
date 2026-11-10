@@ -6,7 +6,7 @@ category: codemap
 last_verified: 2026-11-10
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
+sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
 ---
 
 # Game rules (prototype)
@@ -17,11 +17,11 @@ Balance numbers live only in `packages/shared/src/rules.ts`; the server enforces
 ## Phases
 
 `registration` → admin "Anmeldung schließen & starten" → `running` → `ended` (a player reaches
-`VICTORY_POINTS_TO_WIN`, or the admin ends it; highest VP wins). Joining is only possible during
+`GameState.victoryPointsToWin`: the admin's `setVictoryPointsToWin` kept in the save for the round, else `VICTORY_POINTS_TO_WIN`; refused below a player's VP — or the admin ends it; highest VP wins). Joining is only possible during
 registration (closed system). Admin tools: rename (`rename`, same name rules as registration) and
 `setEmail` per player, `grant` / `grantTroops` / `grantTrophies`, break days (`setBreakDay`, see
 Game clock), a purely cosmetic castle decoration seen by everyone (`setCastleDecoration`,
-`PlayerPublic.castleDecoration`, currently only `'penis'`; until the admin removes it); while running also kick (armies vanish, outposts turn
+`PlayerPublic.castleDecoration`, `'penis'` (over the castle, sways) or `'crown'` (on the middle tower at `CASTLE_CROWNS[style]`, glows at night), one at a time; until the admin removes it); while running also kick (armies vanish, outposts turn
 to ruins keeping their stock) and `swapCastles` (two home castles trade places, everything else
 stays with each player; armies returning home move along with their castle and keep their arrival time;
 armies that set out from either castle keep target and progress (as a share of the way) but
@@ -55,7 +55,7 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 - **Gameday start**: first game-time tick of a calendar day (weekdays) or every 8 clock-hours
   (always). Then: the night caravan arrives (see below), pending activity
   becomes active, every player gets 1 of each resource and 3 of the active one plus
-  `OUTPOST_DAILY_INCOME` (1) of each per owned outpost, all straight into the home castle, and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
+  `outpostIncome(level)` per owned outpost (see Bases and outposts), all straight into the home castle, then troop upkeep is paid and the troop snapshot taken (see Economy), and `CHESTS_PER_GAMEDAY` (3) chests spawn, up to `maxChestsOnMap` on the map
   (one per player, at least `CHESTS_PER_GAMEDAY`).
 
 - **Night caravan** (`sendCaravans`): once per gameday, on the first tick outside game hours
@@ -73,8 +73,9 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
 | ----- | ---- |
 | Resources | wood, stone, gold (`Holz`, `Stein`, `Gold`) |
 | Base activity | chosen any time; applies at the next gameday start, else yesterday's is kept |
-| Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle |
-| Victory point | rising: `victoryPointCost(owned)` = base 1 wood + 2 stone + 1 gold, each further VP +1 of one resource in turn (stone, wood, gold); the 10th costs 4 wood + 5 stone + 4 gold, all 10 together 85 resources; every `TROPHY_VP_INTERVAL`-th (4th) VP needs trophies, which are not spent (`victoryPointTrophiesNeeded`: 4th 1, 8th 3, 12th 6, … = 1+…+k); at most `VICTORY_POINTS_PER_GAMEDAY` (3) per gameday, counted in `PlayerRecord.victoryPointsBought` and shown as `SelfState.victoryPointsToday` |
+| Troops | 10 for 1 wood + 1 gold; one generic troop type; bought only into the home castle, ready after `TROOP_PRODUCTION_MS` (1 h game clock): `buy` queues a `TroopOrder` in `PlayerRecord.troopOrders` (a purchase within `TROOP_ORDER_MERGE_MS` (30 s) of the newest order joins it and keeps its ready time), `advance` finishes it in time order with army arrivals (`nextTroopOrder` / `finishTroopOrders`), so troops ready before an assault lands defend. In production they neither defend nor march but count for upkeep and the VP troop factor (`ownedTroops`). Public as `PlayerPublic.troopsInProduction` (null under Nebel like `homeTroops`; nameplate `name · troops (in production)`), own orders with ready times as `SelfState.troopOrders` (castle panel) |
+| Upkeep | anti-snowball: at each gameday start, after the income, `payUpkeep` charges `troopUpkeep(owned)` = ⌊`UPKEEP_FACTOR` (1) × (troops / 100)²⌋ `UPKEEP_RESOURCE` (stone) for every troop owned (castle, production, own outposts and all own armies, `ownedTroops`; minus the outposts' relief): 100 → 1, 200 → 4, 300 → 9, 500 → 25. Each missing stone makes `UPKEEP_DESERTERS_PER_UNIT` (10) troops desert from the home castle (a short last batch still settles one stone); what that cannot cover carries over as `PlayerRecord.upkeepDebt` (`SelfState.upkeepDebt`) and is due again, on top, at the next gameday start; `buy` adds the debt to the stone price of any purchase (troops or VP) and clears it, so nothing can be bought while it stands — troops sent away over night do not dodge the upkeep. Grace: a game already running when upkeep came in gets `SavedGame.upkeepFrom` = gameday + 2 on load, so the next gameday start only logs a warning with the amount; new games set it to 0. Preview: `SelfState.upkeepNext` {due, stone, grace} mirrors the next gameday start (outposts a day older, debt, caravan + outpost stock + income; gatherers out not counted), shown in the realm box and the castle shop, plus the debt |
+| Victory point | rising: `victoryPointCost(owned)` = the n-th VP costs n of each resource (1/1/1, 2/2/2, …), before the troop factor; every `TROPHY_VP_INTERVAL`-th (4th) VP needs trophies, which are not spent (`victoryPointTrophiesNeeded`: 4th 1, 8th 3, 12th 6, … = 1+…+k); at most `VICTORY_POINTS_PER_GAMEDAY` (3) per gameday, counted in `PlayerRecord.victoryPointsBought` and shown as `SelfState.victoryPointsToday`. **Troop factor** (anti-snowball): the price is `scaledVictoryPointCost` = each resource × `victoryPointTroopFactor` = (Ø troops / `VP_TROOP_REFERENCE` 400) ^ `VP_TROOP_EXPONENT` 0.35, at least `VP_TROOP_FACTOR_MIN` 0.5, rounded, ≥ 1 each (all three stay equal). Ø troops = `averageTroops` of `PlayerRecord.troopSnapshots`: `ownedTroops` recorded at each gameday start after upkeep, last `VP_TROOP_SNAPSHOTS` (3) — so the price is fixed for the day and losing troops right before buying barely helps; no snapshots yet (older saves) → factor 1. Sent as `SelfState.victoryPointFactor` / `troopAverage`. All 12 VP (resources): 50 troops 126, 100 → 144, 200 → 183, 300 → 213, 500 → 252, 800 → 297 (factor 1: 234) |
 | Trophies | a public reputation: `PlayerRecord.trophies` (`PlayerPublic.trophies`, shown in the leaderboard), never spent; +1 per win over another player (`awardTrophy`): a raid, an owned outpost taken (not a ruin), a castle stormed; a won duo gives each participant one (not for a ruin). Each outpost pays a player only once (`awardOutpostTrophy`, ids in `PlayerRecord.outpostTrophies`), solo or duo, so an outpost passed back and forth farms nothing. Booked straight into the account, never carried, never lost |
 | Spending | only resources stored in the home castle; outpost stock reaches it only with the night caravan (leaves 18:00, arrives at the next gameday start) |
 | Start | 50 troops, 2 of each resource |
@@ -90,6 +91,17 @@ roughly `10 h / √players`. Measured nearest-castle trips over land: 2 players 
   spot; armies elsewhere that left from it return home later.
 - **Outposts** (`OUTPOSTS_PER_PLAYER`, min `MIN_OUTPOSTS`) start as empty, unowned **ruins**,
   placed on contested ground between castles (`world.placeOutposts`). Taking one rebuilds it.
+- **Outpost levels** (`Outpost.heldGamedays`, `outpostLevel`): level 1 when taken, +1 per
+  `OUTPOST_LEVEL_GAMEDAYS` (2) gameday starts in the same hand, up to `OUTPOST_MAX_LEVEL` (4).
+  Each gameday start pays `outpostIncome` = level wood, `OUTPOST_STONE_PER_LEVEL` (2) × level
+  stone, level gold into the home castle (level 4: 4/8/4), and each level spares
+  `OUTPOST_UPKEEP_RELIEF_PER_LEVEL` (50) troops from the upkeep (`troopUpkeep(troops, spared)`,
+  `upkeepRelief`). Every owner change goes through `setOutpostOwner`: conquered from a player →
+  level − 1 (`heldGamedaysForLevel`), a ruin taken or an outpost given up (castle fell, kick) →
+  level 1. Shown on the nameplate as one `*` per level (`Anna · 40 ***`) and in the outpost panel (income, relief, next level).
+  Games running from before levels: `src/game/outpostLevels.ts` replays the ownership in the
+  save backups (`BACKUP_DIR`) with these rules — admin panel preview (`GET /api/admin/outpost-levels`)
+  then `applyOutpostLevels`, or the CLI `scripts/migrate-outpost-levels.ts` (dry run unless `--write`).
   They have no names of their own: `outpostName` shows "Ruine" or "Stützpunkt <owner>". Arriving
   at an own outpost deposits troops and cargo; at a foreign one (or a ruin) it is an assault.
 - Moving troops between own bases never carries `cargo`: `sendArmy` refuses any cargo, so stock

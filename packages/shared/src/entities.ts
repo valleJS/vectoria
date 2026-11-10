@@ -35,9 +35,9 @@ export const ARMY_TARGET_KINDS: readonly ArmyTarget['kind'][] = [
 ];
 
 /** Something the admin can put over a player's castle, seen by everyone; purely cosmetic. */
-export type CastleDecoration = 'penis';
+export type CastleDecoration = 'penis' | 'crown';
 
-export const CASTLE_DECORATIONS: readonly CastleDecoration[] = ['penis'];
+export const CASTLE_DECORATIONS: readonly CastleDecoration[] = ['penis', 'crown'];
 
 export interface PlayerPublic {
   id: string;
@@ -55,6 +55,8 @@ export interface PlayerPublic {
    * others while a Nebel march that set out from the castle is still on its first route.
    */
   homeTroops: number | null;
+  /** Troops bought but not ready yet (`TROOP_PRODUCTION_MS`); null while `homeTroops` is. */
+  troopsInProduction: number | null;
   fortified: boolean;
   /** Shoes stolen (card): marches started now go at `BAREFOOT_SPEED`. */
   barefoot: boolean;
@@ -102,6 +104,11 @@ export interface Outpost {
   resources: Resources;
   /** Game clock of the last assault, won or lost; absent if never attacked. */
   attackedAt?: number;
+  /**
+   * Gameday starts held by the current owner (`outpostLevel`); a conquest keeps the level minus 1.
+   * Absent for ruins and in older saves (level 1).
+   */
+  heldGamedays?: number;
 }
 
 /** Display name of an outpost: a ruin while unowned, "Stützpunkt <owner>" once rebuilt. */
@@ -269,6 +276,12 @@ export interface FeedEntry {
 }
 
 /** The player's own private state. */
+/** Troops bought in one purchase, ready in the home castle at `readyClock` (game clock). */
+export interface TroopOrder {
+  troops: number;
+  readyClock: number;
+}
+
 export interface SelfState {
   id: string;
   name: string;
@@ -298,6 +311,24 @@ export interface SelfState {
   barefootUntil: number | null;
   /** Victory points bought this gameday (capped at `VICTORY_POINTS_PER_GAMEDAY`). */
   victoryPointsToday: number;
+  /**
+   * Today's victory point price factor (`victoryPointTroopFactor`), fixed from the troop
+   * snapshots at the gameday start; 1 before the first one.
+   */
+  victoryPointFactor: number;
+  /** Average troops owned over the last gameday starts behind that factor; null before the first. */
+  troopAverage: number | null;
+  /** Own troop purchases still in production, soonest first. */
+  troopOrders: TroopOrder[];
+  /** Unpaid troop upkeep in `UPKEEP_RESOURCE`; any purchase settles it first (0 when none). */
+  upkeepDebt: number;
+  /**
+   * The upkeep due at the next gameday start for the army as it stands now: `due` in
+   * `UPKEEP_RESOURCE` (old debt included), `stone` the castle will expectably hold then (stock,
+   * caravan and outpost stock, the day's income; gatherers still out not counted), and `grace`
+   * when that gameday start only warns (the update's grace day).
+   */
+  upkeepNext: { due: number; stone: number; grace: boolean };
   /**
    * Langfinger: how many cards each other player holds (not which). Sent only while the player
    * holds a Langfinger card; null otherwise.

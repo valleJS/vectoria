@@ -15,7 +15,10 @@ import {
   CONVOY_PLUNDER_SHARE,
   DAILY_ACTIVITY_INCOME,
   DAILY_BASE_INCOME,
-  OUTPOST_DAILY_INCOME,
+  heldGamedaysForLevel,
+  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
+  outpostIncome,
+  outpostLevel,
   drawCard,
   emptyResources,
   findPath,
@@ -49,6 +52,15 @@ import {
   TROOP_BATCH_SIZE,
   travelMs,
   victoryPointsCost,
+  averageTroops,
+  troopUpkeep,
+  UPKEEP_DESERTERS_PER_UNIT,
+  UPKEEP_RESOURCE,
+  TROOP_ORDER_MERGE_MS,
+  TROOP_PRODUCTION_MS,
+  type TroopOrder,
+  victoryPointTroopFactor,
+  VP_TROOP_SNAPSHOTS,
   victoryPointsTrophiesNeeded,
   VICTORY_POINTS_PER_GAMEDAY,
   type AdminPieceKind,
@@ -65,6 +77,7 @@ import {
   type FeedEntry,
   type GamePhase,
   type GameView,
+  type SelfState,
   type LobbyInfo,
   type LogEntry,
   type MapData,
@@ -173,6 +186,18 @@ interface PlayerRecord {
   caravan?: Resources;
   /** Where the caravan's wagons set out and when it arrives (real time); absent when none travels. */
   caravanTrip?: CaravanTrip;
+  /** Troop purchases still in production, soonest first; absent in older saves and when none. */
+  troopOrders?: TroopOrder[];
+  /**
+   * Unpaid troop upkeep (`UPKEEP_RESOURCE`): grows at each gameday start the castle lacks the
+   * stone, and is paid first by every purchase. Absent in older saves and when none.
+   */
+  upkeepDebt?: number;
+  /**
+   * Troops owned at the last gameday starts (newest last, at most `VP_TROOP_SNAPSHOTS`); their
+   * average sets the victory point price. Absent in older saves and before the first gameday.
+   */
+  troopSnapshots?: number[];
   /** Admin's decoration over the castle; absent when none (and in older saves). */
   castleDecoration?: CastleDecoration;
   /** Online time and action counts for this round; absent in older saves. */
@@ -264,6 +289,13 @@ export interface SavedGame {
   spotLayout?: number;
   /** Last applied `GATHERER_FIX`; absent in saves from before it. */
   gathererFix?: number;
+  /**
+   * First gameday that charges troop upkeep. A game already running when upkeep came in gets one
+   * grace gameday (a warning only); new games charge from the start. Absent in older saves.
+   */
+  upkeepFrom?: number;
+  /** Win target set in the admin panel for this round; absent = `VICTORY_POINTS_TO_WIN`. */
+  victoryPointsToWin?: number;
 }
 
 /** Save format before email login, outposts and land routes. */
@@ -356,6 +388,8 @@ export class GameState {
       this.recallFromLostOutposts();
       if ((this.data.spotLayout ?? 1) < SPOT_LAYOUT) this.relayoutSpots();
       if ((this.data.gathererFix ?? 0) < GATHERER_FIX) this.moveGatherersToNearestSpot();
+      // Upkeep is new to this running game: the next gameday start only warns, the one after pays.
+      this.data.upkeepFrom ??= this.data.gameday + 2;
     }
     if (saved && saved.phase === 'running' && !saved.paused) this.catchUp(saved.savedAt);
   }
@@ -475,7 +509,7 @@ export class GameState {
     return {
       phase: this.data.phase,
       players: this.data.players.map((p) => p.name),
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
     };
   }
 
@@ -501,10 +535,21 @@ export class GameState {
     }
     // Victory points get dearer one by one, so their price is the sum over the whole purchase.
     const cost =
-      item === 'troops' ? TROOP_BATCH_COST : victoryPointsCost(player.victoryPoints, count);
+      item === 'troops'
+        ? TROOP_BATCH_COST
+        : victoryPointsCost(player.victoryPoints, count, this.victoryPointFactor(player));
     const times = item === 'troops' ? count : 1;
-    if (!canAfford(player.resources, cost, times)) {
-      throw new RuleError('Nicht genug Ressourcen in deiner Burg.');
+    // Unpaid upkeep is settled first: no troops and no victory points while in debt.
+    const debt = player.upkeepDebt ?? 0;
+    const total = emptyResources();
+    for (const r of RESOURCES) total[r] = cost[r] * times;
+    total[UPKEEP_RESOURCE] += debt;
+    if (!canAfford(player.resources, total)) {
+      throw new RuleError(
+        debt > 0 && canAfford(player.resources, cost, times)
+          ? `Erst die Sold-Schulden begleichen: ${debt} ${RESOURCE_NAMES[UPKEEP_RESOURCE]} fehlen dafür noch.`
+          : 'Nicht genug Ressourcen in deiner Burg.',
+      );
     }
     // Every 4th victory point needs a trophy reputation; trophies are not spent.
     const trophies =
@@ -514,10 +559,20 @@ export class GameState {
         `Dafür brauchst du ${trophies} Trophäe${trophies === 1 ? '' : 'n'} — du hast ${player.trophies ?? 0}.`,
       );
     }
-    for (const r of RESOURCES) player.resources[r] -= cost[r] * times;
+    for (const r of RESOURCES) player.resources[r] -= total[r];
+    if (debt > 0) {
+      delete player.upkeepDebt;
+      this.addLog(player, `Sold-Schulden beglichen: −${debt} ${RESOURCE_NAMES[UPKEEP_RESOURCE]}.`);
+    }
     if (item === 'troops') {
-      player.homeTroops += count * TROOP_BATCH_SIZE;
-      this.stats(player).troopsBought += count * TROOP_BATCH_SIZE;
+      const troops = count * TROOP_BATCH_SIZE;
+      const readyClock = this.data.clock + TROOP_PRODUCTION_MS;
+      const orders = player.troopOrders ?? [];
+      const newest = orders[orders.length - 1];
+      if (newest && readyClock - newest.readyClock <= TROOP_ORDER_MERGE_MS) newest.troops += troops;
+      else player.troopOrders = [...orders, { troops, readyClock }];
+      this.stats(player).troopsBought += troops;
+      this.addLog(player, `${troops} Truppen werden ausgebildet.`);
     } else {
       player.victoryPoints += count;
       this.stats(player).victoryPointsBought += count;
@@ -526,7 +581,7 @@ export class GameState {
         count: this.victoryPointsToday(player) + count,
       };
       this.addLog(player, `Du hast ${count} Siegpunkt(e) gekauft.`);
-      if (player.victoryPoints >= this.options.victoryPointsToWin) this.finish(player.id);
+      if (player.victoryPoints >= this.victoryPointsToWin) this.finish(player.id);
     }
     this.dirty = true;
   }
@@ -1565,7 +1620,7 @@ export class GameState {
     sides.forEach((p, i) => addResources(this.stats(p).plunder, parts[i]!));
     sides.forEach((p, i) => {
       if (!castleOwner && i === keeper) {
-        outpost!.ownerId = p.id;
+        this.setOutpostOwner(outpost!, p.id);
         outpost!.troops = survivors[i]!;
         outpost!.resources = parts[i]!;
         this.notify(p, {
@@ -1643,9 +1698,18 @@ export class GameState {
       const next = this.data.armies
         .filter((a) => a.status !== 'waiting' && a.arriveClock <= end)
         .sort((a, b) => a.arriveClock - b.arriveClock)[0];
-      if (!next || this.data.phase !== 'running') break;
-      this.data.clock = Math.max(this.data.clock, next.arriveClock);
-      this.arrive(next);
+      // Troops finishing production join the castle in time order with the arrivals, so they
+      // defend against an assault that lands after them.
+      const ready = this.nextTroopOrder(end);
+      if ((!next && !ready) || this.data.phase !== 'running') break;
+      if (ready && (!next || ready.clock <= next.arriveClock)) {
+        this.data.clock = Math.max(this.data.clock, ready.clock);
+        this.finishTroopOrders(ready.player);
+        this.revision++;
+        continue;
+      }
+      this.data.clock = Math.max(this.data.clock, next!.arriveClock);
+      this.arrive(next!);
       this.syncJoiners();
       this.revision++;
     }
@@ -1921,7 +1985,7 @@ export class GameState {
           this.fleeingArmy(player, outpost.position, outpost.troops, emptyResources()),
         );
       }
-      outpost.ownerId = null;
+      this.setOutpostOwner(outpost, null);
       outpost.troops = 0;
       abandoned++;
     }
@@ -2133,7 +2197,7 @@ export class GameState {
     if (defender) this.recallFromLostOutpost(defender, outpost.id, name);
     // A trophy for taking it from someone, once per outpost; rebuilding an empty ruin is no victory.
     const trophy = defender !== undefined && this.awardOutpostTrophy(attacker, outpost.id);
-    outpost.ownerId = attacker.id;
+    this.setOutpostOwner(outpost, attacker.id);
     outpost.troops = Math.max(1, army.troops - losses.attacker);
     addResources(outpost.resources, army.cargo);
     this.notify(attacker, {
@@ -2315,8 +2379,9 @@ export class GameState {
   }
 
   /**
-   * A new gameday: the night caravans arrive in the home castles, then the daily income is paid
-   * there — the activity, the Füllhorn and `OUTPOST_DAILY_INCOME` per owned outpost.
+   * A new gameday: the night caravans arrive in the home castles, owned outposts grow a day
+   * older (`outpostLevel`), then the daily income is paid there — the activity, the Füllhorn and
+   * `outpostIncome` per owned outpost — and the troop upkeep is due.
    */
   private startGameday(): void {
     this.sendCaravans();
@@ -2330,6 +2395,16 @@ export class GameState {
     }
     this.revision++;
     this.data.gameday++;
+    for (const outpost of this.data.outposts) {
+      const owner = outpost.ownerId ? this.player(outpost.ownerId) : undefined;
+      if (!owner) continue;
+      const before = outpostLevel(outpost.heldGamedays ?? 0);
+      outpost.heldGamedays = (outpost.heldGamedays ?? 0) + 1;
+      const level = outpostLevel(outpost.heldGamedays);
+      if (level > before) {
+        this.addLog(owner, `Ein Stützpunkt ist jetzt auf Stufe ${level} ausgebaut.`);
+      }
+    }
     for (const player of this.data.players) {
       const outposts = this.data.outposts.filter((o) => o.ownerId === player.id);
       const caravan = player.caravan ?? emptyResources();
@@ -2344,20 +2419,27 @@ export class GameState {
       const income = emptyResources();
       const harvest = (player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0;
       if (harvest) player.harvestDays! -= 1;
-      const fromOutposts = outposts.length * OUTPOST_DAILY_INCOME;
+      const fromOutposts = emptyResources();
+      for (const o of outposts) {
+        addResources(fromOutposts, outpostIncome(outpostLevel(o.heldGamedays ?? 0)));
+      }
       for (const r of RESOURCES) {
         income[r] =
           (r === player.activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) +
           harvest +
-          fromOutposts;
+          fromOutposts[r];
         player.resources[r] += income[r];
       }
       this.addLog(
         player,
         `Gameday ${this.data.gameday} beginnt: +${formatResources(income)}` +
           (outposts.length > 0
-            ? ` (davon +${fromOutposts} je Rohstoff von ${outposts.length} Stützpunkt(en)).`
+            ? ` (davon +${formatResources(fromOutposts)} von ${outposts.length} Stützpunkt(en)).`
             : '.'),
+      );
+      this.payUpkeep(player);
+      player.troopSnapshots = [...(player.troopSnapshots ?? []), this.ownedTroops(player)].slice(
+        -VP_TROOP_SNAPSHOTS,
       );
     }
     this.addFeed('day', `Spieltag ${this.data.gameday} beginnt.`);
@@ -2366,6 +2448,135 @@ export class GameState {
       this.spawnChest();
     }
     this.dirty = true;
+  }
+
+  /**
+   * Troop upkeep (`troopUpkeep`) plus any old debt, in `UPKEEP_RESOURCE` from the home castle.
+   * Each missing unit makes `UPKEEP_DESERTERS_PER_UNIT` home troops desert (a short last batch
+   * still settles one unit); what even that cannot cover becomes `upkeepDebt`.
+   */
+  private payUpkeep(player: PlayerRecord): void {
+    const upkeep = troopUpkeep(this.ownedTroops(player), this.upkeepRelief(player));
+    if (this.data.gameday < (this.data.upkeepFrom ?? 0)) {
+      if (upkeep > 0) {
+        this.addLog(
+          player,
+          `Neu: Truppen wollen Sold. Ab dem nächsten Spieltag kostet deine Armee ${upkeep} ${RESOURCE_NAMES[UPKEEP_RESOURCE]} pro Tag (heute noch nichts). Fehlt Stein, desertieren Truppen aus der Burg.`,
+        );
+      }
+      return;
+    }
+    const due = upkeep + (player.upkeepDebt ?? 0);
+    if (due === 0) return;
+    const paid = Math.min(due, player.resources[UPKEEP_RESOURCE]);
+    player.resources[UPKEEP_RESOURCE] -= paid;
+    const missing = due - paid;
+    const deserters = Math.min(player.homeTroops, missing * UPKEEP_DESERTERS_PER_UNIT);
+    player.homeTroops -= deserters;
+    const debt = missing - Math.ceil(deserters / UPKEEP_DESERTERS_PER_UNIT);
+    if (debt > 0) player.upkeepDebt = debt;
+    else delete player.upkeepDebt;
+    const name = RESOURCE_NAMES[UPKEEP_RESOURCE];
+    this.addLog(
+      player,
+      `Sold für deine Truppen: ${upkeep} ${name}, bezahlt −${paid} ${name}.` +
+        (deserters > 0 ? ` ${deserters} Truppen sind mangels Sold aus der Burg desertiert.` : '') +
+        (debt > 0
+          ? ` Es bleiben ${debt} ${name} Schulden — bis sie beglichen sind, kannst du weder Truppen noch Siegpunkte kaufen.`
+          : ''),
+    );
+  }
+
+  /**
+   * Troops the player's outposts spare from the upkeep (`OUTPOST_UPKEEP_RELIEF_PER_LEVEL`);
+   * `ahead` gamedays added to each outpost's age (1 = as at the next gameday start).
+   */
+  private upkeepRelief(player: PlayerRecord, ahead = 0): number {
+    let spared = 0;
+    for (const o of this.data.outposts) {
+      if (o.ownerId === player.id) {
+        spared += outpostLevel((o.heldGamedays ?? 0) + ahead) * OUTPOST_UPKEEP_RELIEF_PER_LEVEL;
+      }
+    }
+    return spared;
+  }
+
+  /**
+   * What the next gameday start will charge (`SelfState.upkeepNext`), mirroring `startGameday`:
+   * outposts a day older, the caravan and outpost stock home, the day's income paid first.
+   */
+  private upkeepNext(player: PlayerRecord): SelfState['upkeepNext'] {
+    const due =
+      troopUpkeep(this.ownedTroops(player), this.upkeepRelief(player, 1)) +
+      (player.upkeepDebt ?? 0);
+    const activity = player.pendingActivity ?? player.activity;
+    let stone =
+      player.resources[UPKEEP_RESOURCE] +
+      (player.caravan?.[UPKEEP_RESOURCE] ?? 0) +
+      (UPKEEP_RESOURCE === activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) +
+      ((player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0);
+    for (const o of this.data.outposts) {
+      if (o.ownerId !== player.id) continue;
+      stone += o.resources[UPKEEP_RESOURCE];
+      stone += outpostIncome(outpostLevel((o.heldGamedays ?? 0) + 1))[UPKEEP_RESOURCE];
+    }
+    return { due, stone, grace: this.data.gameday + 1 < (this.data.upkeepFrom ?? 0) };
+  }
+
+  /**
+   * Hands `outpost` to `ownerId`: a conquest from another player keeps its level minus 1, a ruin
+   * taken (or an outpost given up, `ownerId` null) starts again at level 1.
+   */
+  private setOutpostOwner(outpost: Outpost, ownerId: string | null): void {
+    const level = outpostLevel(outpost.heldGamedays ?? 0);
+    const conquered = ownerId !== null && outpost.ownerId !== null;
+    outpost.ownerId = ownerId;
+    const held = conquered ? heldGamedaysForLevel(level - 1) : 0;
+    if (held > 0) outpost.heldGamedays = held;
+    else delete outpost.heldGamedays;
+  }
+
+  /** The earliest troop order ready by `end`, with its owner. */
+  private nextTroopOrder(end: number): { player: PlayerRecord; clock: number } | null {
+    let best: { player: PlayerRecord; clock: number } | null = null;
+    for (const player of this.data.players) {
+      const first = player.troopOrders?.[0];
+      if (first && first.readyClock <= end && (!best || first.readyClock < best.clock)) {
+        best = { player, clock: first.readyClock };
+      }
+    }
+    return best;
+  }
+
+  /** Moves every order of `player` that is ready by now into the home castle. */
+  private finishTroopOrders(player: PlayerRecord): void {
+    const orders = player.troopOrders ?? [];
+    const done = orders.filter((o) => o.readyClock <= this.data.clock);
+    const troops = done.reduce((sum, o) => sum + o.troops, 0);
+    player.homeTroops += troops;
+    const left = orders.filter((o) => o.readyClock > this.data.clock);
+    if (left.length > 0) player.troopOrders = left;
+    else delete player.troopOrders;
+    this.addLog(player, `${troops} neue Truppen stehen in deiner Burg bereit.`);
+    this.dirty = true;
+  }
+
+  /** Troops still in production for `player`. */
+  private troopsInProduction(player: PlayerRecord): number {
+    return (player.troopOrders ?? []).reduce((sum, o) => sum + o.troops, 0);
+  }
+
+  /** Every troop the player owns: home castle, production, own outposts and all own armies. */
+  private ownedTroops(player: PlayerRecord): number {
+    let troops = player.homeTroops + this.troopsInProduction(player);
+    for (const o of this.data.outposts) if (o.ownerId === player.id) troops += o.troops;
+    for (const a of this.data.armies) if (a.ownerId === player.id) troops += a.troops;
+    return troops;
+  }
+
+  /** Today's victory point price factor from the gameday-start troop snapshots. */
+  private victoryPointFactor(player: PlayerRecord): number {
+    return victoryPointTroopFactor(averageTroops(player.troopSnapshots ?? []));
   }
 
   /** Clock catch-up for the time the server was down. */
@@ -2391,6 +2602,7 @@ export class GameState {
     this.data.outposts = world.outposts;
     this.data.spotLayout = SPOT_LAYOUT;
     this.data.gathererFix = GATHERER_FIX;
+    this.data.upkeepFrom = 0;
     players.forEach((player, i) => {
       player.castle = world.castles[i]!;
       player.homeTroops = STARTING_TROOPS;
@@ -2645,7 +2857,7 @@ export class GameState {
     this.data.armies = this.data.armies.filter((a) => a.ownerId !== playerId);
     for (const outpost of this.data.outposts) {
       if (outpost.ownerId !== playerId) continue;
-      outpost.ownerId = null;
+      this.setOutpostOwner(outpost, null);
       outpost.troops = 0;
     }
     this.dirty = true;
@@ -2680,6 +2892,40 @@ export class GameState {
     const player = this.player(playerId);
     if (!player) throw new RuleError('Unbekannter Spieler.');
     player.name = this.cleanName(rawName, playerId);
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** The round's win target: the admin's choice, else the configured default. */
+  get victoryPointsToWin(): number {
+    return this.data.victoryPointsToWin ?? this.options.victoryPointsToWin;
+  }
+
+  /** Admin: sets the round's win target (kept in the save; a reset falls back to the default). */
+  setVictoryPointsToWin(points: number): void {
+    const ahead = this.data.players.find((p) => p.victoryPoints >= points);
+    if (this.data.phase === 'running' && ahead) {
+      throw new RuleError(`${ahead.name} hat schon ${ahead.victoryPoints} Siegpunkte.`);
+    }
+    this.data.victoryPointsToWin = points;
+    this.revision++;
+    this.dirty = true;
+  }
+
+  /** The running game's state the outpost-level replay starts from (`outpostLevels.ts`). */
+  get outpostLevelSource(): Pick<SavedGame, 'seed' | 'gameday' | 'outposts' | 'players'> {
+    if (this.data.phase !== 'running') throw new RuleError('Es läuft kein Spiel.');
+    return this.data;
+  }
+
+  /** Admin: stores replayed outpost ages (`Outpost.heldGamedays`) for the running game. */
+  applyOutpostLevels(held: Map<string, number>): void {
+    if (this.data.phase !== 'running') throw new RuleError('Es läuft kein Spiel.');
+    for (const outpost of this.data.outposts) {
+      const days = outpost.ownerId ? (held.get(outpost.id) ?? 0) : 0;
+      if (days > 0) outpost.heldGamedays = days;
+      else delete outpost.heldGamedays;
+    }
     this.revision++;
     this.dirty = true;
   }
@@ -2730,7 +2976,7 @@ export class GameState {
     return {
       phase: this.data.phase,
       clock: this.clockState(),
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
       winnerId: this.data.winnerId,
       players: this.data.players.map((p) => ({
         id: p.id,
@@ -2739,6 +2985,7 @@ export class GameState {
         victoryPoints: p.victoryPoints,
         trophies: p.trophies ?? 0,
         homeTroops: fogged.has(baseKey(p.id, null)) ? null : p.homeTroops,
+        troopsInProduction: fogged.has(baseKey(p.id, null)) ? null : this.troopsInProduction(p),
         fortified: (p.fortifiedUntil ?? 0) > clock,
         barefoot: (p.barefootUntil ?? 0) > clock,
         routed: p.routed ?? false,
@@ -2774,6 +3021,11 @@ export class GameState {
           })),
         barefootUntil: (self.barefootUntil ?? 0) > clock ? self.barefootUntil! : null,
         victoryPointsToday: this.victoryPointsToday(self),
+        victoryPointFactor: this.victoryPointFactor(self),
+        troopAverage: averageTroops(self.troopSnapshots ?? []),
+        upkeepDebt: self.upkeepDebt ?? 0,
+        upkeepNext: this.upkeepNext(self),
+        troopOrders: self.troopOrders ?? [],
         // Langfinger shows who holds how many cards, never which.
         cardCounts: self.cards.includes('pickpocket')
           ? this.data.players
@@ -2791,7 +3043,7 @@ export class GameState {
       clock: this.clockState(),
       mapSize: this.data.mapSize,
       winnerId: this.data.winnerId,
-      victoryPointsToWin: this.options.victoryPointsToWin,
+      victoryPointsToWin: this.victoryPointsToWin,
       players: this.data.players.map((p) => ({
         id: p.id,
         name: p.name,

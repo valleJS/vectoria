@@ -3,10 +3,10 @@ type: Codemap
 description: Path map for apps/server — config, game loop and state, gameday calendar, persistence, email login, WebSocket + HTTP API, Postgres/Redis wiring.
 audience: agent
 category: codemap
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 load-when: Any change under apps/server (game simulation, tick loop, WebSocket handling, database, Redis, env config).
 sources: [apps/server/src/, apps/server/package.json, apps/server/drizzle.config.ts, apps/server/tsup.config.ts]
-sources_stamp: 134e1609e1482f93d2e63191e062b9cb3e7c69dd
+sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
 ---
 
 # Server codemap (`apps/server`)
@@ -59,8 +59,9 @@ themselves in between. Commands mutate state only through
 | `ADMIN_TOKEN` | `admin` (dev) | **required in production** |
 | `GAME_HOURS` / `GAME_TIMEZONE` | `weekdays` / `Europe/Berlin` | `always` for dev |
 | `TIME_SCALE` | `1` | clock multiplier for testing |
-| `VICTORY_POINTS_TO_WIN` | `10` | |
+| `VICTORY_POINTS_TO_WIN` | `12` | default; the admin panel's "Siegziel" overrides it per round |
 | `DATA_FILE` | `data/game.json` | relative to the server cwd; gitignored |
+| `BACKUP_DIR` | `../backups` from the data dir | save backups for the outpost-level replay; `/backups` (read-only mount) in the container |
 | `CLIENT_DIR` | unset = API only | built client to serve; set in the Docker image |
 | `ALLOWED_ORIGINS` | empty = any | comma list; **set in production** |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | unset / `587` / `false` | **host required in production**; unset = codes in the log |

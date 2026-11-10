@@ -11,9 +11,15 @@ import {
   SPOT_FAR_HOURS,
   SPOT_MAX_HOURS,
   SPOT_NEAR_HOURS,
-  OUTPOST_DAILY_INCOME,
+  OUTPOST_LEVEL_GAMEDAYS,
+  OUTPOST_MAX_LEVEL,
+  OUTPOST_STONE_PER_LEVEL,
+  OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
   TROPHY_VP_INTERVAL,
   VICTORY_POINTS_PER_GAMEDAY,
+  VP_TROOP_FACTOR_MIN,
+  VP_TROOP_REFERENCE,
+  VP_TROOP_SNAPSHOTS,
 } from '@vectoria/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +48,31 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'balancing-army-size-outpost-levels',
+    date: '2026-11-10',
+    title: 'Große Armeen kosten, Stützpunkte wachsen',
+    body: (
+      <>
+        <b>Siegpunkte</b> kosten jetzt gleich viel von jedem Rohstoff: der erste je 1, der zweite je
+        2 und so weiter. Darauf kommt dein <b>Truppenfaktor</b>: Mit {VP_TROOP_REFERENCE} Truppen
+        zahlst du den Grundpreis, mit mehr entsprechend mehr, mit wenigen nur{' '}
+        {formatPercent(VP_TROOP_FACTOR_MIN)}. Gezählt wird dein Schnitt der letzten{' '}
+        {VP_TROOP_SNAPSHOTS} Spieltagsbeginne. Gewonnen hat, wer zuerst <b>12 Siegpunkte</b> hat.
+        <br />
+        Truppen wollen <b>Sold in Stein</b>, zu jedem Spieltagsbeginn und wachsend mit dem Quadrat
+        der Armee (100 Truppen 1 Stein, 300 schon 9). Fehlt Stein, desertieren Truppen aus der Burg.
+        Was dann noch fehlt, wird zu Schulden, und mit Schulden kannst du nichts kaufen.
+        <br />
+        Neue Truppen brauchen <b>eine Stunde Ausbildung</b>, bevor sie in der Burg stehen.
+        <br />
+        <b>Stützpunkte</b> steigen alle {OUTPOST_LEVEL_GAMEDAYS} Spieltage eine Stufe, bis Stufe{' '}
+        {OUTPOST_MAX_LEVEL}. Je Stufe bringen sie täglich 1 Holz, {OUTPOST_STONE_PER_LEVEL} Stein
+        und 1 Gold und versorgen {OUTPOST_UPKEEP_RELIEF_PER_LEVEL} Truppen ohne Sold. Eroberer
+        übernehmen sie eine Stufe niedriger.
+      </>
+    ),
+  },
   {
     id: 'one-trophy-per-outpost',
     date: '2026-11-09',
@@ -202,13 +233,12 @@ const RULE_CHANGES: RuleChange[] = [
     title: 'Stützpunkte: Einkommen und Nachtkarawane',
     body: (
       <>
-        Jeder eigene Stützpunkt bringt zu Beginn jedes Spieltags{' '}
-        <b>+{OUTPOST_DAILY_INCOME} Holz, Stein und Gold</b> direkt in deine Basis.{' '}
-        <b>Manuelle Transporte gibt es nicht mehr.</b> Dafür bricht <b>um 18 Uhr eine Karawane</b>{' '}
-        mit dem ganzen Lager aller Stützpunkte auf, am nächsten Morgen liegt es in der Basis.
-        Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben dann im Stützpunkt. Sammler
-        bringen ihre Ladung wie bisher zu ihrer Burg und lassen sich jetzt unterwegs zu jedem
-        eigenen Lager umleiten.
+        Jeder eigene Stützpunkt bringt zu Beginn jedes Spieltags <b>+1 Holz, Stein und Gold</b>{' '}
+        direkt in deine Basis. <b>Manuelle Transporte gibt es nicht mehr.</b> Dafür bricht{' '}
+        <b>um 18 Uhr eine Karawane</b> mit dem ganzen Lager aller Stützpunkte auf, am nächsten
+        Morgen liegt es in der Basis. Truppen abziehen geht weiter jederzeit, die Ressourcen bleiben
+        dann im Stützpunkt. Sammler bringen ihre Ladung wie bisher zu ihrer Burg und lassen sich
+        jetzt unterwegs zu jedem eigenen Lager umleiten.
       </>
     ),
   },

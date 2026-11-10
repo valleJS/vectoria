@@ -5,6 +5,9 @@ import {
   type AdminAction,
   type AdminPlayer,
   type AdminState,
+  ADMIN_VICTORY_POINTS_MAX,
+  OUTPOST_MAX_LEVEL,
+  type OutpostLevelPreview,
 } from '@vectoria/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { formatGameDuration } from '../game/format';
@@ -179,8 +182,24 @@ function PlayerCard({
       <div className="text-xs text-ink-soft">
         Karten: {p.cards.map((c) => CARDS[c].name).join(', ') || '—'}
       </div>
-      <div className="flex justify-between gap-2">
-        <Tip label="Für alle sichtbar über der Burg, bis du ihn wieder abnimmst">
+      <div className="flex flex-wrap justify-between gap-2">
+        <Tip label="Für alle sichtbar auf dem Mittelturm der Burg, leuchtet nachts. Ersetzt den Penis.">
+          <Button
+            size="sm"
+            className="h-9 sm:h-7"
+            aria-pressed={p.castleDecoration === 'crown'}
+            onClick={() =>
+              run({
+                action: 'setCastleDecoration',
+                playerId: p.id,
+                decoration: p.castleDecoration === 'crown' ? null : 'crown',
+              })
+            }
+          >
+            {p.castleDecoration === 'crown' ? 'Krone abnehmen' : 'Krone aufsetzen'}
+          </Button>
+        </Tip>
+        <Tip label="Für alle sichtbar über der Burg, bis du ihn wieder abnimmst. Ersetzt die Krone.">
           <Button
             size="sm"
             className="h-9 sm:h-7"
@@ -278,6 +297,144 @@ function BreakDays({
         </ul>
       ) : (
         <p className="mt-2 text-ink-soft">Keine Pausentage geplant.</p>
+      )}
+    </Panel>
+  );
+}
+
+/** The round's win target, editable while nobody has reached the new value (keyed by it). */
+function WinTarget({
+  points,
+  run,
+}: {
+  points: number;
+  run: (action: AdminAction, confirmText?: string) => void;
+}) {
+  const [value, setValue] = useState(String(points));
+  const next = Number(value);
+  const valid = Number.isInteger(next) && next >= 1 && next <= ADMIN_VICTORY_POINTS_MAX;
+  return (
+    <Panel title="Siegziel">
+      <p className="mb-2 text-xs text-ink-soft">
+        Wer zuerst so viele Siegpunkte hat, gewinnt. Gilt sofort für die laufende Runde.
+      </p>
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid && next !== points) {
+            run(
+              { action: 'setVictoryPointsToWin', points: next },
+              `Siegziel von ${points} auf ${next} Siegpunkte ändern?`,
+            );
+          }
+        }}
+      >
+        <Input
+          type="number"
+          min={1}
+          max={ADMIN_VICTORY_POINTS_MAX}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          aria-label="Siegpunkte zum Sieg"
+          className="h-10 w-24 sm:h-7"
+        />
+        <span className="text-ink-soft">Siegpunkte</span>
+        <Button type="submit" className="h-10 sm:h-7" disabled={!valid || next === points}>
+          Speichern
+        </Button>
+      </form>
+    </Panel>
+  );
+}
+
+/**
+ * One-off for a round that ran before outpost levels: replays the ownership in the server's
+ * save backups, shows the levels, and stores them on a second click.
+ */
+function OutpostLevels({
+  token,
+  run,
+}: {
+  token: string;
+  run: (action: AdminAction, confirmText?: string) => void;
+}) {
+  const [preview, setPreview] = useState<OutpostLevelPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const load = () => {
+    setLoading(true);
+    api
+      .adminOutpostLevels(token)
+      .then((p) => {
+        setPreview(p);
+        setError(null);
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+  const changes = preview?.rows.filter((r) => r.level !== r.currentLevel).length ?? 0;
+  return (
+    <Panel title="Stützpunkt-Stufen nachrechnen">
+      <p className="mb-2 text-xs text-ink-soft">
+        Einmalig nach dem Update: rechnet aus den täglichen Backups nach, wie lange jeder Stützpunkt
+        schon in derselben Hand ist, und zeigt die Stufen. Erst „Übernehmen“ ändert das Spiel.
+      </p>
+      <Button className="h-10 sm:h-7" disabled={loading} onClick={load}>
+        {loading ? 'Rechne …' : preview ? 'Neu berechnen' : 'Vorschau berechnen'}
+      </Button>
+      {error && <p className="mt-2 text-seal">{error}</p>}
+      {preview && (
+        <>
+          <p className="mt-2 text-xs text-ink-soft">
+            {preview.backups} Backups (Gameday {preview.fromGameday}–{preview.toGameday})
+            {preview.skipped > 0 && `, ${preview.skipped} anderer Runden übersprungen`}. „≥“: schon
+            im ältesten Backup im Besitz, die echte Stufe kann höher sein.
+          </p>
+          <table className="mt-2 w-full text-sm tabular-nums">
+            <thead className="text-left text-xs text-ink-soft">
+              <tr>
+                <th className="font-normal">Besitzer:in</th>
+                <th className="font-normal">gehalten</th>
+                <th className="font-normal">Stufe</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink/15">
+              {preview.rows.map((r) => (
+                <tr key={r.outpostId}>
+                  <td className="truncate py-1">{r.ownerName}</td>
+                  <td>{r.heldGamedays} Spieltage</td>
+                  <td>
+                    <b>
+                      {r.sinceOldest && r.level < OUTPOST_MAX_LEVEL ? '≥' : ''}
+                      {r.level}
+                    </b>
+                    {r.level !== r.currentLevel && (
+                      <span className="text-ink-soft"> (jetzt {r.currentLevel})</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {preview.rows.length === 0 && (
+            <p className="mt-2 text-ink-soft">Kein Stützpunkt ist gerade im Besitz.</p>
+          )}
+          <Button
+            variant="primary"
+            className="mt-2 h-10 sm:h-7"
+            disabled={changes === 0}
+            onClick={() => {
+              run(
+                { action: 'applyOutpostLevels' },
+                `Stufen für ${changes} Stützpunkt(e) übernehmen? Die Spieler:innen sehen sie sofort.`,
+              );
+              setPreview(null);
+            }}
+          >
+            {changes === 0 ? 'Alles schon aktuell' : `Übernehmen (${changes} ändern sich)`}
+          </Button>
+        </>
       )}
     </Panel>
   );
@@ -491,6 +648,12 @@ export function AdminPanel() {
           )}
 
           {state.phase !== 'ended' && <BreakDays days={state.clock.breakDays} run={run} />}
+
+          {state.phase !== 'ended' && (
+            <WinTarget key={state.victoryPointsToWin} points={state.victoryPointsToWin} run={run} />
+          )}
+
+          {running && <OutpostLevels token={token} run={run} />}
 
           {running && state.players.length > 1 && (
             <Panel title="Hauptburgen tauschen">
