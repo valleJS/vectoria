@@ -673,18 +673,12 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           <div>
             {player.homeTroops ?? '?'} Verteidiger · {player.victoryPoints} Siegpunkte
           </div>
-          {own
-            ? view.self.troopOrders.map((order, i) => (
-                <div key={i} className="text-xs text-ink-soft tabular-nums">
-                  {order.troops} Truppen in Ausbildung · fertig{' '}
-                  {formatEta(view.clock, order.readyClock - view.clock.clock)}
-                </div>
-              ))
-            : (player.troopsInProduction ?? 0) > 0 && (
-                <div className="text-xs text-ink-soft">
-                  {player.troopsInProduction} Truppen in Ausbildung
-                </div>
-              )}
+          {(own ? view.self.troopOrders : (player.troopOrders ?? [])).map((order, i) => (
+            <div key={i} className="text-xs text-ink-soft tabular-nums">
+              {order.troops} Truppen in Ausbildung · fertig{' '}
+              {formatEta(view.clock, order.readyClock - view.clock.clock)}
+            </div>
+          ))}
           {player.fortified && <div className="text-fortify italic">Bollwerk aktiv (+50 %)</div>}
           {player.barefoot && (
             <div className="text-seal italic">

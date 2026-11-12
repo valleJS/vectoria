@@ -112,7 +112,7 @@ import { createRandom } from './random';
 import { placeBalancedSpots } from './spots';
 import {
   createWorld,
-  farthestFrom,
+  chestTile,
   innerLand,
   mainlandTiles,
   outpostCount,
@@ -284,6 +284,8 @@ export interface SavedGame {
   spots: ResourceSpot[];
   outposts: Outpost[];
   chests: Chest[];
+  /** Where every random chest of this game spawned; absent in older saves. */
+  chestSpawns?: Vec2[];
   feed: FeedEntry[];
   /** Spot layout version (`SPOT_LAYOUT`); absent in saves from before balanced spots. */
   spotLayout?: number;
@@ -2650,11 +2652,14 @@ export class GameState {
 
   spawnChest(): void {
     if (!this.map) throw new RuleError('Noch keine Karte.');
-    this.data.chests.push({
-      id: this.nextId('chest'),
-      position: farthestFrom(mainlandTiles(this.map), this.takenPositions(), Math.random),
-      troopsNeeded: rollChestTroops(),
-    });
+    const bases = [
+      ...this.data.players.flatMap((p) => (p.castle ? [p.castle] : [])),
+      ...this.data.outposts.map((o) => o.position),
+    ];
+    const earlier = this.data.chestSpawns ?? [];
+    const position = chestTile(this.map, bases, this.takenPositions(), earlier, Math.random);
+    this.data.chestSpawns = [...earlier, position];
+    this.data.chests.push({ id: this.nextId('chest'), position, troopsNeeded: rollChestTroops() });
     this.dirty = true;
   }
 
@@ -2986,6 +2991,7 @@ export class GameState {
         trophies: p.trophies ?? 0,
         homeTroops: fogged.has(baseKey(p.id, null)) ? null : p.homeTroops,
         troopsInProduction: fogged.has(baseKey(p.id, null)) ? null : this.troopsInProduction(p),
+        troopOrders: fogged.has(baseKey(p.id, null)) ? null : (p.troopOrders ?? []),
         fortified: (p.fortifiedUntil ?? 0) > clock,
         barefoot: (p.barefootUntil ?? 0) > clock,
         routed: p.routed ?? false,

@@ -190,6 +190,16 @@ export const CHESTS_PER_GAMEDAY = 3;
 export function maxChestsOnMap(players: number): number {
   return Math.max(CHESTS_PER_GAMEDAY, players);
 }
+/**
+ * Where a chest spawns: any free mainland tile at least `CHEST_BASE_GAP_HOURS` of marching from
+ * every castle and outpost, picked at random, favouring ground where no chest of this game has
+ * spawned yet. Each earlier spawn adds closeness `exp(-(d / radius)²)` (radius
+ * `CHEST_REPEAT_RADIUS_HOURS` of marching); a tile's odds are `1 / (1 + CHEST_REPEAT_PENALTY ·
+ * closeness)`, so a tile right on one earlier spawn has a fifth of the odds of untouched ground.
+ */
+export const CHEST_BASE_GAP_HOURS = 0.5;
+export const CHEST_REPEAT_RADIUS_HOURS = 1;
+export const CHEST_REPEAT_PENALTY = 4;
 /** Troops needed to open a chest: random in this range, in steps of `CHEST_TROOPS_STEP`. */
 export const CHEST_TROOPS_MIN = 20;
 export const CHEST_TROOPS_MAX = 100;

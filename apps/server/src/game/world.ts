@@ -1,4 +1,9 @@
 import {
+  CHEST_BASE_GAP_HOURS,
+  CHEST_REPEAT_PENALTY,
+  CHEST_REPEAT_RADIUS_HOURS,
+  CROSS_MAP_HOURS,
+  distanceField,
   emptyResources,
   mapSizeForPlayers,
   MIN_OUTPOSTS,
@@ -124,7 +129,7 @@ export function placeOutposts(
   return outposts;
 }
 
-/** A random tile among the best few candidates by distance to the nearest `taken` point. */
+/** The best of 200 random candidates by distance to the nearest `taken` point. */
 export function farthestFrom(candidates: Vec2[], taken: Vec2[], random: () => number): Vec2 {
   // Sample instead of scanning everything; plenty for maps under 100×100.
   let best = candidates[0]!;
@@ -138,6 +143,42 @@ export function farthestFrom(candidates: Vec2[], taken: Vec2[], random: () => nu
     }
   }
   return best;
+}
+
+/**
+ * A random spot for a new chest: a free mainland tile (`taken` holds every occupied point) at least
+ * `CHEST_BASE_GAP_HOURS` of marching from every base, weighted away from `earlier` spawns (every one of this game). When no
+ * tile is that far from the bases, any free one will do.
+ */
+export function chestTile(
+  map: MapData,
+  bases: Vec2[],
+  taken: Vec2[],
+  earlier: Vec2[],
+  random: () => number,
+): Vec2 {
+  const tilesPerHour = map.width / CROSS_MAP_HOURS;
+  const gap = CHEST_BASE_GAP_HOURS * tilesPerHour;
+  const fields = bases.map((b) => distanceField(map, b, gap));
+  const index = (p: Vec2) => Math.floor(p.y) * map.width + Math.floor(p.x);
+  const occupied = new Set(taken.map(index));
+  const free = mainlandTiles(map).filter((t) => !occupied.has(index(t)));
+  const far = free.filter((t) => fields.every((f) => !(f[index(t)]! < gap)));
+  const pool = far.length > 0 ? far : free;
+  const radius = CHEST_REPEAT_RADIUS_HOURS * tilesPerHour;
+  const weights = pool.map((t) => {
+    const closeness = earlier.reduce(
+      (sum, e) => sum + Math.exp(-((distance(e, t) / radius) ** 2)),
+      0,
+    );
+    return 1 / (1 + CHEST_REPEAT_PENALTY * closeness);
+  });
+  let roll = random() * weights.reduce((sum, w) => sum + w, 0);
+  for (let i = 0; i < pool.length; i++) {
+    roll -= weights[i]!;
+    if (roll < 0) return pool[i]!;
+  }
+  return pool[pool.length - 1]!;
 }
 
 /** Centres of the tiles of the largest 4-connected land area. */
