@@ -57,6 +57,11 @@ export interface PlayerPublic {
   homeTroops: number | null;
   /** Troops bought but not ready yet (`TROOP_PRODUCTION_MS`); null while `homeTroops` is. */
   troopsInProduction: number | null;
+  /**
+   * The same troops per purchase with their ready times (public, so an attacker can see when the
+   * defence grows); null while `homeTroops` is.
+   */
+  troopOrders: TroopOrder[] | null;
   fortified: boolean;
   /** Shoes stolen (card): marches started now go at `BAREFOOT_SPEED`. */
   barefoot: boolean;

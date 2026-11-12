@@ -728,7 +728,8 @@ const CHAPTERS: Chapter[] = [
           <Cost resources={TROOP_BATCH_COST} />. Die Ausbildung dauert eine Spielstunde, danach
           stehen sie in deiner Burg. Bis dahin verteidigen sie nicht und können nicht losziehen. Auf
           dem Namensschild deiner Burg stehen sie in Klammern hinter den Verteidigern, und ein Klick
-          auf die Burg zeigt, wann jede Ausbildung fertig ist.
+          auf die Burg zeigt, wann jede Ausbildung fertig ist. Das gilt auch für fremde Burgen: Vor
+          einem Angriff siehst du, wann dort neue Verteidiger dazukommen.
         </P>
         <P>
           Truppen wollen <b>Sold</b>: Zu jedem Spieltagsbeginn zahlst du Unterhalt in Stein aus

@@ -3,10 +3,10 @@ type: Codemap
 description: Path map for apps/client — React shell, PixiJS cartography renderer and camera, zustand store, WebSocket client, parchment-themed shadcn/ui + Tailwind HUD, design tokens and design sheet.
 audience: agent
 category: codemap
-last_verified: 2026-11-10
+last_verified: 2026-11-12
 load-when: Any change under apps/client (rendering, pan/zoom/click input, HUD/UI, client state, client networking).
 sources: [apps/client/src/, apps/client/vite.config.ts, apps/client/package.json, apps/client/components.json]
-sources_stamp: 252ac1817c4090bfcecd7b1e57b60e00c65d5829
+sources_stamp: e20f08c0d03542951c716fab61ae85f303eed798
 ---
 
 # Client codemap (`apps/client`)

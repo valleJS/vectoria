@@ -3,10 +3,10 @@ type: Codemap
 description: System shape, directory tree, network protocol, and where-to-change map for the vectoria monorepo.
 audience: agent
 category: codemap
-last_verified: 2026-11-10
+last_verified: 2026-11-12
 load-when: Understanding the system, finding where something lives, or changing anything cross-cutting (protocol, shared types, workspace config).
 sources: [package.json, tsconfig.json, eslint.config.js, packages/shared/src/, docker-compose.yml]
-sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
+sources_stamp: e20f08c0d03542951c716fab61ae85f303eed798
 ---
 
 # Architecture
