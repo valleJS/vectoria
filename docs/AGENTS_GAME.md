@@ -3,10 +3,10 @@ type: Codemap
 description: Game rules of the prototype — phases, gameday clock, economy, bases and outposts, land movement, raids, combat, live ticker, chests and cards — and where each rule lives in code.
 audience: agent
 category: codemap
-last_verified: 2026-11-10
+last_verified: 2026-11-12
 load-when: Changing or explaining any game rule, balance number, card, the gameday clock, or combat.
 sources: [packages/shared/src/rules.ts, packages/shared/src/entities.ts, apps/server/src/game/]
-sources_stamp: 6ebbed896b194cd1ef14ba0f8476a2c5846166e7
+sources_stamp: e20f08c0d03542951c716fab61ae85f303eed798
 ---
 
 # Game rules (prototype)
