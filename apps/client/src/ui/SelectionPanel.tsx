@@ -1,5 +1,9 @@
 import {
   assaultImminent,
+  BRIBE_COST_BATCH,
+  BRIBE_COST_PER_BATCH,
+  BRIBE_COST_RESOURCE,
+  bribeCost,
   CARDS,
   emptyResources,
   findPath,
@@ -14,6 +18,7 @@ import {
   outpostLevel,
   GATHER_YIELD_PER_100_TROOPS,
   gatherYield,
+  harvestBonus,
   hasResources,
   isRaidable,
   pathLength,
@@ -341,6 +346,8 @@ function FieldRedirect({
     (a) =>
       a.ownerId === view.self.id &&
       a.duoWith === null &&
+      // Untraded stone goes only to the trader or back where it came from.
+      !a.tradeBound &&
       // Loaded armies on their way home may switch to another own store (not a trade march).
       (ownBase
         ? a.status === 'returning' || !(hasResources(a.cargo) || a.chest)
@@ -537,7 +544,16 @@ function ArmyDetails({ view, army }: { view: GameView; army: ArmyView }) {
           {own && ' — umleiten oder zurückrufen löst ihn davon'}.
         </div>
       )}
-      {own && (carrying || army.chest) && <StoreRedirect view={view} army={army} />}
+      {own && army.tradeBound && (
+        <div className="mt-1 text-xs text-ink-soft italic">
+          {army.status === 'outbound'
+            ? 'Stein für den Händler: nur zurückrufen möglich.'
+            : 'Ungetauschter Stein geht dorthin zurück, woher er kam.'}
+        </div>
+      )}
+      {own && (carrying || army.chest) && !army.tradeBound && (
+        <StoreRedirect view={view} army={army} />
+      )}
       {army.duoWith && (army.ownerId === view.self.id || army.duoWith === view.self.id) && (
         <div className="mt-1 text-xs text-ink-soft italic">
           Duo-Pakt: abbrechen nur gemeinsam, im Posteingang.
@@ -568,6 +584,9 @@ function BribeOption({ view, army }: { view: GameView; army: ArmyView }) {
   if (!map || !view.self.cards.includes('bribe')) return null;
   const host = bribeHostFor(view, map.width, army);
   if (!host) return null;
+  const gold = view.self.resources[BRIBE_COST_RESOURCE];
+  const cost = army.troops === null ? null : bribeCost(army.troops);
+  const short = cost !== null && gold < cost;
   return (
     <Locked className="mt-2 border-t border-ink/30 pt-2">
       <div className="font-bold">Bestechen</div>
@@ -576,9 +595,17 @@ function BribeOption({ view, army }: { view: GameView; army: ArmyView }) {
         {describeTarget(view, host.target)}. Kann er sie vor dem Ziel nicht treffen, wartet er dort
         auf sie.
       </p>
+      <p className={`text-xs ${short ? 'text-seal' : 'text-ink-soft'}`}>
+        Preis:{' '}
+        {cost !== null
+          ? `${cost} ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]}`
+          : `${BRIBE_COST_PER_BATCH} ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]} je angefangene ${BRIBE_COST_BATCH} Truppen (Stärke im Nebel)`}{' '}
+        — du hast {gold}.
+      </p>
       <Button
         variant="primary"
         className="mt-1"
+        disabled={short}
         onClick={() => {
           gameSocket.send({ type: 'activateCard', card: 'bribe', target: army.id });
           setBribing(false);
@@ -688,7 +715,8 @@ function SelectionBody({ view, selection }: { view: GameView; selection: Selecti
           {own && view.self.harvestDays > 0 && (
             <div className="text-gold-deep italic">
               Füllhorn: noch {view.self.harvestDays}{' '}
-              {view.self.harvestDays === 1 ? 'Spieltag' : 'Spieltage'} +1 auf alles
+              {view.self.harvestDays === 1 ? 'Spieltag' : 'Spieltage'}, nächster +
+              {harvestBonus(view.clock.gameday + 1)} auf alles
             </div>
           )}
           {player.routed && (

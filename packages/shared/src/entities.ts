@@ -175,6 +175,11 @@ export interface ArmyView {
    * army, but it is no raid. Null otherwise.
    */
   joining: string | null;
+  /**
+   * Stone for the trader, not yet traded: on its way there (recall only) or recalled, then bound
+   * for the base it came from. Cannot be redirected to another store.
+   */
+  tradeBound: boolean;
 }
 
 /**

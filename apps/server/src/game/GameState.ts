@@ -4,7 +4,9 @@ import {
   BAREFOOT_DURATION_MS,
   BAREFOOT_SPEED,
   battleLosses,
+  BRIBE_COST_RESOURCE,
   BRIBE_RANGE_HOURS,
+  bribeCost,
   bribeRangeTiles,
   canAfford,
   CARDS,
@@ -27,8 +29,8 @@ import {
   GAMEDAY_MS,
   GATHER_DURATION_MS,
   gatherYield,
-  HARVEST_BONUS,
   HARVEST_GAMEDAYS,
+  harvestBonus,
   hasResources,
   HOUR_MS,
   isBribable,
@@ -232,6 +234,11 @@ interface ArmyRecord {
   cargo: Resources;
   /** On the way to the trader: what the stone is to be swapped for. Absent otherwise. */
   trade?: { gold: number; wood: number };
+  /**
+   * A trader march recalled before trading: its stone goes back to the base it came from and
+   * nowhere else (`redirectArmy`). Absent otherwise.
+   */
+  tradeRecalled?: boolean;
   /** Carrying an opened chest home (cannot be raided); absent in older saves. */
   chest?: boolean;
   /** Times the cargo was stolen in raids (`MAX_CARGO_RAIDS`); absent while never stolen. */
@@ -730,9 +737,14 @@ export class GameState {
     if (army.pactId) throw new RuleError('Ein Duo-Zug lässt sich nicht umleiten.');
     // Sent elsewhere by hand, a bribed army no longer joins its host.
     delete army.joins;
-    // Stone bound for the trader goes there or back (recall), never to another store.
-    if (army.trade && army.status === 'outbound') {
-      throw new RuleError('Ein Zug zum Händler lässt sich nur zurückrufen.');
+    // Stone bound for the trader goes there or back to where it came from (recall), never to
+    // another store; only what the trader gave for it may be taken elsewhere.
+    if (this.tradeBound(army)) {
+      throw new RuleError(
+        army.status === 'outbound'
+          ? 'Ein Zug zum Händler lässt sich nur zurückrufen.'
+          : 'Ungetauschter Stein geht zurück, woher er kam — nur Getauschtes darf woandershin.',
+      );
     }
     if (this.isTrader(target)) {
       throw new RuleError('Zum Händler geht es nur mit Stein direkt aus einer Burg.');
@@ -775,6 +787,11 @@ export class GameState {
     this.dirty = true;
   }
 
+  /** Stone for the trader, not yet traded: on its way there, or recalled to its own base. */
+  private tradeBound(army: ArmyRecord): boolean {
+    return (army.trade !== undefined || army.tradeRecalled === true) && hasResources(army.cargo);
+  }
+
   /** A loaded army heads for another own base (castle or outpost) to store its load there. */
   private redirectHome(player: PlayerRecord, army: ArmyRecord, target: ArmyTarget): void {
     const outpost =
@@ -805,6 +822,7 @@ export class GameState {
     if (army.pactId) throw new RuleError('Einen Duo-Angriff könnt ihr nur gemeinsam abbrechen.');
     if (army.status === 'returning') throw new RuleError('Der Zug ist bereits auf dem Rückweg.');
     delete army.joins;
+    if (army.trade) army.tradeRecalled = true;
     this.startReturn(army, this.armyPosition(army));
     this.addFeed('march', `${this.armyLabel(army)} kehrt um.`, army.id);
     this.dirty = true;
@@ -853,7 +871,7 @@ export class GameState {
           player.harvestDays = (player.harvestDays ?? 0) + HARVEST_GAMEDAYS;
           this.addLog(
             player,
-            `Füllhorn: die nächsten ${player.harvestDays} Spieltage je +${HARVEST_BONUS} Holz, Stein und Gold extra.`,
+            `Füllhorn: die nächsten ${player.harvestDays} Spieltage extra Holz, Stein und Gold — je so viel, wie der Spieltag zählt (morgen +${harvestBonus(this.data.gameday + 1)}).`,
           );
           this.addFeed('day', `${player.name} öffnet ein Füllhorn.`);
         };
@@ -903,7 +921,20 @@ export class GameState {
             `Keiner deiner Züge ist nah genug dran (höchstens ${BRIBE_RANGE_HOURS} h Marsch).`,
           );
         }
-        return () => this.bribe(player, victim, army, host);
+        const cost = bribeCost(army.troops);
+        const have = player.resources[BRIBE_COST_RESOURCE];
+        if (have < cost) {
+          // Under Nebel the price would give the troop count away.
+          throw new RuleError(
+            army.fog
+              ? `Dafür reicht dein ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]} in der Burg nicht.`
+              : `Die Bestechung kostet ${cost} ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]} — du hast ${have}.`,
+          );
+        }
+        return () => {
+          player.resources[BRIBE_COST_RESOURCE] -= cost;
+          this.bribe(player, victim, army, host, cost);
+        };
       }
       default:
         throw new RuleError('Diese Karte wirkt nicht sofort.');
@@ -938,6 +969,7 @@ export class GameState {
     victim: PlayerRecord,
     army: ArmyRecord,
     host: ArmyRecord,
+    cost: number,
   ): void {
     // Nebel hid the troop count until now; the ticker keeps it hidden.
     const troops = army.fog ? '?' : String(army.troops);
@@ -951,7 +983,7 @@ export class GameState {
     this.planJoin(army, host);
     this.addLog(
       player,
-      `Bestechung: ${army.troops} Truppen von ${victim.name} laufen über und stoßen zu deinem Zug.`,
+      `Bestechung für ${cost} ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]}: ${army.troops} Truppen von ${victim.name} laufen über und stoßen zu deinem Zug.`,
     );
     this.addLog(
       victim,
@@ -2419,7 +2451,7 @@ export class GameState {
 
       player.activity = player.pendingActivity ?? player.activity;
       const income = emptyResources();
-      const harvest = (player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0;
+      const harvest = (player.harvestDays ?? 0) > 0 ? harvestBonus(this.data.gameday) : 0;
       if (harvest) player.harvestDays! -= 1;
       const fromOutposts = emptyResources();
       for (const o of outposts) {
@@ -2516,7 +2548,7 @@ export class GameState {
       player.resources[UPKEEP_RESOURCE] +
       (player.caravan?.[UPKEEP_RESOURCE] ?? 0) +
       (UPKEEP_RESOURCE === activity ? DAILY_ACTIVITY_INCOME : DAILY_BASE_INCOME) +
-      ((player.harvestDays ?? 0) > 0 ? HARVEST_BONUS : 0);
+      ((player.harvestDays ?? 0) > 0 ? harvestBonus(this.data.gameday + 1) : 0);
     for (const o of this.data.outposts) {
       if (o.ownerId !== player.id) continue;
       stone += o.resources[UPKEEP_RESOURCE];
@@ -3137,6 +3169,7 @@ export class GameState {
       cargoRaids: army.cargoRaids ?? 0,
       duoWith: pact && (member || pact.status === 'united') ? other : null,
       joining: visible ? (army.joins?.hostId ?? null) : null,
+      tradeBound: this.tradeBound(army),
     };
   }
 
