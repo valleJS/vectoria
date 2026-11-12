@@ -1,4 +1,7 @@
 import {
+  BRIBE_COST_BATCH,
+  BRIBE_COST_PER_BATCH,
+  BRIBE_COST_RESOURCE,
   ASSAULT_LOCK_MS,
   CARD_TYPES,
   CARDS,
@@ -631,7 +634,7 @@ const CHAPTERS: Chapter[] = [
         <Details
           items={[
             'Zum Händler geht nur ein Zug, der Stein mitnimmt. Stein ist die einzige Ladung, die du aus einer Burg mitschicken kannst.',
-            'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen. Dann bringt er den Stein zurück.',
+            'Ein Zug auf dem Weg zum Händler lässt sich nicht umleiten, nur zurückrufen. Dann bringt er den Stein dorthin zurück, woher er kam – in kein anderes Lager. Erst was der Händler dir gegeben hat, darfst du auf dem Heimweg woandershin bringen.',
             'Wird er auf dem Hinweg ausgeraubt, kehrt er sofort leer und wieder normal schnell heim.',
             'Gold und Holz gehen an die Burg, aus der der Zug losgezogen ist. Unterwegs kannst du sie wie jede Ladung zu einem anderen eigenen Lager umleiten.',
           ]}
@@ -1129,8 +1132,9 @@ const CHAPTERS: Chapter[] = [
             'Eilmarsch halbiert nur den Hinweg (auch nach Umleiten). Heim geht es normal schnell.',
             'Mehrere Bollwerke hintereinander verlängern die Wirkung jeweils um einen weiteren Spieltag. Die Dauer läuft in Spielzeit, pausiert also nachts.',
             'Seeweg führt Hin- und Rückweg schnurgerade, auch übers Wasser – der Zug wird dort zum Schiff. Zurückrufen behält den Seeweg, Umleiten beendet ihn; für Überfälle taugt er nicht. Einen Zug auf dem Wasser kann niemand abfangen.',
-            'Füllhorn zahlt an den nächsten drei Spieltag-Anfängen je +1 Holz, Stein und Gold zusätzlich in deine Burg. Mehrere Füllhörner verlängern um je drei Spieltage.',
+            'Füllhorn zahlt an den nächsten drei Spieltag-Anfängen zusätzlich Holz, Stein und Gold in deine Burg — je so viel, wie der neue Spieltag zählt: an Spieltag 3 je +3, an Spieltag 10 je +10. Mehrere Füllhörner verlängern um je drei Spieltage.',
             'Schuhe klauen trifft alle Züge, die die gewählte Person in den nächsten 8 Stunden Spielzeit losschickt (auch Heimwege und Umleitungen): 75 % Tempo, beladen also nur noch etwa 56 %. Schon laufende Züge behalten ihr Tempo.',
+            `Bestechung kostet ${BRIBE_COST_PER_BATCH} ${RESOURCE_NAMES[BRIBE_COST_RESOURCE]} je angefangene ${BRIBE_COST_BATCH} Truppen des bestochenen Zuges, bezahlt aus deiner Burg. Reicht das Gold nicht, bleibt die Karte in deiner Hand.`,
             'Hofumzug tauscht die Orte deiner Burg und eines deiner Stützpunkte. Truppen und Lager bleiben, wo sie hingehören: Die Burg nimmt ihre mit, der Stützpunkt seine. Züge auf dem Weg zu einer der beiden laufen zum neuen Ort weiter. Hofumzug ist seltener als die anderen Karten.',
             'Karten können nicht gestohlen werden und gehen beim Sturm auf deine Burg nicht verloren.',
           ]}

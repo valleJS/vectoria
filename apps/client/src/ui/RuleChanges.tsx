@@ -1,6 +1,9 @@
 import {
   ASSAULT_LOCK_MS,
   BAREFOOT_SPEED,
+  BRIBE_COST_BATCH,
+  BRIBE_COST_PER_BATCH,
+  BRIBE_COST_RESOURCE,
   BRIBE_RANGE_HOURS,
   CASTLE_PLUNDER_SHARE,
   HOUR_MS,
@@ -15,6 +18,7 @@ import {
   OUTPOST_MAX_LEVEL,
   OUTPOST_STONE_PER_LEVEL,
   OUTPOST_UPKEEP_RELIEF_PER_LEVEL,
+  RESOURCE_NAMES,
   TROPHY_VP_INTERVAL,
   VICTORY_POINTS_PER_GAMEDAY,
   VP_TROOP_FACTOR_MIN,
@@ -48,6 +52,21 @@ interface RuleChange {
  * game plays (balance, rules) belong here — not UI polish. Add an entry with every such change.
  */
 const RULE_CHANGES: RuleChange[] = [
+  {
+    id: 'harvest-scales-bribe-costs-trade-recall',
+    date: '2026-11-12',
+    title: 'Füllhorn wächst, Bestechung kostet',
+    body: (
+      <>
+        <b>Füllhorn</b> zahlt jetzt drei Spieltage lang je so viel Holz, Stein und Gold extra, wie
+        der Spieltag zählt — an Spieltag 3 also je +3. <b>Bestechung</b> kostet{' '}
+        {BRIBE_COST_PER_BATCH} {RESOURCE_NAMES[BRIBE_COST_RESOURCE]} je angefangene{' '}
+        {BRIBE_COST_BATCH} Truppen des bestochenen Zuges, bezahlt aus deiner Burg. Und: Rufst du
+        einen Zug zum <b>Händler</b> zurück, bringt er den Stein nur dorthin zurück, woher er kam —
+        erst Getauschtes darf in ein anderes Lager.
+      </>
+    ),
+  },
   {
     id: 'balancing-army-size-outpost-levels',
     date: '2026-11-10',

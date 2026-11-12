@@ -285,7 +285,8 @@ export const CARDS: Record<CardType, CardInfo> = {
   },
   harvest: {
     name: 'Füllhorn',
-    description: 'Deine Burg bringt 3 Spieltage lang je +1 Holz, Stein und Gold zusätzlich.',
+    description:
+      'Deine Burg bringt 3 Spieltage lang zusätzlich Holz, Stein und Gold — je so viel, wie der Spieltag zählt (an Spieltag 5 also je +5).',
     flavor: 'Die Speicher laufen über, die Schreiber kommen kaum hinterher.',
     use: 'instant',
     weight: 1,
@@ -319,7 +320,7 @@ export const CARDS: Record<CardType, CardInfo> = {
   bribe: {
     name: 'Bestechung',
     description:
-      'Ein fremder Zug ohne Ladung, höchstens 1 h Marsch von einem deiner Züge entfernt, läuft zu dir über und stößt zu deinem Zug.',
+      'Ein fremder Zug ohne Ladung, höchstens 1 h Marsch von einem deiner Züge entfernt, läuft zu dir über und stößt zu deinem Zug. Kostet 3 Gold je angefangene 50 Truppen.',
     flavor: 'Jeder Söldner hat seinen Preis — meist einen kleinen.',
     use: 'instant',
     target: 'foreignArmy',
@@ -343,9 +344,13 @@ export function cardChance(card: CardType): number {
   return CARDS[card].weight / CARD_TYPES.reduce((sum, c) => sum + CARDS[c].weight, 0);
 }
 
-/** Füllhorn: extra income of every resource at each of the next gameday starts. */
-export const HARVEST_BONUS = 1;
+/** Füllhorn: extra income of every resource at each of the next `HARVEST_GAMEDAYS` gameday starts. */
 export const HARVEST_GAMEDAYS = 3;
+
+/** Füllhorn's extra of every resource at the start of `gameday`: the gameday's number. */
+export function harvestBonus(gameday: number): number {
+  return Math.max(0, gameday);
+}
 
 /** Schuhe klauen: marches the victim starts within the duration go at this pace. */
 export const BAREFOOT_SPEED = 0.75;
@@ -360,6 +365,19 @@ export const BRIBE_RANGE_HOURS = 1;
 /** Bestechung's reach in tiles on a map `mapWidth` tiles wide (see `travelMs`). */
 export function bribeRangeTiles(mapWidth: number): number {
   return (mapWidth * BRIBE_RANGE_HOURS) / CROSS_MAP_HOURS;
+}
+
+/**
+ * Bestechung's price, paid from the home castle in `BRIBE_COST_RESOURCE`: `BRIBE_COST_PER_BATCH`
+ * per started `BRIBE_COST_BATCH` troops of the bribed army — well under what buying them would
+ * cost (`TROOP_BATCH_COST`), so the card stays a bargain but big armies are no longer free.
+ */
+export const BRIBE_COST_RESOURCE: ResourceType = 'gold';
+export const BRIBE_COST_PER_BATCH = 3;
+export const BRIBE_COST_BATCH = 50;
+
+export function bribeCost(troops: number): number {
+  return Math.ceil(troops / BRIBE_COST_BATCH) * BRIBE_COST_PER_BATCH;
 }
 
 export const FORTIFY_MULTIPLIER = 1.5;
